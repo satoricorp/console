@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# Large Blender exports (copy locally from Desktop)
+/public/models/*.glb
+
 # next.js
 /.next/
 /out/

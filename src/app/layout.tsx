@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getToken } from "@/lib/auth-server";
 
@@ -35,6 +36,7 @@ export default async function RootLayout({
         <ConvexClientProvider initialToken={token}>
           <SiteHeader />
           {children}
+          <SiteFooter />
         </ConvexClientProvider>
       </body>
     </html>

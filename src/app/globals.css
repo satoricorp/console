@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --ascii-muted: #e8e8e8;
+  --ascii-gray: #636E72;
 }
 
 @theme inline {
@@ -16,6 +18,7 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --ascii-muted: #121212;
   }
 }
 

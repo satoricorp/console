@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
+import { GxLogo } from "@/components/gx-logo";
 
 export default function Home() {
   const { data: session, isPending } = authClient.useSession();
@@ -23,6 +24,7 @@ export default function Home() {
           </div>
         ) : (
           <>
+            <GxLogo variant="hero" className="mx-auto" />
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                 Welcome
