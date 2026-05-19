@@ -1,7 +1,15 @@
-import { auth, signIn, signOut } from "@/auth";
+"use client";
 
-export async function AuthButton() {
-  const session = await auth();
+import { authClient } from "@/lib/auth-client";
+
+export function AuthButton() {
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending) {
+    return (
+      <div className="h-10 w-44 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
+    );
+  }
 
   if (session?.user) {
     return (
@@ -12,38 +20,31 @@ export async function AuthButton() {
             {session.user.name ?? session.user.email}
           </span>
         </p>
-        <form
-          action={async () => {
-            "use server";
-            await signOut();
-          }}
+        <button
+          type="button"
+          onClick={() => authClient.signOut()}
+          className="rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
         >
-          <button
-            type="submit"
-            className="rounded-full border border-zinc-300 px-6 py-2.5 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            Sign out
-          </button>
-        </form>
+          Sign out
+        </button>
       </div>
     );
   }
 
   return (
-    <form
-      action={async () => {
-        "use server";
-        await signIn("github");
-      }}
+    <button
+      type="button"
+      onClick={() =>
+        authClient.signIn.social({
+          provider: "github",
+          callbackURL: process.env.NEXT_PUBLIC_SITE_URL,
+        })
+      }
+      className="flex items-center gap-2 rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
     >
-      <button
-        type="submit"
-        className="flex items-center gap-2 rounded-full bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-      >
-        <GitHubIcon />
-        Sign in with GitHub
-      </button>
-    </form>
+      <GitHubIcon />
+      Sign in with GitHub
+    </button>
   );
 }
 
