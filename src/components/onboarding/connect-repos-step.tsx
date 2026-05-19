@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
 import { GitHubIcon } from "@/components/github-icon";
+import { OrgMultiSelect } from "@/components/onboarding/org-multi-select";
+import { RepoVisibilityIcon } from "@/components/onboarding/repo-icons";
 
 type AvailableRepo = {
   githubId: number;
@@ -16,9 +19,16 @@ type AvailableRepo = {
 };
 
 export function ConnectReposStep() {
+  const { data: session, isPending: sessionPending } = authClient.useSession();
+  const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const listAvailableRepos = useAction(api.repoActions.listAvailableRepos);
   const connectRepos = useMutation(api.repos.connectRepos);
-  const connectedRepos = useQuery(api.repos.getMyConnectedRepos);
+  const connectedRepos = useQuery(
+    api.repos.getMyConnectedRepos,
+    session?.user && isAuthenticated ? {} : "skip",
+  );
+  const authReady =
+    !sessionPending && !convexAuthLoading && Boolean(session?.user) && isAuthenticated;
 
   const [availableRepos, setAvailableRepos] = useState<AvailableRepo[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -26,6 +36,7 @@ export function ConnectReposStep() {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [orgFilter, setOrgFilter] = useState<Set<string>>(() => new Set());
 
   const connectedFullNames = useMemo(
     () => new Set(connectedRepos?.map((repo) => repo.fullName) ?? []),
@@ -33,6 +44,18 @@ export function ConnectReposStep() {
   );
 
   useEffect(() => {
+    if (!authReady) {
+      if (!sessionPending && !convexAuthLoading) {
+        setLoading(false);
+        if (session?.user && !isAuthenticated) {
+          setError(
+            "Could not verify your session. Try signing out and signing in again.",
+          );
+        }
+      }
+      return;
+    }
+
     let cancelled = false;
 
     async function loadRepos() {
@@ -65,15 +88,29 @@ export function ConnectReposStep() {
     return () => {
       cancelled = true;
     };
-  }, [listAvailableRepos, connectedFullNames]);
+  }, [
+    authReady,
+    sessionPending,
+    convexAuthLoading,
+    session?.user,
+    isAuthenticated,
+    listAvailableRepos,
+    connectedFullNames,
+  ]);
+
+  const orgs = useMemo(() => {
+    const owners = new Set(availableRepos.map((repo) => repo.owner));
+    return [...owners].sort((a, b) => a.localeCompare(b));
+  }, [availableRepos]);
 
   const filteredRepos = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return availableRepos;
-    return availableRepos.filter((repo) =>
-      repo.fullName.toLowerCase().includes(query),
-    );
-  }, [availableRepos, search]);
+    return availableRepos.filter((repo) => {
+      if (orgFilter.size > 0 && !orgFilter.has(repo.owner)) return false;
+      if (!query) return true;
+      return repo.fullName.toLowerCase().includes(query);
+    });
+  }, [availableRepos, search, orgFilter]);
 
   const selectedCount = selected.size;
   const newlySelectedCount = [...selected].filter(
@@ -117,50 +154,57 @@ export function ConnectReposStep() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <div className="space-y-2 text-center">
+      <div className="space-y-2 text-left">
         <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           Step 1 of onboarding
         </p>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           Connect your GitHub repositories
         </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Choose the repositories you want Console to work with. You can add
-          more later.
-        </p>
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/50">
-        <GitHubIcon className="h-4 w-4 shrink-0 text-zinc-500" />
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search repositories"
-          className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100"
-        />
+      <div className="overflow-hidden border border-zinc-200 dark:border-zinc-800">
+        {!loading && orgs.length > 1 ? (
+          <div className="border-b border-zinc-200 dark:border-zinc-800">
+            <OrgMultiSelect
+              orgs={orgs}
+              selected={orgFilter}
+              onChange={setOrgFilter}
+            />
+          </div>
+        ) : null}
+        <div className="flex items-center gap-2 bg-zinc-50 px-3 py-2 dark:bg-zinc-900/50">
+          <GitHubIcon className="h-4 w-4 shrink-0 text-zinc-500" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search repositories"
+            className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100"
+          />
+        </div>
       </div>
 
       {error ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <p className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </p>
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-hidden border border-zinc-200 dark:border-zinc-800">
         {loading ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="h-12 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-900"
+                className="h-12 animate-pulse bg-zinc-100 dark:bg-zinc-900"
               />
             ))}
           </div>
         ) : filteredRepos.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-zinc-600 dark:text-zinc-400">
-            {search
-              ? "No repositories match your search."
+            {search || orgFilter.size > 0
+              ? "No repositories match your filters."
               : "No repositories found on your GitHub account."}
           </p>
         ) : (
@@ -176,7 +220,7 @@ export function ConnectReposStep() {
                     disabled={isConnected}
                     aria-pressed={isSelected}
                     onClick={() => toggleRepo(repo.fullName)}
-                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    className={`flex w-full min-w-0 items-center gap-2 px-4 py-2.5 text-left transition-colors ${
                       isConnected
                         ? "cursor-default opacity-70"
                         : "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
@@ -186,17 +230,19 @@ export function ConnectReposStep() {
                         : ""
                     }`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                        {repo.fullName}
-                      </p>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {repo.private ? "Private" : "Public"}
-                        {repo.defaultBranch
-                          ? ` · default branch ${repo.defaultBranch}`
-                          : ""}
-                      </p>
-                    </div>
+                    <p className="min-w-0 flex-1 truncate text-sm">
+                      <span className="text-zinc-500 dark:text-zinc-400">
+                        {repo.owner}
+                      </span>
+                      <span className="text-zinc-300 dark:text-zinc-600">
+                        {" "}
+                        /{" "}
+                      </span>
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                        {repo.name}
+                      </span>
+                    </p>
+                    <RepoVisibilityIcon isPrivate={repo.private} />
                     {isConnected ? (
                       <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                         Connected

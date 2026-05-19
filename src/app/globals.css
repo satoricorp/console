@@ -4,8 +4,8 @@
   --background: #ffffff;
   --foreground: #171717;
   --ascii-muted: #e8e8e8;
-  --ascii-gray: #636E72;
-  --footer-link-hover: #ff00ff;
+  --ascii-gray: #333333;
+  --footer-link-hover: #867888;
 }
 
 @theme inline {

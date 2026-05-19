@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 
@@ -21,9 +21,12 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
+  const authReady =
+    !sessionPending && !convexAuthLoading && Boolean(session?.user) && isAuthenticated;
   const onboardingStatus = useQuery(
     api.repos.getOnboardingStatus,
-    session?.user ? {} : "skip",
+    authReady ? {} : "skip",
   );
 
   const isOnboardingRoute = pathname === ONBOARDING_PATH;
@@ -35,7 +38,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     !onboardingStatus.hasConnectedRepos;
 
   useEffect(() => {
-    if (sessionPending || !session?.user || onboardingStatus === undefined) {
+    if (!authReady || onboardingStatus === undefined) {
       return;
     }
 
@@ -54,19 +57,18 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
       router.replace("/");
     }
   }, [
-    sessionPending,
-    session?.user,
+    authReady,
     onboardingStatus,
     isOnboardingRoute,
     skipOnboardingRedirect,
     router,
   ]);
 
-  if (sessionPending) {
+  if (sessionPending || convexAuthLoading) {
     return <OnboardingGateFallback />;
   }
 
-  if (session?.user && onboardingStatus === undefined) {
+  if (session?.user && (!isAuthenticated || onboardingStatus === undefined)) {
     return <OnboardingGateFallback />;
   }
 

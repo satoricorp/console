@@ -49,7 +49,7 @@ export function AsciiFooterArt({ className }: AsciiFooterArtProps) {
           </Suspense>
           <SafeAsciiRenderer
             bgColor="transparent"
-            fgColor="#636E72"
+            fgColor="#333333"
             characters=" .:-=+*#%@"
             resolution={0.2}
             invert
