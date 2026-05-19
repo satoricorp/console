@@ -18,7 +18,7 @@ export function SatoriLogo({ height = 12, className }: SatoriLogoProps) {
         display: "inline-block",
         width,
         height,
-        backgroundColor: "var(--footer-link-hover, #867888)",
+        backgroundColor: "var(--footer-link-hover, #7c6e7c)",
         WebkitMaskImage: LOGO_MASK,
         WebkitMaskSize: "100% 100%",
         WebkitMaskRepeat: "no-repeat",
