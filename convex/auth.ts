@@ -18,7 +18,14 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
       github: {
         clientId: process.env.GITHUB_CLIENT_ID!,
         clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+        overrideUserInfoOnSignIn: true,
+        mapProfileToUser: (profile) => ({
+          username: profile.login,
+          displayUsername: profile.login,
+        }),
       },
     },
     plugins: [convex({ authConfig })],
   });
+
+export const { getAuthUser } = authComponent.clientApi();
