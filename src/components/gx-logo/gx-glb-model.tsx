@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo } from "react";
 import { Center, useGLTF } from "@react-three/drei";
 import { Box3, MeshPhysicalMaterial, Vector3, type Mesh } from "three";
 
-import { GX_MESH_PATH } from "./constants";
+import { GX_HEADER_MESH_PATH, GX_MESH_PATH } from "./constants";
 import type { LogoVariantConfig } from "./constants";
 
 /** Correct Blender export orientation until rotation is applied in Blender. */
@@ -26,7 +26,7 @@ type GxGlbModelProps = {
 };
 
 export function GxGlbModel({ config }: GxGlbModelProps) {
-  const { scene } = useGLTF(GX_MESH_PATH);
+  const { scene } = useGLTF(config.meshPath);
   const { model, scale } = useMemo(() => {
     const clone = scene.clone(true);
     clone.rotation.set(...BLENDER_MESH_ROTATION);
@@ -66,3 +66,4 @@ export function GxGlbModel({ config }: GxGlbModelProps) {
 }
 
 useGLTF.preload(GX_MESH_PATH);
+useGLTF.preload(GX_HEADER_MESH_PATH);

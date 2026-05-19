@@ -4,6 +4,7 @@
  */
 
 export const GX_MESH_PATH = "/models/gx-chrome.glb";
+export const GX_HEADER_MESH_PATH = "/models/gx-icon.glb";
 
 export const USE_GX_LOGO_MESH =
   process.env.NEXT_PUBLIC_GX_LOGO_MESH === "true";
@@ -31,6 +32,7 @@ type ContainerConfig = {
 
 export type LogoVariantConfig = ContainerConfig & {
   camera: CameraConfig;
+  meshPath: string;
   /** Scene units — max axis after centering; header uses smaller fit. */
   targetMaxDimension: number;
   textSize: number;
@@ -45,10 +47,12 @@ function defineVariant(
   camera: CameraConfig,
   textSize: number,
   targetMaxDimension: number,
+  meshPath: string,
 ): LogoVariantConfig {
   return {
     ...container,
     camera,
+    meshPath,
     targetMaxDimension,
     ...splinePill(textSize),
   };
@@ -56,16 +60,18 @@ function defineVariant(
 
 export const LOGO_VARIANTS = {
   header: defineVariant(
-    { widthRem: 8.25, heightRem: 2.55 },
+    { widthRem: 6.25, heightRem: 1.95 },
     { position: [0, 0, 2.55], fov: 28 },
     1.22,
     1.88,
+    GX_HEADER_MESH_PATH,
   ),
   hero: defineVariant(
     { widthRem: 24, heightRem: 14, maxWidthRem: 26 },
     { position: [0, 0, 3.05], fov: 32 },
     1.72,
     1.92,
+    GX_MESH_PATH,
   ),
 } as const satisfies Record<string, LogoVariantConfig>;
 
