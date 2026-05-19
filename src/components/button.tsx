@@ -7,15 +7,15 @@ function ButtonArrow() {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 16 16"
-      fill="currentColor"
-      className="size-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="ml-1.5 size-4 shrink-0"
       aria-hidden
     >
-      <path
-        fillRule="evenodd"
-        d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
-        clipRule="evenodd"
-      />
+      <path d="M2.5 8h9M9.5 5l3 3-3 3" />
     </svg>
   );
 }
@@ -49,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-none px-6 py-2 text-sm font-medium transition-colors ${fullWidth ? "w-full" : ""} ${variantClass[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-sm font-medium transition-colors ${fullWidth ? "w-full" : ""} ${variantClass[variant]} ${className}`}
       {...props}
     >
       {children}

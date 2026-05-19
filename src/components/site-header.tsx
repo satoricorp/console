@@ -10,7 +10,7 @@ export function SiteHeader() {
   const { data: session, isPending } = authClient.useSession();
 
   return (
-    <header className="flex items-center justify-between gap-4 overflow-visible border-b border-zinc-200 py-3 pl-3 pr-6 dark:border-zinc-800">
+    <header className="flex items-center justify-between gap-4 overflow-visible border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
       <Link
         href="/"
         className="flex shrink-0 items-center"
@@ -19,7 +19,7 @@ export function SiteHeader() {
         <GxLogo variant="header" />
       </Link>
       {isPending ? (
-        <div className="h-9 w-28 shrink-0 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
+        <div className="h-9 w-28 shrink-0 animate-pulse rounded-none bg-zinc-200 dark:bg-zinc-800" />
       ) : session?.user ? (
         <UserMenu />
       ) : (

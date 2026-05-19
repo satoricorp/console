@@ -9,7 +9,7 @@ export const AsciiFooterArt = dynamic(
     loading: () => (
       <div
         aria-hidden
-        className="pointer-events-none h-48 w-full"
+        className="pointer-events-none h-72 w-full"
       />
     ),
   },

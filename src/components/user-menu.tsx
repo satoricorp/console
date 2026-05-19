@@ -21,6 +21,36 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function UserAvatar({
+  user,
+  displayName,
+  size = "sm",
+}: {
+  user: SessionUser;
+  displayName: string;
+  size?: "sm" | "md";
+}) {
+  const sizeClass = size === "md" ? "h-10 w-10 text-sm" : "h-7 w-7 text-xs";
+
+  if (user.image) {
+    return (
+      <img
+        src={user.image}
+        alt=""
+        className={`${sizeClass} rounded-full object-cover`}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`flex ${sizeClass} items-center justify-center rounded-full bg-zinc-200 font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`}
+    >
+      {getInitials(displayName)}
+    </span>
+  );
+}
+
 export function UserMenu() {
   const menuId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,22 +102,10 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-controls={menuId}
         onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-2 rounded-full border border-zinc-200 py-1 pl-1 pr-2.5 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900"
+        className="rounded-full border border-zinc-200 p-0.5 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-900"
+        aria-label={displayName}
       >
-        {user.image ? (
-          <img
-            src={user.image}
-            alt=""
-            className="h-7 w-7 rounded-full object-cover"
-          />
-        ) : (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-            {getInitials(displayName)}
-          </span>
-        )}
-        <span className="max-w-32 truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-          {displayName}
-        </span>
+        <UserAvatar user={user} displayName={displayName} />
       </button>
 
       {open ? (
@@ -97,19 +115,24 @@ export function UserMenu() {
           className="absolute right-0 z-50 mt-2 w-64 origin-top-right rounded-xl border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
         >
           <div className="border-b border-zinc-100 px-3 py-3 dark:border-zinc-900">
-            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              {displayName}
-            </p>
-            {username ? (
-              <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
-                @{username}
-              </p>
-            ) : null}
-            {user.email ? (
-              <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                {user.email}
-              </p>
-            ) : null}
+            <div className="flex items-center gap-3">
+              <UserAvatar user={user} displayName={displayName} size="md" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                  {displayName}
+                </p>
+                {username ? (
+                  <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
+                    @{username}
+                  </p>
+                ) : null}
+                {user.email ? (
+                  <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    {user.email}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
 
           <a
