@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
+import { TestStripeCheckoutButton } from "@/components/billing/test-stripe-checkout-button";
 import { GxLogo } from "@/components/gx-logo";
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
               Use the menu in the header to view your profile or sign out.
             </p>
+            <TestStripeCheckoutButton />
           </div>
         ) : (
           <>
