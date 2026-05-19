@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
+import { OnboardingGate } from "@/components/onboarding-gate";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getToken } from "@/lib/auth-server";
@@ -32,10 +33,10 @@ export default async function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col font-sans">
         <ConvexClientProvider initialToken={token}>
           <SiteHeader />
-          {children}
+          <OnboardingGate>{children}</OnboardingGate>
           <SiteFooter />
         </ConvexClientProvider>
       </body>
