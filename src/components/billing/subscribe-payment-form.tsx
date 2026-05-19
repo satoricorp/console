@@ -9,11 +9,19 @@ import {
 } from "@stripe/react-stripe-js";
 import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { Button } from "@/components/button";
 import { getStripe, stripeElementsAppearance } from "@/lib/stripe";
 
-function SubscribeForm({ onSuccess }: { onSuccess: () => void }) {
+function TrialSubscribeForm({
+  trialDays,
+  onSuccess,
+}: {
+  trialDays: number;
+  onSuccess: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
+  const startTrial = useAction(api.stripeActions.startTrialSubscription);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,7 +32,7 @@ function SubscribeForm({ onSuccess }: { onSuccess: () => void }) {
     setSubmitting(true);
     setError(null);
 
-    const { error: confirmError } = await stripe.confirmPayment({
+    const { error: confirmError, setupIntent } = await stripe.confirmSetup({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/billing?success=1`,
@@ -33,13 +41,30 @@ function SubscribeForm({ onSuccess }: { onSuccess: () => void }) {
     });
 
     if (confirmError) {
-      setError(confirmError.message ?? "Payment failed");
+      setError(confirmError.message ?? "Could not save card");
       setSubmitting(false);
       return;
     }
 
-    onSuccess();
-    setSubmitting(false);
+    const paymentMethodId =
+      typeof setupIntent?.payment_method === "string"
+        ? setupIntent.payment_method
+        : setupIntent?.payment_method?.id;
+
+    if (!paymentMethodId) {
+      setError("Could not verify payment method. Try again.");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      await startTrial({ paymentMethodId });
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start trial");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -48,33 +73,43 @@ function SubscribeForm({ onSuccess }: { onSuccess: () => void }) {
       {error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : null}
-      <button
+      <Button
         type="submit"
+        fullWidth
         disabled={!stripe || submitting}
-        className="w-full rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        className="py-2.5 disabled:opacity-60"
       >
-        {submitting ? "Processing…" : "Subscribe"}
-      </button>
+        {submitting ? "Starting trial…" : `Start ${trialDays}-day free trial`}
+      </Button>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Your card is saved now. You will not be charged until the trial ends.
+      </p>
     </form>
   );
 }
 
 export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
-  const createPayment = useAction(api.stripeActions.createSubscriptionPayment);
+  const createTrialSetup = useAction(api.stripeActions.createTrialSetupIntent);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [trialDays, setTrialDays] = useState(14);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    createPayment({})
+    createTrialSetup({})
       .then((result) => {
-        if (!cancelled) setClientSecret(result.clientSecret);
+        if (!cancelled) {
+          setClientSecret(result.clientSecret);
+          setTrialDays(result.trialDays);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load payment form");
+          setError(
+            err instanceof Error ? err.message : "Could not load payment form",
+          );
         }
       })
       .finally(() => {
@@ -84,7 +119,7 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [createPayment]);
+  }, [createTrialSetup]);
 
   if (loading) {
     return (
@@ -93,24 +128,20 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   if (error) {
-    return (
-      <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-    );
+    return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
   }
 
   if (!clientSecret) return null;
 
-  const stripePromise = getStripe();
-
   return (
     <Elements
-      stripe={stripePromise}
+      stripe={getStripe()}
       options={{
         clientSecret,
         appearance: stripeElementsAppearance,
       }}
     >
-      <SubscribeForm onSuccess={onSuccess} />
+      <TrialSubscribeForm trialDays={trialDays} onSuccess={onSuccess} />
     </Elements>
   );
 }

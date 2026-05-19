@@ -6,6 +6,7 @@ import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
+import { Button } from "@/components/button";
 import { SubscribePaymentForm } from "@/components/billing/subscribe-payment-form";
 import { StripeDashboardLinks } from "@/components/billing/stripe-dashboard-links";
 import { UpdatePaymentMethodForm } from "@/components/billing/update-payment-method-form";
@@ -18,6 +19,7 @@ type BillingDetails = {
     interval: string | null;
     currency: string;
   };
+  trialDays: number;
   paymentMethod: {
     brand: string;
     last4: string;
@@ -136,7 +138,7 @@ function BillingContent() {
     <>
       {paymentSuccess ? (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-          Payment received. Your subscription should activate shortly.
+          Trial started. You have full access until your trial ends.
         </p>
       ) : null}
 
@@ -177,14 +179,18 @@ function BillingContent() {
                   </p>
                 ) : null}
                 <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  Active
+                  {subscription?.status === "trialing" ? "Trial" : "Active"}
                   {subscription?.cancelAtPeriodEnd
                     ? " — cancels at period end"
                     : ""}
                 </p>
                 {subscription?.currentPeriodEnd ? (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {subscription.cancelAtPeriodEnd ? "Access until" : "Renews"}{" "}
+                    {subscription.status === "trialing"
+                      ? "Trial ends"
+                      : subscription.cancelAtPeriodEnd
+                        ? "Access until"
+                        : "Renews"}{" "}
                     {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
                   </p>
                 ) : null}
@@ -236,23 +242,20 @@ function BillingContent() {
 
           <div className="flex flex-wrap gap-2">
             {subscription?.cancelAtPeriodEnd ? (
-              <button
-                type="button"
+              <Button
                 disabled={loading !== null}
                 onClick={() => void handleResume()}
-                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
               >
                 {loading === "resume" ? "Resuming…" : "Resume subscription"}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 disabled={loading !== null}
                 onClick={() => void handleCancel()}
-                className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-medium transition-colors hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
                 {loading === "cancel" ? "Canceling…" : "Cancel subscription"}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -282,8 +285,12 @@ function BillingContent() {
           </div>
 
           <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
-            <p className="mb-4 text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              Payment details
+            <p className="mb-1 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Start your free trial
+            </p>
+            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+              {billingDetails?.trialDays ?? 14}-day trial. Add a card to begin —
+              you will not be charged until the trial ends.
             </p>
             {!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? (
               <p className="text-sm text-red-600 dark:text-red-400">

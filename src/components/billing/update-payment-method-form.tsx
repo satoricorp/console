@@ -9,6 +9,7 @@ import {
 } from "@stripe/react-stripe-js";
 import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { Button } from "@/components/button";
 import { getStripe, stripeElementsAppearance } from "@/lib/stripe";
 
 function UpdateForm({
@@ -55,20 +56,12 @@ function UpdateForm({
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : null}
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={!stripe || submitting}
-          className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
+        <Button type="submit" disabled={!stripe || submitting}>
           {submitting ? "Saving…" : "Save card"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-        >
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

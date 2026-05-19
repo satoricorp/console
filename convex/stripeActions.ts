@@ -1,6 +1,7 @@
 "use node";
 
 import Stripe from "stripe";
+import { v } from "convex/values";
 import { action, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
@@ -19,6 +20,48 @@ function requireEnv(name: string) {
     throw new Error(`${name} is not set in the Convex deployment`);
   }
   return value;
+}
+
+function getTrialDays() {
+  const raw = process.env.STRIPE_TRIAL_DAYS;
+  if (!raw) return 14;
+  const days = Number.parseInt(raw, 10);
+  if (!Number.isFinite(days) || days < 1 || days > 730) return 14;
+  return days;
+}
+
+function getSiteUrl() {
+  const url = process.env.SITE_URL;
+  if (!url) {
+    throw new Error("SITE_URL is not set in the Convex deployment");
+  }
+  return url.replace(/\/$/, "");
+}
+
+function getSubscriptionPeriodEnd(subscription: Stripe.Subscription) {
+  if (subscription.trial_end) {
+    return subscription.trial_end * 1000;
+  }
+  const firstItem = subscription.items.data[0];
+  return firstItem ? firstItem.current_period_end * 1000 : undefined;
+}
+
+async function persistSubscription(
+  ctx: ActionCtx,
+  userId: string,
+  customerId: string,
+  subscription: Stripe.Subscription,
+) {
+  const firstItem = subscription.items.data[0];
+  await ctx.runMutation(internal.billing.upsertSubscription, {
+    userId,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    status: subscription.status,
+    priceId: firstItem?.price.id,
+    currentPeriodEnd: getSubscriptionPeriodEnd(subscription),
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+  });
 }
 
 async function getOrCreateStripeCustomer(
@@ -47,17 +90,6 @@ async function getOrCreateStripeCustomer(
   });
 
   return customer.id;
-}
-
-function getInvoiceClientSecret(
-  invoice: Stripe.Invoice | string | null | undefined,
-): string | null {
-  if (!invoice || typeof invoice === "string") return null;
-  return invoice.confirmation_secret?.client_secret ?? null;
-}
-
-function getSubscriptionClientSecret(subscription: Stripe.Subscription) {
-  return getInvoiceClientSecret(subscription.latest_invoice);
 }
 
 async function getPlanSummary(stripe: Stripe, priceId: string) {
@@ -142,20 +174,63 @@ export const getBillingDetails = action({
       }
     }
 
-    return { plan, paymentMethod };
+    return { plan, paymentMethod, trialDays: getTrialDays() };
   },
 });
 
-export const createSubscriptionPayment = action({
+export const createTrialSetupIntent = action({
   args: {},
   handler: async (ctx) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
-      throw new Error("Sign in to subscribe");
+      throw new Error("Sign in to start your trial");
+    }
+
+    const stripe = getStripe();
+    const customerId = await getOrCreateStripeCustomer(ctx, stripe, {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+    });
+
+    const existing = await ctx.runQuery(internal.billing.getSubscriptionByUserId, {
+      userId: user._id,
+    });
+
+    if (existing && ["active", "trialing"].includes(existing.status)) {
+      throw new Error("You already have an active subscription");
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      metadata: { userId: user._id, purpose: "trial" },
+    });
+
+    if (!setupIntent.client_secret) {
+      throw new Error("Could not initialize card form");
+    }
+
+    return {
+      clientSecret: setupIntent.client_secret,
+      trialDays: getTrialDays(),
+    };
+  },
+});
+
+export const startTrialSubscription = action({
+  args: {
+    paymentMethodId: v.string(),
+  },
+  handler: async (ctx, { paymentMethodId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      throw new Error("Sign in to start your trial");
     }
 
     const stripe = getStripe();
     const priceId = requireEnv("STRIPE_PRICE_ID");
+    const trialDays = getTrialDays();
     const customerId = await getOrCreateStripeCustomer(ctx, stripe, {
       _id: user._id,
       email: user.email,
@@ -171,44 +246,54 @@ export const createSubscriptionPayment = action({
     }
 
     if (existing?.status === "incomplete") {
-      const subscription = await stripe.subscriptions.retrieve(
-        existing.stripeSubscriptionId,
-        { expand: ["latest_invoice.confirmation_secret"] },
-      );
-      const clientSecret = getSubscriptionClientSecret(subscription);
-      if (clientSecret) {
-        return { clientSecret };
-      }
+      await stripe.subscriptions.cancel(existing.stripeSubscriptionId);
+    }
+
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    if (
+      paymentMethod.customer &&
+      paymentMethod.customer !== customerId
+    ) {
+      throw new Error("Invalid payment method");
+    }
+    if (!paymentMethod.customer) {
+      await stripe.paymentMethods.attach(paymentMethodId, {
+        customer: customerId,
+      });
+    }
+
+    await stripe.customers.update(customerId, {
+      invoice_settings: { default_payment_method: paymentMethodId },
+    });
+
+    if (paymentMethod.card) {
+      await ctx.runMutation(internal.billing.updateCustomerPaymentMethod, {
+        stripeCustomerId: customerId,
+        paymentMethodBrand: paymentMethod.card.brand,
+        paymentMethodLast4: paymentMethod.card.last4,
+        paymentMethodExpMonth: paymentMethod.card.exp_month,
+        paymentMethodExpYear: paymentMethod.card.exp_year,
+      });
     }
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
-      payment_behavior: "default_incomplete",
+      trial_period_days: trialDays,
+      default_payment_method: paymentMethodId,
       payment_settings: { save_default_payment_method: "on_subscription" },
-      expand: ["latest_invoice.confirmation_secret"],
       metadata: { userId: user._id },
     });
 
-    const clientSecret = getSubscriptionClientSecret(subscription);
-    if (!clientSecret) {
-      throw new Error("Could not initialize payment");
-    }
+    await persistSubscription(ctx, user._id, customerId, subscription);
 
-    const firstItem = subscription.items.data[0];
-    await ctx.runMutation(internal.billing.upsertSubscription, {
-      userId: user._id,
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: subscription.id,
+    return {
       status: subscription.status,
-      priceId: firstItem?.price.id,
-      currentPeriodEnd: firstItem
-        ? firstItem.current_period_end * 1000
+      trialEnd: subscription.trial_end
+        ? subscription.trial_end * 1000
         : undefined,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    });
-
-    return { clientSecret };
+      trialDays,
+    };
   },
 });
 
@@ -240,6 +325,55 @@ export const createSetupIntent = action({
   },
 });
 
+/** Temporary: hosted Stripe Checkout for QA (redirects to checkout.stripe.com). */
+export const createTestCheckoutSession = action({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      throw new Error("Sign in to test billing");
+    }
+
+    const stripe = getStripe();
+    const priceId = requireEnv("STRIPE_PRICE_ID");
+    const siteUrl = getSiteUrl();
+    const trialDays = getTrialDays();
+
+    const existing = await ctx.runQuery(internal.billing.getSubscriptionByUserId, {
+      userId: user._id,
+    });
+
+    if (existing && ["active", "trialing"].includes(existing.status)) {
+      throw new Error("You already have an active subscription");
+    }
+
+    const customerId = await getOrCreateStripeCustomer(ctx, stripe, {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: trialDays,
+        metadata: { userId: user._id },
+      },
+      success_url: `${siteUrl}/billing?success=1`,
+      cancel_url: `${siteUrl}/?checkout=canceled`,
+      metadata: { userId: user._id },
+    });
+
+    if (!session.url) {
+      throw new Error("Could not create Stripe Checkout session");
+    }
+
+    return { url: session.url, trialDays };
+  },
+});
+
 export const cancelSubscription = action({
   args: {},
   handler: async (ctx) => {
@@ -263,18 +397,12 @@ export const cancelSubscription = action({
       { cancel_at_period_end: true },
     );
 
-    const firstItem = updated.items.data[0];
-    await ctx.runMutation(internal.billing.upsertSubscription, {
-      userId: user._id,
-      stripeCustomerId: subscription.stripeCustomerId,
-      stripeSubscriptionId: updated.id,
-      status: updated.status,
-      priceId: firstItem?.price.id,
-      currentPeriodEnd: firstItem
-        ? firstItem.current_period_end * 1000
-        : undefined,
-      cancelAtPeriodEnd: updated.cancel_at_period_end,
-    });
+    await persistSubscription(
+      ctx,
+      user._id,
+      subscription.stripeCustomerId,
+      updated,
+    );
   },
 });
 
@@ -301,17 +429,11 @@ export const resumeSubscription = action({
       { cancel_at_period_end: false },
     );
 
-    const firstItem = updated.items.data[0];
-    await ctx.runMutation(internal.billing.upsertSubscription, {
-      userId: user._id,
-      stripeCustomerId: subscription.stripeCustomerId,
-      stripeSubscriptionId: updated.id,
-      status: updated.status,
-      priceId: firstItem?.price.id,
-      currentPeriodEnd: firstItem
-        ? firstItem.current_period_end * 1000
-        : undefined,
-      cancelAtPeriodEnd: updated.cancel_at_period_end,
-    });
+    await persistSubscription(
+      ctx,
+      user._id,
+      subscription.stripeCustomerId,
+      updated,
+    );
   },
 });

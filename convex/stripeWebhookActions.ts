@@ -124,6 +124,11 @@ async function upsertSubscriptionRecord(
 
   const firstItem = subscription.items.data[0];
   const priceId = firstItem?.price.id;
+  const currentPeriodEnd = subscription.trial_end
+    ? subscription.trial_end * 1000
+    : firstItem
+      ? firstItem.current_period_end * 1000
+      : undefined;
 
   await ctx.runMutation(internal.billing.upsertSubscription, {
     userId,
@@ -131,9 +136,7 @@ async function upsertSubscriptionRecord(
     stripeSubscriptionId: subscription.id,
     status: subscription.status,
     priceId,
-    currentPeriodEnd: firstItem
-      ? firstItem.current_period_end * 1000
-      : undefined,
+    currentPeriodEnd,
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
   });
 }
