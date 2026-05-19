@@ -1,3 +1,5 @@
+Version control: use GX (`gx add`, `gx pr`), not `git commit` / `git push`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 

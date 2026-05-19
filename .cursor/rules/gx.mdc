@@ -1,0 +1,13 @@
+---
+description: Use GX for commits and PRs in this repo
+alwaysApply: true
+---
+# GX
+
+This repo uses GX (`.gx/` present). Do not use `git commit` or `git push` for normal work.
+
+- Finish work: `gx add -m "…"`
+- Publish: `gx pr`
+- Inspect: `git status`, `git diff`, `git log` only
+
+Read the gx skill before any commit, push, or PR.
