@@ -103,19 +103,21 @@ function IconPreview({
   variant,
   label,
   onReady,
+  previewSize,
 }: {
   variant: LogoVariant;
   label: string;
   onReady: (capture: () => Promise<HTMLCanvasElement>) => void;
+  previewSize: number;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-1.5">
       <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
         {label}
       </p>
       <GxLogo
         variant={variant}
-        pixelSize={200}
+        pixelSize={previewSize}
         interactive={false}
         preserveDrawingBuffer
       >
@@ -125,7 +127,11 @@ function IconPreview({
   );
 }
 
-export function GxLogoIconExporter() {
+type GxLogoIconExporterProps = {
+  compact?: boolean;
+};
+
+export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps) {
   const captureGxRef = useRef<(() => Promise<HTMLCanvasElement>) | null>(null);
   const captureXRef = useRef<(() => Promise<HTMLCanvasElement>) | null>(null);
   const [readyGx, setReadyGx] = useState(false);
@@ -166,10 +172,16 @@ export function GxLogoIconExporter() {
     }
   }, [exportSize]);
 
+  const previewSize = compact ? 160 : 200;
+  const rootGap = compact ? "gap-5" : "gap-8";
+  const panelClass = compact
+    ? "grid grid-cols-2 gap-3 border border-zinc-200 p-3 dark:border-zinc-800"
+    : "grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800";
+
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-8">
+    <div className={`mx-auto flex w-full max-w-lg flex-col ${rootGap}`}>
       <div
-        className="grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800"
+        className={panelClass}
         style={{
           backgroundColor:
             background === "light"
@@ -182,6 +194,7 @@ export function GxLogoIconExporter() {
         <IconPreview
           variant="icon"
           label="gx (48px+)"
+          previewSize={previewSize}
           onReady={(fn) => {
             captureGxRef.current = fn;
             setReadyGx(true);
@@ -190,6 +203,7 @@ export function GxLogoIconExporter() {
         <IconPreview
           variant="iconX"
           label="x (≤48px)"
+          previewSize={previewSize}
           onReady={(fn) => {
             captureXRef.current = fn;
             setReadyX(true);
@@ -202,11 +216,11 @@ export function GxLogoIconExporter() {
           : "Loading environment maps…"}
       </p>
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-xs font-medium uppercase tracking-wide text-zinc-500">
           Background
         </legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {(
             [
               ["transparent", "Transparent"],
@@ -216,7 +230,7 @@ export function GxLogoIconExporter() {
           ).map(([value, label]) => (
             <label
               key={value}
-              className="flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-sm dark:border-zinc-800"
+              className="flex cursor-pointer items-center gap-1.5 border border-zinc-200 px-2.5 py-1 text-xs dark:border-zinc-800"
             >
               <input
                 type="radio"
@@ -231,23 +245,23 @@ export function GxLogoIconExporter() {
         </div>
       </fieldset>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <button
           type="button"
           disabled={!ready || busy}
           onClick={() => void exportAll()}
-          className="rounded-full bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          className="bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
         >
           Download all PNG sizes
         </button>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
           {ICON_EXPORT_SIZES.map(({ label, size }) => (
             <button
               key={label}
               type="button"
               disabled={!ready || busy}
               onClick={() => void exportSize(size, label)}
-              className="rounded-lg border border-zinc-200 px-3 py-2 text-left text-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+              className="border border-zinc-200 px-2.5 py-1.5 text-left text-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
             >
               <span className="font-medium text-zinc-900 dark:text-zinc-50">
                 {size}×{size}

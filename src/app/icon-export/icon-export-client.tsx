@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import dynamic from "next/dynamic";
 
 const GxLogoIconExporter = dynamic(
@@ -19,7 +20,14 @@ export function IconExportClient() {
         </h1>
         <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
           Renders at 1024×1024, then scales to standard favicon and app-icon
-          sizes. Favicons at 48px and below use the{" "}
+          sizes. See the{" "}
+          <Link
+            href="/design"
+            className="font-medium text-zinc-900 underline underline-offset-4 dark:text-zinc-50"
+          >
+            design overview
+          </Link>{" "}
+          for colors, type, and export sizes. Favicons at 48px and below use the{" "}
           <strong>x</strong> clipped from the same chrome mesh as the header;
           larger sizes use the full <strong>gx</strong> mark. Use transparent
           PNGs for{" "}
