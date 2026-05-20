@@ -1,6 +1,15 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const indexJobStatus = v.union(
+  v.literal("pending"),
+  v.literal("indexing"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
+
 export default defineSchema({
   billingCustomers: defineTable({
     userId: v.string(),
@@ -37,7 +46,28 @@ export default defineSchema({
     private: v.boolean(),
     defaultBranch: v.optional(v.string()),
     connectedAt: v.number(),
+    accessVerifiedAt: v.number(),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"]),
+
+  repoIndexJobs: defineTable({
+    fullName: v.string(),
+    githubId: v.number(),
+    owner: v.string(),
+    name: v.string(),
+    defaultBranch: v.optional(v.string()),
+    commitId: v.optional(v.string()),
+    turbopufferNamespace: v.string(),
+    status: indexJobStatus,
+    trigger: v.optional(indexTrigger),
+    filesTotal: v.optional(v.number()),
+    filesIndexed: v.optional(v.number()),
+    chunksIndexed: v.optional(v.number()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_fullName", ["fullName"])
+    .index("by_status", ["status"]),
 });

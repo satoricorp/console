@@ -289,8 +289,9 @@ function BillingContent() {
               Start your free trial
             </p>
             <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-              {billingDetails?.trialDays ?? 14}-day trial. Add a card to begin —
-              you will not be charged until the trial ends.
+              {billingDetails?.trialDays ?? 14}-day free trial
+              {planPrice ? `, then ${planPrice}` : ", then $28/month"}. Add a card
+              to begin — you will not be charged until the trial ends.
             </p>
             {!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? (
               <p className="text-sm text-red-600 dark:text-red-400">

@@ -10,9 +10,13 @@
 
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
+import type * as githubAccess from "../githubAccess.js";
 import type * as http from "../http.js";
+import type * as indexing from "../indexing.js";
+import type * as indexingActions from "../indexingActions.js";
 import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
+import type * as searchActions from "../searchActions.js";
 import type * as stripeActions from "../stripeActions.js";
 import type * as stripeUrls from "../stripeUrls.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
@@ -26,9 +30,13 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
+  githubAccess: typeof githubAccess;
   http: typeof http;
+  indexing: typeof indexing;
+  indexingActions: typeof indexingActions;
   repoActions: typeof repoActions;
   repos: typeof repos;
+  searchActions: typeof searchActions;
   stripeActions: typeof stripeActions;
   stripeUrls: typeof stripeUrls;
   stripeWebhookActions: typeof stripeWebhookActions;

@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { authComponent } from "./auth";
 
 const repoInput = v.object({
@@ -40,49 +45,136 @@ export const getMyConnectedRepos = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
+    const jobsByFullName = new Map<string, (typeof jobs)[number]>();
+    for (const fullName of repos.map((r) => r.fullName)) {
+      const job = await ctx.db
+        .query("repoIndexJobs")
+        .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+        .unique();
+      if (job) jobsByFullName.set(fullName, job);
+    }
+
     return repos
-      .map((repo) => ({
-        id: repo._id,
-        githubId: repo.githubId,
-        owner: repo.owner,
-        name: repo.name,
-        fullName: repo.fullName,
-        private: repo.private,
-        defaultBranch: repo.defaultBranch,
-        connectedAt: repo.connectedAt,
-      }))
+      .map((repo) => {
+        const job = jobsByFullName.get(repo.fullName);
+        return {
+          id: repo._id,
+          githubId: repo.githubId,
+          owner: repo.owner,
+          name: repo.name,
+          fullName: repo.fullName,
+          private: repo.private,
+          defaultBranch: repo.defaultBranch,
+          connectedAt: repo.connectedAt,
+          accessVerifiedAt: repo.accessVerifiedAt,
+          indexStatus: job?.status ?? null,
+        };
+      })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
   },
 });
 
+/** @deprecated Use repoActions.connectRepos — kept for typegen compatibility during migration */
 export const connectRepos = mutation({
   args: {
     repos: v.array(repoInput),
   },
-  handler: async (ctx, { repos }) => {
-    const user = await authComponent.getAuthUser(ctx);
-    const now = Date.now();
+  handler: async () => {
+    throw new Error(
+      "Use the connectRepos action instead — repository access must be verified live against GitHub.",
+    );
+  },
+});
 
-    for (const repo of repos) {
-      const existing = await ctx.db
-        .query("connectedRepos")
-        .withIndex("by_userId_fullName", (q) =>
-          q.eq("userId", user._id).eq("fullName", repo.fullName),
-        )
-        .unique();
+export const insertConnectedRepo = internalMutation({
+  args: {
+    userId: v.string(),
+    repo: repoInput,
+    accessVerifiedAt: v.number(),
+  },
+  handler: async (ctx, { userId, repo, accessVerifiedAt }) => {
+    const existing = await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_userId_fullName", (q) =>
+        q.eq("userId", userId).eq("fullName", repo.fullName),
+      )
+      .unique();
 
-      if (existing) continue;
-
-      await ctx.db.insert("connectedRepos", {
-        userId: user._id,
-        githubId: repo.githubId,
-        owner: repo.owner,
-        name: repo.name,
-        fullName: repo.fullName,
-        private: repo.private,
-        defaultBranch: repo.defaultBranch,
-        connectedAt: now,
-      });
+    if (existing) {
+      await ctx.db.patch(existing._id, { accessVerifiedAt });
+      return { inserted: false, id: existing._id };
     }
+
+    const id = await ctx.db.insert("connectedRepos", {
+      userId,
+      githubId: repo.githubId,
+      owner: repo.owner,
+      name: repo.name,
+      fullName: repo.fullName,
+      private: repo.private,
+      defaultBranch: repo.defaultBranch,
+      connectedAt: accessVerifiedAt,
+      accessVerifiedAt,
+    });
+
+    return { inserted: true, id };
+  },
+});
+
+export const revokeRepoAccess = internalMutation({
+  args: {
+    userId: v.string(),
+    fullName: v.string(),
+  },
+  handler: async (ctx, { userId, fullName }) => {
+    const existing = await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_userId_fullName", (q) =>
+        q.eq("userId", userId).eq("fullName", fullName),
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+  },
+});
+
+export const touchRepoAccessVerified = internalMutation({
+  args: {
+    userId: v.string(),
+    fullName: v.string(),
+    accessVerifiedAt: v.number(),
+    defaultBranch: v.optional(v.string()),
+  },
+  handler: async (ctx, { userId, fullName, accessVerifiedAt, defaultBranch }) => {
+    const existing = await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_userId_fullName", (q) =>
+        q.eq("userId", userId).eq("fullName", fullName),
+      )
+      .unique();
+
+    if (!existing) return;
+
+    await ctx.db.patch(existing._id, {
+      accessVerifiedAt,
+      ...(defaultBranch !== undefined ? { defaultBranch } : {}),
+    });
+  },
+});
+
+export const getConnectedRepo = internalQuery({
+  args: {
+    userId: v.string(),
+    fullName: v.string(),
+  },
+  handler: async (ctx, { userId, fullName }) => {
+    return await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_userId_fullName", (q) =>
+        q.eq("userId", userId).eq("fullName", fullName),
+      )
+      .unique();
   },
 });

@@ -1,9 +1,13 @@
 "use node";
 
 import { v } from "convex/values";
-import { action, type ActionCtx } from "./_generated/server";
-import { components } from "./_generated/api";
+import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
+import {
+  getGithubAccessToken,
+  verifyGithubRepoAccess,
+} from "./githubAccess";
 
 type GithubRepo = {
   id: number;
@@ -14,24 +18,14 @@ type GithubRepo = {
   default_branch?: string;
 };
 
-async function getGithubAccessToken(ctx: ActionCtx, userId: string) {
-  const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "account",
-    where: [
-      { field: "userId", value: userId },
-      { field: "providerId", value: "github" },
-    ],
-  })) as { accessToken?: string | null } | null;
-
-  const accessToken = account?.accessToken;
-  if (!accessToken) {
-    throw new Error(
-      "GitHub access is missing. Sign out and sign in again to grant repository access.",
-    );
-  }
-
-  return accessToken;
-}
+const repoInput = v.object({
+  githubId: v.number(),
+  owner: v.string(),
+  name: v.string(),
+  fullName: v.string(),
+  private: v.boolean(),
+  defaultBranch: v.optional(v.string()),
+});
 
 export const listAvailableRepos = action({
   args: {},
@@ -88,5 +82,74 @@ export const listAvailableRepos = action({
         defaultBranch: repo.default_branch,
       }))
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  },
+});
+
+export const connectRepos = action({
+  args: {
+    repos: v.array(repoInput),
+  },
+  handler: async (ctx, { repos }) => {
+    const user = await authComponent.getAuthUser(ctx);
+    const accessToken = await getGithubAccessToken(ctx, user._id);
+    const now = Date.now();
+    const connected: string[] = [];
+    const errors: string[] = [];
+
+    for (const repo of repos) {
+      const verification = await verifyGithubRepoAccess(
+        ctx,
+        user._id,
+        repo.fullName,
+      );
+
+      if (!verification.ok) {
+        errors.push(`${repo.fullName}: ${verification.message}`);
+        continue;
+      }
+
+      const defaultBranch =
+        verification.defaultBranch ?? repo.defaultBranch ?? "main";
+
+      const { inserted } = await ctx.runMutation(
+        internal.repos.insertConnectedRepo,
+        {
+          userId: user._id,
+          repo: { ...repo, defaultBranch },
+          accessVerifiedAt: now,
+        },
+      );
+
+      if (!inserted) continue;
+
+      connected.push(repo.fullName);
+
+      const { shouldEnqueue } = await ctx.runMutation(
+        internal.indexing.ensureIndexJob,
+        {
+          fullName: repo.fullName,
+          githubId: repo.githubId,
+          owner: repo.owner,
+          name: repo.name,
+          defaultBranch,
+          trigger: "connect",
+        },
+      );
+
+      if (shouldEnqueue) {
+        await ctx.runAction(internal.indexingActions.enqueueIndexRepo, {
+          fullName: repo.fullName,
+          githubId: repo.githubId,
+          trigger: "connect",
+          githubAccessToken: accessToken,
+        });
+      }
+    }
+
+    if (errors.length > 0 && connected.length === 0) {
+      throw new Error(errors.join("\n"));
+    }
+
+    return { connected, errors };
   },
 });

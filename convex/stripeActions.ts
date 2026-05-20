@@ -30,14 +30,6 @@ function getTrialDays() {
   return days;
 }
 
-function getSiteUrl() {
-  const url = process.env.SITE_URL;
-  if (!url) {
-    throw new Error("SITE_URL is not set in the Convex deployment");
-  }
-  return url.replace(/\/$/, "");
-}
-
 function getSubscriptionPeriodEnd(subscription: Stripe.Subscription) {
   if (subscription.trial_end) {
     return subscription.trial_end * 1000;
@@ -178,6 +170,25 @@ export const getBillingDetails = action({
   },
 });
 
+export const getStripeElementsConfig = action({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      throw new Error("Sign in to manage billing");
+    }
+
+    const stripe = getStripe();
+    const priceId = requireEnv("STRIPE_PRICE_ID");
+    const price = await stripe.prices.retrieve(priceId);
+
+    return {
+      currency: price.currency,
+      trialDays: getTrialDays(),
+    };
+  },
+});
+
 export const createTrialSetupIntent = action({
   args: {},
   handler: async (ctx) => {
@@ -203,18 +214,18 @@ export const createTrialSetupIntent = action({
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ["card"],
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: "never",
+      },
       metadata: { userId: user._id, purpose: "trial" },
     });
 
     if (!setupIntent.client_secret) {
-      throw new Error("Could not initialize card form");
+      throw new Error("Could not initialize payment setup");
     }
 
-    return {
-      clientSecret: setupIntent.client_secret,
-      trialDays: getTrialDays(),
-    };
+    return { clientSecret: setupIntent.client_secret };
   },
 });
 
@@ -314,7 +325,10 @@ export const createSetupIntent = action({
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ["card"],
+      automatic_payment_methods: {
+        enabled: true,
+        allow_redirects: "never",
+      },
     });
 
     if (!setupIntent.client_secret) {
@@ -322,55 +336,6 @@ export const createSetupIntent = action({
     }
 
     return { clientSecret: setupIntent.client_secret };
-  },
-});
-
-/** Temporary: hosted Stripe Checkout for QA (redirects to checkout.stripe.com). */
-export const createTestCheckoutSession = action({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in to test billing");
-    }
-
-    const stripe = getStripe();
-    const priceId = requireEnv("STRIPE_PRICE_ID");
-    const siteUrl = getSiteUrl();
-    const trialDays = getTrialDays();
-
-    const existing = await ctx.runQuery(internal.billing.getSubscriptionByUserId, {
-      userId: user._id,
-    });
-
-    if (existing && ["active", "trialing"].includes(existing.status)) {
-      throw new Error("You already have an active subscription");
-    }
-
-    const customerId = await getOrCreateStripeCustomer(ctx, stripe, {
-      _id: user._id,
-      email: user.email,
-      name: user.name,
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        trial_period_days: trialDays,
-        metadata: { userId: user._id },
-      },
-      success_url: `${siteUrl}/billing?success=1`,
-      cancel_url: `${siteUrl}/?checkout=canceled`,
-      metadata: { userId: user._id },
-    });
-
-    if (!session.url) {
-      throw new Error("Could not create Stripe Checkout session");
-    }
-
-    return { url: session.url, trialDays };
   },
 });
 
