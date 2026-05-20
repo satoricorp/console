@@ -4,7 +4,6 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/button";
-import { SatoriLogo } from "@/components/satori-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,16 +19,6 @@ import {
   UI_ZINC,
   type DesignSectionId,
 } from "@/lib/design-tokens";
-
-const GxLogo = dynamic(
-  () => import("@/components/gx-logo").then((mod) => mod.GxLogo),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-7 w-20 animate-pulse bg-zinc-200 dark:bg-zinc-800" />
-    ),
-  },
-);
 
 const GxLogoIconExporter = dynamic(
   () =>
@@ -121,29 +110,6 @@ function TypographySection() {
   );
 }
 
-function LogoSection() {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="border border-zinc-200 p-3 dark:border-zinc-800">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-          GX chrome
-        </p>
-        <div className="mt-2">
-          <GxLogo variant="header" />
-        </div>
-      </div>
-      <div className="border border-zinc-200 p-3 dark:border-zinc-800">
-        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-          Satori
-        </p>
-        <div className="mt-2 bg-zinc-900 px-3 py-2">
-          <SatoriLogo height={12} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ComponentsSection() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -161,7 +127,6 @@ function IconExportSection() {
 const SECTION_CONTENT: Record<DesignSectionId, React.ReactNode> = {
   colors: <ColorsSection />,
   typography: <TypographySection />,
-  logo: <LogoSection />,
   components: <ComponentsSection />,
   "icon-export": <IconExportSection />,
 };

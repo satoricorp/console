@@ -49,7 +49,6 @@ export const ICON_EXPORT_SIZES = [
 export const DESIGN_SECTIONS = [
   { id: "colors", label: "Colors" },
   { id: "typography", label: "Typography" },
-  { id: "logo", label: "Logo & icons" },
   { id: "components", label: "Components" },
   { id: "icon-export", label: "Icon export" },
 ] as const;
