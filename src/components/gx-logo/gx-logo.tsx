@@ -20,6 +20,10 @@ export type GxLogoProps = {
   interactive?: boolean;
   /** Required for canvas.toDataURL() capture. */
   preserveDrawingBuffer?: boolean;
+  /** HDR cubemap face size (icon export — keep ≤1024 to limit GPU memory). */
+  environmentResolution?: number;
+  /** Override frameloop (icon capture uses `always` until SceneCaptureBridge finishes). */
+  frameloop?: "always" | "demand" | "never";
   onGlReady?: (gl: WebGLRenderer) => void;
 };
 
@@ -29,6 +33,8 @@ export function GxLogo({
   pixelSize,
   interactive = true,
   preserveDrawingBuffer = false,
+  environmentResolution,
+  frameloop: frameloopProp,
   onGlReady,
   children,
 }: GxLogoProps) {
@@ -38,14 +44,28 @@ export function GxLogo({
   const isSquare =
     variant === "icon" || variant === "iconX" || pixelSize != null;
   const ariaLabel = variant === "iconX" ? "x" : "gx";
+  const isHeader = variant === "header";
+  /** Header is a small canvas — allow Retina DPR without the hero's continuous loop cost. */
+  const dpr =
+    isHeader
+      ? ([1, 2] as const)
+      : !motionEnabled || variant === "hero"
+        ? 1
+        : pixelSize && (variant === "icon" || variant === "iconX")
+          ? 2
+          : 1;
+  const antialias = isHeader || isHero || motionEnabled;
+  /** Header parallax only repaints on hover — safe alongside the home hero loop. */
+  const hoverDrivenMotion = isHeader && motionEnabled;
+  const canvasFrameloop =
+    frameloopProp ??
+    (motionEnabled ? (hoverDrivenMotion ? "demand" : "always") : "demand");
 
   return (
     <div
       role="img"
       aria-label={ariaLabel}
-      className={["block shrink-0", motionEnabled ? "cursor-pointer" : "", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={["block shrink-0 cursor-default", className].filter(Boolean).join(" ")}
       style={{
         width: pixelSize ?? (isHero ? "100%" : `${config.widthRem}rem`),
         height: pixelSize ?? `${config.heightRem}rem`,
@@ -57,37 +77,35 @@ export function GxLogo({
       }}
     >
       <Canvas
-        frameloop={motionEnabled ? "always" : "demand"}
+        frameloop={canvasFrameloop}
         camera={{
           position: config.camera.position,
           fov: config.camera.fov,
         }}
         gl={{
           alpha: true,
-          antialias: motionEnabled,
-          powerPreference: motionEnabled ? "high-performance" : "low-power",
+          antialias,
+          powerPreference:
+            motionEnabled && isHero ? "high-performance" : "low-power",
           preserveDrawingBuffer,
         }}
-        dpr={
-          !motionEnabled
-            ? 1
-            : pixelSize && (variant === "icon" || variant === "iconX")
-              ? 2
-              : pixelSize
-                ? 1
-                : [1, 2]
-        }
+        dpr={dpr}
         onCreated={({ gl, camera, invalidate }) => {
           configureGxLogoRenderer(gl, variant);
           camera.lookAt(0, 0, 0);
           disableMotion(gl);
-          if (!motionEnabled) invalidate();
+          invalidate();
           onGlReady?.(gl);
         }}
-        style={{ width: "100%", height: "100%", display: "block" }}
+        style={{ width: "100%", height: "100%", display: "block", cursor: "default" }}
       >
         <Suspense fallback={null}>
-          <GxLogoScene variant={variant} interactive={motionEnabled} />
+          <GxLogoScene
+            variant={variant}
+            interactive={motionEnabled}
+            hoverDrivenMotion={hoverDrivenMotion}
+            environmentResolution={environmentResolution}
+          />
           {children}
         </Suspense>
       </Canvas>

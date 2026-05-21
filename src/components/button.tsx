@@ -12,7 +12,7 @@ function ButtonArrow() {
       strokeWidth="1"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="ml-1.5 size-4 shrink-0"
+      className="ml-1.5 size-4 shrink-0 pointer-events-none"
       aria-hidden
     >
       <path d="M2.5 8h9M9.5 5l3 3-3 3" />
@@ -22,7 +22,7 @@ function ButtonArrow() {
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
-    "bg-zinc-900 text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300",
+    "bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300",
   secondary:
     "border border-zinc-300 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900",
   dashed:
@@ -49,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-sm font-medium transition-colors ${fullWidth ? "w-full" : ""} ${variantClass[variant]} ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-none px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${fullWidth ? "w-full" : ""} ${variantClass[variant]} ${className}`}
       {...props}
     >
       {children}
