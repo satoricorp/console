@@ -2,10 +2,10 @@ import { v } from "convex/values";
 import {
   internalMutation,
   internalQuery,
-  mutation,
   query,
 } from "./_generated/server";
 import { authComponent } from "./auth";
+import type { Doc } from "./_generated/dataModel";
 
 const repoInput = v.object({
   githubId: v.number(),
@@ -45,7 +45,7 @@ export const getMyConnectedRepos = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
-    const jobsByFullName = new Map<string, (typeof jobs)[number]>();
+    const jobsByFullName = new Map<string, Doc<"repoIndexJobs">>();
     for (const fullName of repos.map((r) => r.fullName)) {
       const job = await ctx.db
         .query("repoIndexJobs")
@@ -66,23 +66,11 @@ export const getMyConnectedRepos = query({
           private: repo.private,
           defaultBranch: repo.defaultBranch,
           connectedAt: repo.connectedAt,
-          accessVerifiedAt: repo.accessVerifiedAt,
+          accessVerifiedAt: repo.accessVerifiedAt ?? repo.connectedAt,
           indexStatus: job?.status ?? null,
         };
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
-  },
-});
-
-/** @deprecated Use repoActions.connectRepos — kept for typegen compatibility during migration */
-export const connectRepos = mutation({
-  args: {
-    repos: v.array(repoInput),
-  },
-  handler: async () => {
-    throw new Error(
-      "Use the connectRepos action instead — repository access must be verified live against GitHub.",
-    );
   },
 });
 

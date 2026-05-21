@@ -33,6 +33,39 @@ http.route({
 });
 
 http.route({
+  path: "/turbo-puffer/should-index",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.TURBO_PUFFER_CALLBACK_SECRET;
+    if (!secret) {
+      return new Response("Callback secret not configured", { status: 500 });
+    }
+
+    const authHeader = request.headers.get("authorization");
+    if (authHeader !== `Bearer ${secret}`) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    let body: { fullName?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    if (!body.fullName) {
+      return new Response("Missing fullName", { status: 400 });
+    }
+
+    const job = await ctx.runQuery(internal.indexing.getJobByFullName, {
+      fullName: body.fullName,
+    });
+
+    return Response.json({ shouldIndex: job !== null });
+  }),
+});
+
+http.route({
   path: "/turbo-puffer/callback",
   method: "POST",
   handler: httpAction(async (ctx, request) => {

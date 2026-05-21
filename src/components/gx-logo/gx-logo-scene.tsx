@@ -21,6 +21,9 @@ import { Box3, Vector3, type Group } from "three";
 
 import {
   getLogoConfig,
+  HEADER_ENVIRONMENT_RESOLUTION,
+  HERO_ENVIRONMENT_RESOLUTION,
+  ICON_ENVIRONMENT_RESOLUTION,
   USE_GX_LOGO_MESH,
   type LogoVariant,
   type LogoVariantConfig,
@@ -36,6 +39,8 @@ type GxLogoSceneProps = {
   variant?: LogoVariant;
   /** When false, no mouse parallax or float — used for icon PNG export. */
   interactive?: boolean;
+  /** HDR cubemap face size — lower for icon export to save GPU memory. */
+  environmentResolution?: number;
 };
 
 function SplineChrome() {
@@ -53,11 +58,13 @@ function SplineChrome() {
   );
 }
 
-function isIconExportVariant(variant: LogoVariant) {
-  return variant === "icon" || variant === "iconX";
-}
-
-function SplineLighting({ variant }: { variant: LogoVariant }) {
+function SplineLighting({
+  variant,
+  environmentResolution,
+}: {
+  variant: LogoVariant;
+  environmentResolution?: number;
+}) {
   return (
     <>
       <ambientLight intensity={0.45} />
@@ -65,7 +72,7 @@ function SplineLighting({ variant }: { variant: LogoVariant }) {
       <directionalLight position={[-10, 4, 8]} intensity={1.1} color="#d8e6ff" />
       <pointLight position={[0, 0, 10]} intensity={16} color="#ffffff" />
       <Environment
-        resolution={isIconExportVariant(variant) ? 4096 : 2048}
+        resolution={environmentResolution ?? 2048}
         environmentIntensity={1.1}
         preset="studio"
         blur={1}
@@ -107,6 +114,28 @@ const MOUSE_SMOOTHING = {
 
 function damp(current: number, target: number, lambda: number, delta: number) {
   return current + (target - current) * (1 - Math.exp(-lambda * delta));
+}
+
+/** Stop the render loop when the tab is hidden (hero + header motion). */
+function PauseWhenHidden() {
+  const setFrameloop = useThree((state) => state.setFrameloop);
+  const invalidate = useThree((state) => state.invalidate);
+
+  useEffect(() => {
+    const sync = () => {
+      if (document.hidden) {
+        setFrameloop("never");
+      } else {
+        setFrameloop("always");
+        invalidate();
+      }
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, [setFrameloop, invalidate]);
+
+  return null;
 }
 
 /** Demand-mode canvases still need explicit invalidates after async assets load. */
@@ -244,8 +273,9 @@ function GxTextMark({ config }: { config: LogoVariantConfig }) {
     const box = new Box3().setFromObject(mesh);
     const size = box.getSize(new Vector3());
     const halfFov = (config.camera.fov * Math.PI) / 360;
+    const padding = config.squareFitPadding ?? 0.86;
     const viewPlane =
-      2 * config.camera.position[2] * Math.tan(halfFov) * 0.86;
+      2 * config.camera.position[2] * Math.tan(halfFov) * padding;
     const scale = Math.min(
       viewPlane / Math.max(size.x, 0.001),
       viewPlane / Math.max(size.y, 0.001),
@@ -295,12 +325,24 @@ function GxLogoMark({ config }: { config: LogoVariantConfig }) {
   );
 }
 
+function defaultEnvironmentResolution(variant: LogoVariant) {
+  if (variant === "icon" || variant === "iconX") {
+    return ICON_ENVIRONMENT_RESOLUTION;
+  }
+  if (variant === "header") return HEADER_ENVIRONMENT_RESOLUTION;
+  if (variant === "hero") return HERO_ENVIRONMENT_RESOLUTION;
+  return 2048;
+}
+
 export function GxLogoScene({
   variant = "header",
   interactive = true,
+  environmentResolution,
 }: GxLogoSceneProps) {
   const config = getLogoConfig(variant);
   const isHero = variant === "hero";
+  const envResolution =
+    environmentResolution ?? defaultEnvironmentResolution(variant);
   const mark = <GxLogoMark config={config} />;
 
   const content =
@@ -314,9 +356,15 @@ export function GxLogoScene({
 
   return (
     <>
-      <SplineLighting variant={variant} />
+      <SplineLighting
+        variant={variant}
+        environmentResolution={envResolution}
+      />
       {interactive ? (
-        <MouseLook variant={variant}>{content}</MouseLook>
+        <>
+          <PauseWhenHidden />
+          <MouseLook variant={variant}>{content}</MouseLook>
+        </>
       ) : (
         content
       )}

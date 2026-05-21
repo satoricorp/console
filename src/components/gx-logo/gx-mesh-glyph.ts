@@ -1,11 +1,11 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from "three";
 
-/** World-space X split between g and x in gx-icon.glb (after Blender rotation). */
-const GLYPH_X_SPLIT_RATIO = 0.52;
+/** World-space split between g and x in gx-icon.glb (after Blender rotation). */
+const GLYPH_X_SPLIT_RATIO = 0.5;
 
 /**
- * Keeps only triangles whose centroid is on the x side of the gx mark.
- * gx-icon.glb is one mesh; this avoids a mismatched Text3D favicon.
+ * Keeps triangles on the x side of the gx mark. Uses any-vertex test so bevels
+ * on the split line are not shaved off (centroid-only clipping cut the x stem).
  */
 export function clipGeometryToGlyphX(
   geometry: BufferGeometry,
@@ -19,21 +19,19 @@ export function clipGeometryToGlyphX(
   const pos = geometry.attributes.position;
   const index = geometry.index;
   const v = new Vector3();
-  const centroid = new Vector3();
   const verts: number[] = [];
 
   const triCount = index ? index.count / 3 : pos.count / 3;
   for (let i = 0; i < triCount; i++) {
-    centroid.set(0, 0, 0);
     const indices: number[] = [];
+    let keep = false;
     for (let j = 0; j < 3; j++) {
       const vi = index ? index.getX(i * 3 + j) : i * 3 + j;
       indices.push(vi);
       v.fromBufferAttribute(pos, vi);
-      centroid.add(v);
+      if (v.x >= splitX) keep = true;
     }
-    centroid.divideScalar(3);
-    if (centroid.x < splitX) continue;
+    if (!keep) continue;
 
     for (const vi of indices) {
       v.fromBufferAttribute(pos, vi);

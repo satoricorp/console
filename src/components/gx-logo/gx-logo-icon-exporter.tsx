@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { WebGLRenderer } from "three";
 import { Vector2 } from "three";
 
 import { GxLogo } from "./gx-logo";
-import type { LogoVariant } from "./constants";
+import { ICON_ENVIRONMENT_RESOLUTION, type LogoVariant } from "./constants";
 
 const CAPTURE_SIZE = 1024;
-const SETTLE_FRAMES = 90;
+/** Fewer frames after lowering icon env map from 4096 → 1024. */
+const SETTLE_FRAMES = 48;
 
 const FAVICON_X_MAX = 48;
 
@@ -24,6 +33,14 @@ export const ICON_EXPORT_SIZES = [
 ] as const;
 
 export type IconExportBackground = "transparent" | "light" | "dark";
+
+type IconCaptureVariant = Extract<LogoVariant, "icon" | "iconX">;
+
+type IconCaptureJob = {
+  variant: IconCaptureVariant;
+  resolve: (canvas: HTMLCanvasElement) => void;
+  reject: (reason?: unknown) => void;
+};
 
 function downloadDataUrl(dataUrl: string, filename: string) {
   const link = document.createElement("a");
@@ -93,36 +110,120 @@ function SceneCaptureBridge({
     if (frames.current >= SETTLE_FRAMES) {
       notified.current = true;
       onReady(capture);
+      return;
     }
+    // demand frameloop only paints on invalidate — keep stepping until env settles
+    invalidate();
   });
 
   return null;
 }
 
-function IconPreview({
-  variant,
-  label,
-  onReady,
-  previewSize,
+/** One short-lived WebGL context — avoids two 4k cubemaps at once. */
+function EphemeralIconCapture({
+  job,
+  onCaptured,
 }: {
-  variant: LogoVariant;
+  job: IconCaptureJob;
+  onCaptured: () => void;
+}) {
+  const handleReady = useCallback(
+    (capture: () => Promise<HTMLCanvasElement>) => {
+      void capture()
+        .then((canvas) => {
+          job.resolve(canvas);
+          onCaptured();
+        })
+        .catch(job.reject);
+    },
+    [job, onCaptured],
+  );
+
+  return (
+    <div
+      className="pointer-events-none fixed top-0 -left-[10000px] size-px overflow-hidden opacity-0"
+      aria-hidden
+    >
+      <GxLogo
+        key={job.variant}
+        variant={job.variant}
+        pixelSize={160}
+        interactive={false}
+        frameloop="always"
+        preserveDrawingBuffer
+        environmentResolution={ICON_ENVIRONMENT_RESOLUTION}
+      >
+        <SceneCaptureBridge onReady={handleReady} />
+      </GxLogo>
+    </div>
+  );
+}
+
+function captureIconVariant(
+  variant: IconCaptureVariant,
+  setJob: Dispatch<SetStateAction<IconCaptureJob | null>>,
+): Promise<HTMLCanvasElement> {
+  return new Promise((resolve, reject) => {
+    setJob({ variant, resolve, reject });
+  });
+}
+
+const TRANSPARENT_CHECKER_LIGHT: CSSProperties = {
+  backgroundColor: "#fafafa",
+  backgroundImage: `
+    linear-gradient(45deg, #e4e4e7 25%, transparent 25%),
+    linear-gradient(-45deg, #e4e4e7 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e4e4e7 75%),
+    linear-gradient(-45deg, transparent 75%, #e4e4e7 75%)
+  `,
+  backgroundSize: "12px 12px",
+  backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0",
+};
+
+function previewSurfaceStyle(
+  background: IconExportBackground,
+): CSSProperties | undefined {
+  if (background === "light") return { backgroundColor: "#ffffff" };
+  if (background === "dark") return { backgroundColor: "#0a0a0a" };
+  return TRANSPARENT_CHECKER_LIGHT;
+}
+
+function IconPreviewImage({
+  label,
+  previewUrl,
+  previewSize,
+  loading,
+  background,
+}: {
   label: string;
-  onReady: (capture: () => Promise<HTMLCanvasElement>) => void;
+  previewUrl: string | null;
   previewSize: number;
+  loading: boolean;
+  background: IconExportBackground;
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
       <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
         {label}
       </p>
-      <GxLogo
-        variant={variant}
-        pixelSize={previewSize}
-        interactive={false}
-        preserveDrawingBuffer
+      <div
+        className="flex items-center justify-center"
+        style={{ width: previewSize, height: previewSize, ...previewSurfaceStyle(background) }}
       >
-        <SceneCaptureBridge onReady={onReady} />
-      </GxLogo>
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt=""
+            width={previewSize}
+            height={previewSize}
+            className="block size-full object-contain"
+          />
+        ) : (
+          <div
+            className={`size-full ${loading ? "animate-pulse bg-zinc-200 dark:bg-zinc-800" : ""}`}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -132,45 +233,94 @@ type GxLogoIconExporterProps = {
 };
 
 export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps) {
-  const captureGxRef = useRef<(() => Promise<HTMLCanvasElement>) | null>(null);
-  const captureXRef = useRef<(() => Promise<HTMLCanvasElement>) | null>(null);
-  const [readyGx, setReadyGx] = useState(false);
-  const [readyX, setReadyX] = useState(false);
+  const [captureJob, setCaptureJob] = useState<IconCaptureJob | null>(null);
+  const [previewGx, setPreviewGx] = useState<string | null>(null);
+  const [previewX, setPreviewX] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [background, setBackground] =
     useState<IconExportBackground>("transparent");
-
-  const ready = readyGx && readyX;
-
-  const captureForSize = useCallback((size: number) => {
-    return size <= FAVICON_X_MAX ? captureXRef : captureGxRef;
+  const finishCaptureJob = useCallback(() => {
+    setCaptureJob(null);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const gxCanvas = await captureIconVariant("icon", setCaptureJob);
+        if (cancelled) return;
+        setPreviewGx(gxCanvas.toDataURL("image/png"));
+
+        const xCanvas = await captureIconVariant("iconX", setCaptureJob);
+        if (cancelled) return;
+        setPreviewX(xCanvas.toDataURL("image/png"));
+        setReady(true);
+      } catch {
+        /* strict-mode unmount or tab switch — effect re-runs */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setCaptureJob((job) => {
+        if (job) job.reject(new Error("icon capture cancelled"));
+        return null;
+      });
+    };
+  }, []);
+
+  const runCapture = useCallback(
+    (variant: IconCaptureVariant) => captureIconVariant(variant, setCaptureJob),
+    [],
+  );
+
   const exportSize = useCallback(
+    async (size: number, label: string, source: HTMLCanvasElement) => {
+      const prefix = size <= FAVICON_X_MAX ? "gx-x" : "gx";
+      const suffix = background === "transparent" ? "" : `-${background}`;
+      const dataUrl = compositeWithBackground(source, size, background);
+      downloadDataUrl(dataUrl, `${prefix}-icon-${label}${suffix}.png`);
+    },
+    [background],
+  );
+
+  const exportAll = useCallback(async () => {
+    setBusy(true);
+    try {
+      const gxSource = await runCapture("icon");
+      for (const { label, size } of ICON_EXPORT_SIZES) {
+        if (size <= FAVICON_X_MAX) continue;
+        await exportSize(size, label, gxSource);
+        await new Promise((r) => setTimeout(r, 80));
+      }
+
+      const xSource = await runCapture("iconX");
+      for (const { label, size } of ICON_EXPORT_SIZES) {
+        if (size > FAVICON_X_MAX) continue;
+        await exportSize(size, label, xSource);
+        await new Promise((r) => setTimeout(r, 80));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [exportSize, runCapture]);
+
+  const exportOne = useCallback(
     async (size: number, label: string) => {
-      const captureRef = captureForSize(size);
-      const capture = captureRef.current;
-      if (!capture) return;
       setBusy(true);
       try {
-        const source = await capture();
-        const prefix = size <= FAVICON_X_MAX ? "gx-x" : "gx";
-        const suffix = background === "transparent" ? "" : `-${background}`;
-        const dataUrl = compositeWithBackground(source, size, background);
-        downloadDataUrl(dataUrl, `${prefix}-icon-${label}${suffix}.png`);
+        const variant: IconCaptureVariant =
+          size <= FAVICON_X_MAX ? "iconX" : "icon";
+        const source = await runCapture(variant);
+        await exportSize(size, label, source);
       } finally {
         setBusy(false);
       }
     },
-    [background, captureForSize],
+    [exportSize, runCapture],
   );
-
-  const exportAll = useCallback(async () => {
-    for (const { label, size } of ICON_EXPORT_SIZES) {
-      await exportSize(size, label);
-      await new Promise((r) => setTimeout(r, 120));
-    }
-  }, [exportSize]);
 
   const previewSize = compact ? 160 : 200;
   const rootGap = compact ? "gap-5" : "gap-8";
@@ -178,42 +328,35 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
     ? "grid grid-cols-2 gap-3 border border-zinc-200 p-3 dark:border-zinc-800"
     : "grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800";
 
+  const loadingGx = !previewGx && Boolean(captureJob?.variant === "icon");
+  const loadingX = previewGx != null && !previewX && captureJob?.variant === "iconX";
+
   return (
     <div className={`mx-auto flex w-full max-w-lg flex-col ${rootGap}`}>
-      <div
-        className={panelClass}
-        style={{
-          backgroundColor:
-            background === "light"
-              ? "#ffffff"
-              : background === "dark"
-                ? "#0a0a0a"
-                : undefined,
-        }}
-      >
-        <IconPreview
-          variant="icon"
+      {captureJob ? (
+        <EphemeralIconCapture job={captureJob} onCaptured={finishCaptureJob} />
+      ) : null}
+
+      <div className={panelClass}>
+        <IconPreviewImage
           label="gx (48px+)"
+          previewUrl={previewGx}
           previewSize={previewSize}
-          onReady={(fn) => {
-            captureGxRef.current = fn;
-            setReadyGx(true);
-          }}
+          loading={loadingGx}
+          background={background}
         />
-        <IconPreview
-          variant="iconX"
+        <IconPreviewImage
           label="x (≤48px)"
+          previewUrl={previewX}
           previewSize={previewSize}
-          onReady={(fn) => {
-            captureXRef.current = fn;
-            setReadyX(true);
-          }}
+          loading={loadingX || (previewGx != null && !previewX && !ready)}
+          background={background}
         />
       </div>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         {ready
           ? "Full gx for larger icons; chrome x only for 16–48px favicons."
-          : "Loading environment maps…"}
+          : "Rendering chrome previews…"}
       </p>
 
       <fieldset className="flex flex-col gap-1.5">
@@ -260,7 +403,7 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
               key={label}
               type="button"
               disabled={!ready || busy}
-              onClick={() => void exportSize(size, label)}
+              onClick={() => void exportOne(size, label)}
               className="border border-zinc-200 px-2.5 py-1.5 text-left text-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
             >
               <span className="font-medium text-zinc-900 dark:text-zinc-50">

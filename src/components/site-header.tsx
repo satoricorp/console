@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
 import { GxLogo } from "@/components/gx-logo";
 import { UserMenu } from "@/components/user-menu";
 
 export function SiteHeader() {
+  const pathname = usePathname();
   const { data: session, isPending } = authClient.useSession();
+  /** Home shows a large hero logo — keep the header as a single static WebGL paint. */
+  const deferHeaderMotion =
+    pathname === "/" && (isPending || !session?.user);
 
   return (
     <header className="flex items-center justify-between gap-4 overflow-visible border-b border-zinc-200 py-3 pl-0.5 pr-6 dark:border-zinc-800">
@@ -16,7 +21,7 @@ export function SiteHeader() {
         className="flex shrink-0 items-center"
         aria-label="Console home"
       >
-        <GxLogo variant="header" />
+        <GxLogo variant="header" interactive={!deferHeaderMotion} />
       </Link>
       {isPending ? (
         <div className="h-9 w-28 shrink-0 animate-pulse rounded-none bg-zinc-200 dark:bg-zinc-800" />

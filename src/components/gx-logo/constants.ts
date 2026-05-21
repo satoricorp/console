@@ -98,7 +98,7 @@ export const LOGO_VARIANTS = {
     1.48,
     1.88,
     GX_HEADER_MESH_PATH,
-    { glyph: "x", squareFit: true, squareFitPadding: 0.86 },
+    { glyph: "x", squareFit: true, squareFitPadding: 0.74 },
   ),
   hero: defineVariant(
     { widthRem: 24, heightRem: 14, maxWidthRem: 26 },
@@ -110,6 +110,15 @@ export const LOGO_VARIANTS = {
 } as const satisfies Record<string, LogoVariantConfig>;
 
 export type LogoVariant = keyof typeof LOGO_VARIANTS;
+
+/** Icon export / design preview — 1024 matches capture output; 4096 cubemap was ~400MB per canvas. */
+export const ICON_ENVIRONMENT_RESOLUTION = 1024;
+
+/** Nav bar — 1024 keeps chrome sharp; canvas is small so GPU cost stays low. */
+export const HEADER_ENVIRONMENT_RESOLUTION = 1024;
+
+/** Hero is large but one canvas; 1024 keeps chrome without a second 2048 map in the header. */
+export const HERO_ENVIRONMENT_RESOLUTION = 1024;
 
 export function getLogoConfig(variant: LogoVariant = "header") {
   return LOGO_VARIANTS[variant];

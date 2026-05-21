@@ -45,9 +45,9 @@ export default defineSchema({
     fullName: v.string(),
     private: v.boolean(),
     defaultBranch: v.optional(v.string()),
-    connectedAt: v.number(),
-    accessVerifiedAt: v.number(),
-  })
+  connectedAt: v.number(),
+  accessVerifiedAt: v.optional(v.number()),
+})
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"]),
 
