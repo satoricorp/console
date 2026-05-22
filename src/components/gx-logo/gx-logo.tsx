@@ -55,7 +55,7 @@ export function GxLogo({
           ? 2
           : 1;
   const antialias = isHeader || isHero || motionEnabled;
-  /** Header parallax only repaints on hover — safe alongside the home hero loop. */
+  /** Header: parallax on hover only, demand frameloop (no 60fps beside the hero). */
   const hoverDrivenMotion = isHeader && motionEnabled;
   const canvasFrameloop =
     frameloopProp ??
@@ -65,7 +65,9 @@ export function GxLogo({
     <div
       role="img"
       aria-label={ariaLabel}
-      className={["block shrink-0 cursor-default", className].filter(Boolean).join(" ")}
+      className={["block shrink-0", motionEnabled ? "cursor-pointer" : "", className]
+        .filter(Boolean)
+        .join(" ")}
       style={{
         width: pixelSize ?? (isHero ? "100%" : `${config.widthRem}rem`),
         height: pixelSize ?? `${config.heightRem}rem`,
@@ -97,7 +99,7 @@ export function GxLogo({
           invalidate();
           onGlReady?.(gl);
         }}
-        style={{ width: "100%", height: "100%", display: "block", cursor: "default" }}
+        style={{ width: "100%", height: "100%", display: "block" }}
       >
         <Suspense fallback={null}>
           <GxLogoScene
