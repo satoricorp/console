@@ -11,6 +11,10 @@
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as githubAccess from "../githubAccess.js";
+import type * as gxAuth from "../gxAuth.js";
+import type * as gxAuthActions from "../gxAuthActions.js";
+import type * as gxAuthUtils from "../gxAuthUtils.js";
+import type * as gxReviewActions from "../gxReviewActions.js";
 import type * as http from "../http.js";
 import type * as indexing from "../indexing.js";
 import type * as indexingActions from "../indexingActions.js";
@@ -31,6 +35,10 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
   githubAccess: typeof githubAccess;
+  gxAuth: typeof gxAuth;
+  gxAuthActions: typeof gxAuthActions;
+  gxAuthUtils: typeof gxAuthUtils;
+  gxReviewActions: typeof gxReviewActions;
   http: typeof http;
   indexing: typeof indexing;
   indexingActions: typeof indexingActions;
