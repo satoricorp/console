@@ -137,6 +137,15 @@ export function UserMenu() {
 
           <a
             role="menuitem"
+            href="/settings/cli"
+            onClick={() => setOpen(false)}
+            className="flex w-full rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            CLI devices
+          </a>
+
+          <a
+            role="menuitem"
             href="/billing"
             onClick={() => setOpen(false)}
             className="flex w-full rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
