@@ -1,0 +1,15 @@
+# Optional: containerized Postgres for local dev (native Homebrew Postgres is preferred)
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: gx
+      POSTGRES_PASSWORD: gx
+      POSTGRES_DB: api
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
