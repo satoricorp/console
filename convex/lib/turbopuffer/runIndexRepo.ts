@@ -58,6 +58,7 @@ export type JobStatusUpdate = {
 export type IndexRepoCallbacks = {
   updateStatus: (update: JobStatusUpdate) => Promise<void>;
   scheduleNextBatch: (nextOffset: number) => Promise<void>;
+  scheduleStallWatchdog: (checkpoint: number) => Promise<void>;
   getPlan: () => Promise<IndexPlan | null>;
   savePlan: (plan: IndexPlan) => Promise<void>;
 };
@@ -175,6 +176,8 @@ export async function runIndexRepo(
       chunksIndexed: currentPlan.chunksIndexed,
       batchOffset: offset,
     });
+
+    await callbacks.scheduleStallWatchdog(offset);
 
     const contents = await fetchGithubBlobs(fullName, batch, accessToken);
     let batchChunks = 0;

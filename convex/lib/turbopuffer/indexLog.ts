@@ -45,3 +45,6 @@ export function isIndexJobIncomplete(job: {
     (job.filesIndexed ?? 0) < job.filesTotal
   );
 }
+
+/** Slightly longer than Convex's 10-minute action limit. */
+export const STALL_WATCHDOG_MS = 11 * 60 * 1000;

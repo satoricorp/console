@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { indexLogMessage, isIndexJobIncomplete } from "./lib/turbopuffer/indexLog";
+import { indexLogMessage, isIndexJobIncomplete, STALL_WATCHDOG_MS } from "./lib/turbopuffer/indexLog";
 
 const indexJobStatus = v.union(
   v.literal("pending"),
@@ -220,5 +220,65 @@ export const scheduleIndexRepo = internalMutation({
   },
   handler: async (ctx, args) => {
     await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, args);
+  },
+});
+
+const stallWatchdogArgs = {
+  fullName: v.string(),
+  githubId: v.number(),
+  trigger: indexTrigger,
+  checkpoint: v.number(),
+  commitId: v.optional(v.string()),
+  githubAccessToken: v.optional(v.string()),
+  githubAppInstallationId: v.optional(v.number()),
+};
+
+export const scheduleStallWatchdog = internalMutation({
+  args: stallWatchdogArgs,
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(
+      STALL_WATCHDOG_MS,
+      internal.indexing.resumeIfStalled,
+      args,
+    );
+  },
+});
+
+export const resumeIfStalled = internalMutation({
+  args: stallWatchdogArgs,
+  handler: async (ctx, args) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
+      .unique();
+
+    if (!job || !isIndexJobIncomplete(job)) return;
+    if ((job.filesIndexed ?? 0) > args.checkpoint) return;
+
+    const batchOffset = job.filesIndexed ?? args.checkpoint;
+    const line = indexLogMessage(
+      args.fullName,
+      {
+        commitId: job.commitId,
+        filesIndexed: batchOffset,
+        filesTotal: job.filesTotal,
+        chunksIndexed: job.chunksIndexed,
+        batchOffset,
+      },
+      "Stalled (timeout/killed) — auto-resuming",
+    );
+    console.log(line);
+
+    await ctx.db.patch(job._id, { indexLog: line });
+
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, {
+      fullName: args.fullName,
+      githubId: args.githubId,
+      trigger: args.trigger,
+      commitId: args.commitId ?? job.commitId,
+      githubAccessToken: args.githubAccessToken,
+      githubAppInstallationId: args.githubAppInstallationId,
+      batchOffset,
+    });
   },
 });

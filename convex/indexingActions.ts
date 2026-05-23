@@ -53,6 +53,17 @@ export const indexRepo = internalAction({
           batchOffset: nextOffset,
         });
       },
+      scheduleStallWatchdog: async (checkpoint) => {
+        await ctx.runMutation(internal.indexing.scheduleStallWatchdog, {
+          fullName: args.fullName,
+          githubId: args.githubId,
+          trigger: args.trigger,
+          checkpoint,
+          commitId: args.commitId,
+          githubAccessToken: args.githubAccessToken,
+          githubAppInstallationId: args.githubAppInstallationId,
+        });
+      },
       getPlan: () =>
         ctx.runQuery(internal.indexing.getIndexPlan, {
           fullName: args.fullName,
