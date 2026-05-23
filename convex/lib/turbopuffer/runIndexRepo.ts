@@ -8,6 +8,7 @@ import { fetchGithubTree } from "./fetchGithubTree";
 import { getGithubAppInstallationToken } from "./getGithubAppToken";
 import type { IndexedDocument } from "./turbopufferClient";
 import { upsertDocuments } from "./upsertDocuments";
+import { indexLogMessage } from "./indexLog";
 import {
   FILE_BATCH,
   MAX_CHUNKS_PER_FILE,
@@ -34,6 +35,7 @@ export type IndexPlan = {
   treeTruncated: boolean;
   startedAt: number;
   chunksIndexed: number;
+  filesIndexed: number;
 };
 
 export type JobStatusUpdate = {
@@ -50,6 +52,7 @@ export type JobStatusUpdate = {
   completedAt?: number;
   defaultBranch?: string;
   clearIndexFiles?: boolean;
+  indexLog?: string;
 };
 
 export type IndexRepoCallbacks = {
@@ -64,11 +67,45 @@ export async function runIndexRepo(
   callbacks: IndexRepoCallbacks,
 ) {
   const { fullName, trigger } = request;
-  const offset = request.batchOffset ?? 0;
+  let offset = request.batchOffset ?? 0;
+
+  const log = async (
+    message: string,
+    parts: {
+      commitId?: string;
+      filesIndexed?: number;
+      filesTotal?: number;
+      chunksIndexed?: number;
+      batchOffset?: number;
+    } = {},
+  ) => {
+    const line = indexLogMessage(fullName, parts, message);
+    console.log(line);
+    await callbacks.updateStatus({ fullName, status: "indexing", indexLog: line });
+  };
 
   try {
     const accessToken = await resolveAccessToken(request);
     let plan = await callbacks.getPlan();
+
+    const sameCommit =
+      !request.commitId || !plan || request.commitId === plan.commitId;
+    if (
+      offset === 0 &&
+      plan &&
+      plan.filesIndexed > 0 &&
+      plan.filesIndexed < plan.indexFiles.length &&
+      sameCommit
+    ) {
+      offset = plan.filesIndexed;
+      await log("Job incomplete — resuming where we left off", {
+        commitId: plan.commitId,
+        filesIndexed: plan.filesIndexed,
+        filesTotal: plan.indexFiles.length,
+        chunksIndexed: plan.chunksIndexed,
+        batchOffset: offset,
+      });
+    }
 
     if (offset === 0) {
       const startedAt = Date.now();
@@ -96,9 +133,16 @@ export async function runIndexRepo(
         treeTruncated: tree.truncated ?? false,
         startedAt,
         chunksIndexed: 0,
+        filesIndexed: 0,
       };
 
       await callbacks.savePlan(plan);
+      await log("Starting index", {
+        commitId: plan.commitId,
+        filesIndexed: 0,
+        filesTotal: indexFiles.length,
+        chunksIndexed: 0,
+      });
       await callbacks.updateStatus({
         fullName,
         status: "indexing",
@@ -120,9 +164,17 @@ export async function runIndexRepo(
     const currentPlan = plan;
     const batch = currentPlan.indexFiles.slice(offset, offset + FILE_BATCH);
     if (batch.length === 0) {
-      await finalizeIndex(fullName, currentPlan, callbacks, trigger);
+      await finalizeIndex(fullName, currentPlan, callbacks, trigger, log);
       return;
     }
+
+    await log("Processing batch", {
+      commitId: currentPlan.commitId,
+      filesIndexed: offset,
+      filesTotal: currentPlan.indexFiles.length,
+      chunksIndexed: currentPlan.chunksIndexed,
+      batchOffset: offset,
+    });
 
     const contents = await fetchGithubBlobs(fullName, batch, accessToken);
     let batchChunks = 0;
@@ -161,7 +213,7 @@ export async function runIndexRepo(
 
     const filesIndexed = offset + batch.length;
     const chunksIndexed = currentPlan.chunksIndexed + batchChunks;
-    plan = { ...currentPlan, chunksIndexed };
+    plan = { ...currentPlan, chunksIndexed, filesIndexed };
 
     await callbacks.savePlan(plan);
     await callbacks.updateStatus({
@@ -179,20 +231,42 @@ export async function runIndexRepo(
 
     const nextOffset = offset + FILE_BATCH;
     if (nextOffset < plan.indexFiles.length) {
+      await log("Batch done — not finished, scheduling next batch", {
+        commitId: plan.commitId,
+        filesIndexed,
+        filesTotal: plan.indexFiles.length,
+        chunksIndexed,
+        batchOffset: nextOffset,
+      });
       await callbacks.scheduleNextBatch(nextOffset);
       return;
     }
 
-    await finalizeIndex(fullName, plan, callbacks, trigger);
+    await finalizeIndex(fullName, plan, callbacks, trigger, log);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown indexing error";
     console.error(`Index failed for ${fullName}:`, error);
 
+    const failedPlan = await callbacks.getPlan();
+    const line = indexLogMessage(
+      fullName,
+      {
+        commitId: failedPlan?.commitId,
+        filesIndexed: failedPlan?.filesIndexed,
+        filesTotal: failedPlan?.indexFiles.length,
+        chunksIndexed: failedPlan?.chunksIndexed,
+        batchOffset: request.batchOffset,
+      },
+      `Failed — job incomplete, resume from last checkpoint · ${message}`,
+    );
+    console.log(line);
+
     await callbacks.updateStatus({
       fullName,
       status: "failed",
       error: message,
+      indexLog: line,
       completedAt: Date.now(),
     });
   }
@@ -203,8 +277,25 @@ async function finalizeIndex(
   plan: IndexPlan,
   callbacks: IndexRepoCallbacks,
   trigger: IndexRepoRequest["trigger"],
+  log: (
+    message: string,
+    parts?: {
+      commitId?: string;
+      filesIndexed?: number;
+      filesTotal?: number;
+      chunksIndexed?: number;
+      batchOffset?: number;
+    },
+  ) => Promise<void>,
 ) {
   await deleteStaleDocuments(fullName, plan.commitId);
+
+  await log("Index complete", {
+    commitId: plan.commitId,
+    filesIndexed: plan.indexFiles.length,
+    filesTotal: plan.indexFiles.length,
+    chunksIndexed: plan.chunksIndexed,
+  });
 
   await callbacks.updateStatus({
     fullName,
@@ -222,7 +313,7 @@ async function finalizeIndex(
   });
 
   console.log(
-    `Indexed ${fullName}@${plan.commitId} (${plan.indexFiles.length} files, ${plan.chunksIndexed} chunks, trigger=${trigger})`,
+    `[index] ${fullName}@${plan.commitId.slice(0, 7)} done · ${plan.indexFiles.length} files · ${plan.chunksIndexed} chunks · trigger=${trigger}`,
   );
 }
 

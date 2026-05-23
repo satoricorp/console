@@ -67,6 +67,7 @@ export const indexRepo = internalAction({
           treeTruncated: plan.treeTruncated,
           startedAt: plan.startedAt,
           chunksIndexed: plan.chunksIndexed,
+          filesIndexed: plan.filesIndexed,
         });
       },
     });

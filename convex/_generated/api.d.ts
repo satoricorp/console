@@ -24,6 +24,7 @@ import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTe
 import type * as lib_turbopuffer_fetchGithubBlobs from "../lib/turbopuffer/fetchGithubBlobs.js";
 import type * as lib_turbopuffer_fetchGithubTree from "../lib/turbopuffer/fetchGithubTree.js";
 import type * as lib_turbopuffer_getGithubAppToken from "../lib/turbopuffer/getGithubAppToken.js";
+import type * as lib_turbopuffer_indexLog from "../lib/turbopuffer/indexLog.js";
 import type * as lib_turbopuffer_queryReviewContext from "../lib/turbopuffer/queryReviewContext.js";
 import type * as lib_turbopuffer_retry from "../lib/turbopuffer/retry.js";
 import type * as lib_turbopuffer_runIndexRepo from "../lib/turbopuffer/runIndexRepo.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/fetchGithubBlobs": typeof lib_turbopuffer_fetchGithubBlobs;
   "lib/turbopuffer/fetchGithubTree": typeof lib_turbopuffer_fetchGithubTree;
   "lib/turbopuffer/getGithubAppToken": typeof lib_turbopuffer_getGithubAppToken;
+  "lib/turbopuffer/indexLog": typeof lib_turbopuffer_indexLog;
   "lib/turbopuffer/queryReviewContext": typeof lib_turbopuffer_queryReviewContext;
   "lib/turbopuffer/retry": typeof lib_turbopuffer_retry;
   "lib/turbopuffer/runIndexRepo": typeof lib_turbopuffer_runIndexRepo;

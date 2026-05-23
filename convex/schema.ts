@@ -82,6 +82,7 @@ export default defineSchema({
     chunksIndexed: v.optional(v.number()),
     filesSkipped: v.optional(v.number()),
     treeTruncated: v.optional(v.boolean()),
+    indexLog: v.optional(v.string()),
     indexFiles: v.optional(
       v.array(v.object({ path: v.string(), sha: v.string() })),
     ),

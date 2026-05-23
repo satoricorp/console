@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { indexLogMessage, isIndexJobIncomplete } from "./lib/turbopuffer/indexLog";
 
 const indexJobStatus = v.union(
   v.literal("pending"),
@@ -47,6 +48,7 @@ export const getIndexPlan = internalQuery({
       treeTruncated: job.treeTruncated ?? false,
       startedAt: job.startedAt ?? Date.now(),
       chunksIndexed: job.chunksIndexed ?? 0,
+      filesIndexed: job.filesIndexed ?? 0,
     };
   },
 });
@@ -67,8 +69,41 @@ export const ensureIndexJob = internalMutation({
       .unique();
 
     if (existing) {
+      if (isIndexJobIncomplete(existing)) {
+        const batchOffset = existing.filesIndexed ?? 0;
+        const line = indexLogMessage(
+          args.fullName,
+          {
+            commitId: existing.commitId,
+            filesIndexed: batchOffset,
+            filesTotal: existing.filesTotal,
+            chunksIndexed: existing.chunksIndexed,
+            batchOffset,
+          },
+          "Job incomplete — will resume where we left off",
+        );
+        console.log(line);
+        await ctx.db.patch(existing._id, { indexLog: line });
+        return { jobId: existing._id, shouldEnqueue: true, batchOffset };
+      }
+
       if (existing.status === "indexing" && args.trigger === "connect") {
-        return { jobId: existing._id, shouldEnqueue: false };
+        const line = indexLogMessage(
+          args.fullName,
+          { commitId: existing.commitId },
+          "Index stalled with no checkpoint — restarting from beginning",
+        );
+        console.log(line);
+        await ctx.db.patch(existing._id, {
+          status: "pending",
+          indexLog: line,
+          indexFiles: undefined,
+          filesIndexed: undefined,
+          filesTotal: undefined,
+          chunksIndexed: undefined,
+          error: undefined,
+        });
+        return { jobId: existing._id, shouldEnqueue: true, batchOffset: 0 };
       }
 
       if (existing.status === "ready" && args.trigger === "connect") {
@@ -112,6 +147,7 @@ export const saveIndexPlan = internalMutation({
     treeTruncated: v.boolean(),
     startedAt: v.number(),
     chunksIndexed: v.number(),
+    filesIndexed: v.number(),
   },
   handler: async (ctx, args) => {
     const job = await ctx.db
@@ -131,6 +167,7 @@ export const saveIndexPlan = internalMutation({
       treeTruncated: args.treeTruncated,
       startedAt: args.startedAt,
       filesTotal: args.indexFiles.length,
+      filesIndexed: args.filesIndexed,
       chunksIndexed: args.chunksIndexed,
     });
   },
@@ -151,6 +188,7 @@ export const updateJobStatus = internalMutation({
     completedAt: v.optional(v.number()),
     defaultBranch: v.optional(v.string()),
     clearIndexFiles: v.optional(v.boolean()),
+    indexLog: v.optional(v.string()),
   },
   handler: async (ctx, { fullName, status, clearIndexFiles, ...fields }) => {
     const job = await ctx.db
