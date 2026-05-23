@@ -1,4 +1,7 @@
+"use node";
+
 import OpenAI from "openai";
+import { withRetry } from "./retry";
 
 const MODEL = "text-embedding-3-small";
 const BATCH_SIZE = 64;
@@ -24,10 +27,14 @@ export async function embedTextBatch(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const response = await client.embeddings.create({
-      model: MODEL,
-      input: batch,
-    });
+    const response = await withRetry(
+      () =>
+        client.embeddings.create({
+          model: MODEL,
+          input: batch,
+        }),
+      { maxAttempts: 4, baseMs: 1000 },
+    );
 
     for (const item of response.data.sort((a, b) => a.index - b.index)) {
       vectors.push(item.embedding);

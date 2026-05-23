@@ -137,7 +137,7 @@ export const connectRepos = action({
       );
 
       if (shouldEnqueue) {
-        await ctx.runAction(internal.indexingActions.enqueueIndexRepo, {
+        await ctx.runMutation(internal.indexing.scheduleIndexRepo, {
           fullName: repo.fullName,
           githubId: repo.githubId,
           trigger: "connect",

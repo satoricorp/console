@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { isRetryableHttpStatus, withRetry } from "./retry";
 import { parseFullName } from "./utils";
 
 export type GithubTreeEntry = {
@@ -13,6 +13,7 @@ export type GithubTreeResult = {
   commitId: string;
   branch: string;
   entries: GithubTreeEntry[];
+  truncated: boolean;
 };
 
 export async function fetchGithubTree(
@@ -66,36 +67,28 @@ export async function fetchGithubTree(
     commitId: resolvedCommitId,
     branch,
     entries: tree.tree.filter((entry) => entry.type === "blob"),
+    truncated: tree.truncated ?? false,
   };
 }
 
 async function githubGet(url: string, accessToken: string) {
-  return fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${accessToken}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "console-turbo-puffer",
+  return withRetry(
+    async () => {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "console-app",
+        },
+      });
+
+      if (isRetryableHttpStatus(response.status)) {
+        throw new Error(`GitHub request failed (${response.status}): ${url}`);
+      }
+
+      return response;
     },
-  });
-}
-
-export function verifyGithubWebhookSignature(
-  payload: string,
-  signatureHeader: string | null,
-): boolean {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET;
-  if (!secret || !signatureHeader) return false;
-
-  const expected =
-    "sha256=" + createHmac("sha256", secret).update(payload).digest("hex");
-
-  try {
-    return timingSafeEqual(
-      Buffer.from(signatureHeader),
-      Buffer.from(expected),
-    );
-  } catch {
-    return false;
-  }
+    { maxAttempts: 4, baseMs: 1000 },
+  );
 }

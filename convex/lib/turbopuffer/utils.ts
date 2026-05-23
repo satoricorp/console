@@ -17,7 +17,19 @@ export function documentId(
   chunkIndex: number,
 ) {
   const input = `${fullName}:${commitId}:${filePath}:${chunkIndex}`;
-  return Bun.hash(input).toString(16).padStart(16, "0");
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < input.length; i++) {
+    const c = input.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= c + 1;
+    h2 = Math.imul(h2, 0x01000193);
+  }
+  return (
+    (h1 >>> 0).toString(16).padStart(8, "0") +
+    (h2 >>> 0).toString(16).padStart(8, "0")
+  );
 }
 
 export const SKIP_DIR_PREFIXES = [
@@ -59,6 +71,38 @@ export const SKIP_EXTENSIONS = new Set([
 
 export const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_FILES = 5000;
+export const MAX_CHUNKS_PER_FILE = 20;
+export const FILE_BATCH = 50;
+
+const PRIORITY_PREFIXES = [
+  "src/",
+  "app/",
+  "lib/",
+  "packages/",
+  "convex/",
+  "services/",
+];
+
+export function indexPathPriority(path: string): number {
+  const lower = path.toLowerCase();
+  for (let i = 0; i < PRIORITY_PREFIXES.length; i++) {
+    const prefix = PRIORITY_PREFIXES[i];
+    if (lower.startsWith(prefix) || lower.includes(`/${prefix}`)) {
+      return i;
+    }
+  }
+  return PRIORITY_PREFIXES.length;
+}
+
+export function sortIndexableEntries<T extends { path: string }>(
+  entries: T[],
+): T[] {
+  return [...entries].sort((a, b) => {
+    const priorityDiff = indexPathPriority(a.path) - indexPathPriority(b.path);
+    if (priorityDiff !== 0) return priorityDiff;
+    return a.path.localeCompare(b.path);
+  });
+}
 
 export type DocType = "code_chunk" | "test_file" | "architecture_doc";
 

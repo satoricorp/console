@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const indexJobStatus = v.union(
   v.literal("pending"),
@@ -9,6 +10,8 @@ const indexJobStatus = v.union(
 );
 
 const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
+
+const indexFile = v.object({ path: v.string(), sha: v.string() });
 
 function namespaceForRepo(fullName: string) {
   return `repo-${fullName.replace("/", "-")}`;
@@ -21,6 +24,30 @@ export const getJobByFullName = internalQuery({
       .query("repoIndexJobs")
       .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
       .unique();
+  },
+});
+
+export const getIndexPlan = internalQuery({
+  args: { fullName: v.string() },
+  handler: async (ctx, { fullName }) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+      .unique();
+
+    if (!job?.indexFiles || !job.commitId || !job.defaultBranch) {
+      return null;
+    }
+
+    return {
+      commitId: job.commitId,
+      branch: job.defaultBranch,
+      indexFiles: job.indexFiles,
+      filesSkipped: job.filesSkipped ?? 0,
+      treeTruncated: job.treeTruncated ?? false,
+      startedAt: job.startedAt ?? Date.now(),
+      chunksIndexed: job.chunksIndexed ?? 0,
+    };
   },
 });
 
@@ -53,6 +80,9 @@ export const ensureIndexJob = internalMutation({
         trigger: args.trigger,
         error: undefined,
         defaultBranch: args.defaultBranch ?? existing.defaultBranch,
+        indexFiles: undefined,
+        filesSkipped: undefined,
+        treeTruncated: undefined,
       });
       return { jobId: existing._id, shouldEnqueue: true };
     }
@@ -72,6 +102,40 @@ export const ensureIndexJob = internalMutation({
   },
 });
 
+export const saveIndexPlan = internalMutation({
+  args: {
+    fullName: v.string(),
+    commitId: v.string(),
+    defaultBranch: v.string(),
+    indexFiles: v.array(indexFile),
+    filesSkipped: v.number(),
+    treeTruncated: v.boolean(),
+    startedAt: v.number(),
+    chunksIndexed: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
+      .unique();
+
+    if (!job) {
+      throw new Error(`No index job found for ${args.fullName}`);
+    }
+
+    await ctx.db.patch(job._id, {
+      commitId: args.commitId,
+      defaultBranch: args.defaultBranch,
+      indexFiles: args.indexFiles,
+      filesSkipped: args.filesSkipped,
+      treeTruncated: args.treeTruncated,
+      startedAt: args.startedAt,
+      filesTotal: args.indexFiles.length,
+      chunksIndexed: args.chunksIndexed,
+    });
+  },
+});
+
 export const updateJobStatus = internalMutation({
   args: {
     fullName: v.string(),
@@ -80,12 +144,15 @@ export const updateJobStatus = internalMutation({
     filesTotal: v.optional(v.number()),
     filesIndexed: v.optional(v.number()),
     chunksIndexed: v.optional(v.number()),
+    filesSkipped: v.optional(v.number()),
+    treeTruncated: v.optional(v.boolean()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     defaultBranch: v.optional(v.string()),
+    clearIndexFiles: v.optional(v.boolean()),
   },
-  handler: async (ctx, { fullName, status, ...fields }) => {
+  handler: async (ctx, { fullName, status, clearIndexFiles, ...fields }) => {
     const job = await ctx.db
       .query("repoIndexJobs")
       .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
@@ -95,6 +162,25 @@ export const updateJobStatus = internalMutation({
       throw new Error(`No index job found for ${fullName}`);
     }
 
-    await ctx.db.patch(job._id, { status, ...fields });
+    await ctx.db.patch(job._id, {
+      status,
+      ...fields,
+      ...(clearIndexFiles ? { indexFiles: undefined } : {}),
+    });
+  },
+});
+
+export const scheduleIndexRepo = internalMutation({
+  args: {
+    fullName: v.string(),
+    githubId: v.number(),
+    trigger: indexTrigger,
+    githubAccessToken: v.optional(v.string()),
+    commitId: v.optional(v.string()),
+    githubAppInstallationId: v.optional(v.number()),
+    batchOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, args);
   },
 });

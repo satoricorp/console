@@ -1,3 +1,5 @@
+"use node";
+
 import { createSign } from "node:crypto";
 
 export async function getGithubAppInstallationToken(
@@ -36,7 +38,7 @@ export async function getGithubAppInstallationToken(
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${jwt}`,
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "console-turbo-puffer",
+        "User-Agent": "console-app",
       },
     },
   );

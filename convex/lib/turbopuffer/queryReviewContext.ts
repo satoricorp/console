@@ -1,6 +1,8 @@
+"use node";
+
 import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
-import { embedQuery } from "./embed-text-batch";
-import { getNamespace } from "./turbopuffer-client";
+import { embedQuery } from "./embedTextBatch";
+import { getNamespace } from "./turbopufferClient";
 
 export type QueryReviewContextRequest = {
   fullName: string;
@@ -90,7 +92,10 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     (result) => (result.rows ?? []) as RankedRow[],
   );
 
-  const fused = reciprocalRankFusion(resultLists).slice(0, Math.max(limit * 2, 20));
+  const fused = reciprocalRankFusion(resultLists).slice(
+    0,
+    Math.max(limit * 2, 20),
+  );
 
   return {
     results: fused.slice(0, limit).map((row) => ({

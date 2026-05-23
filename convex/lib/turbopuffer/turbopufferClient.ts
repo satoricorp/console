@@ -1,3 +1,5 @@
+"use node";
+
 import { Turbopuffer } from "@turbopuffer/turbopuffer";
 import { namespaceForRepo } from "./utils";
 

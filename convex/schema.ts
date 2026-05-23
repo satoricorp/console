@@ -80,6 +80,11 @@ export default defineSchema({
     filesTotal: v.optional(v.number()),
     filesIndexed: v.optional(v.number()),
     chunksIndexed: v.optional(v.number()),
+    filesSkipped: v.optional(v.number()),
+    treeTruncated: v.optional(v.boolean()),
+    indexFiles: v.optional(
+      v.array(v.object({ path: v.string(), sha: v.string() })),
+    ),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),

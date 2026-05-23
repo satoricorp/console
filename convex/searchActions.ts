@@ -5,22 +5,7 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { verifyGithubRepoAccess } from "./githubAccess";
-
-function getTurboPufferServiceUrl() {
-  const url = process.env.TURBO_PUFFER_SERVICE_URL;
-  if (!url) {
-    throw new Error("TURBO_PUFFER_SERVICE_URL is not set");
-  }
-  return url.replace(/\/$/, "");
-}
-
-function getTurboPufferServiceSecret() {
-  const secret = process.env.TURBO_PUFFER_SERVICE_SECRET;
-  if (!secret) {
-    throw new Error("TURBO_PUFFER_SERVICE_SECRET is not set");
-  }
-  return secret;
-}
+import { queryReviewContext as searchTurboPuffer } from "./lib/turbopuffer/queryReviewContext";
 
 export const queryReviewContext = action({
   args: {
@@ -65,45 +50,14 @@ export const queryReviewContext = action({
       defaultBranch: verification.defaultBranch,
     });
 
-    const response = await fetch(
-      `${getTurboPufferServiceUrl()}/query-review-context`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getTurboPufferServiceSecret()}`,
-        },
-        body: JSON.stringify({
-          fullName: args.fullName,
-          changedFiles: args.changedFiles,
-          symbols: args.symbols,
-          prTitle: args.prTitle,
-          prBody: args.prBody,
-          sessionSummary: args.sessionSummary,
-          limit: args.limit ?? 8,
-        }),
-      },
-    );
-
-    if (response.status === 403) {
-      throw new Error(`You do not have access to ${args.fullName}.`);
-    }
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Search failed (${response.status}): ${body}`);
-    }
-
-    return (await response.json()) as {
-      results: Array<{
-        id: string;
-        file_path: string;
-        doc_type: string;
-        symbol?: string;
-        content: string;
-        commit_id: string;
-        score: number;
-      }>;
-    };
+    return searchTurboPuffer({
+      fullName: args.fullName,
+      changedFiles: args.changedFiles,
+      symbols: args.symbols,
+      prTitle: args.prTitle,
+      prBody: args.prBody,
+      sessionSummary: args.sessionSummary,
+      limit: args.limit ?? 8,
+    });
   },
 });

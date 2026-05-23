@@ -33,91 +33,30 @@ http.route({
 });
 
 http.route({
-  path: "/turbo-puffer/should-index",
+  path: "/github/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.TURBO_PUFFER_CALLBACK_SECRET;
-    if (!secret) {
-      return new Response("Callback secret not configured", { status: 500 });
+    const signature = request.headers.get("x-hub-signature-256");
+    if (!signature) {
+      return new Response("Missing x-hub-signature-256 header", { status: 400 });
     }
 
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${secret}`) {
-      return new Response("Unauthorized", { status: 401 });
+    const event = request.headers.get("x-github-event");
+    if (!event) {
+      return new Response("Missing x-github-event header", { status: 400 });
     }
 
-    let body: { fullName?: string };
-    try {
-      body = await request.json();
-    } catch {
-      return new Response("Invalid JSON", { status: 400 });
-    }
-
-    if (!body.fullName) {
-      return new Response("Missing fullName", { status: 400 });
-    }
-
-    const job = await ctx.runQuery(internal.indexing.getJobByFullName, {
-      fullName: body.fullName,
-    });
-
-    return Response.json({ shouldIndex: job !== null });
-  }),
-});
-
-http.route({
-  path: "/turbo-puffer/callback",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const secret = process.env.TURBO_PUFFER_CALLBACK_SECRET;
-    if (!secret) {
-      return new Response("Callback secret not configured", { status: 500 });
-    }
-
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${secret}`) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    let body: {
-      fullName: string;
-      status: "pending" | "indexing" | "ready" | "failed";
-      commitId?: string;
-      filesTotal?: number;
-      filesIndexed?: number;
-      chunksIndexed?: number;
-      error?: string;
-      startedAt?: number;
-      completedAt?: number;
-      defaultBranch?: string;
-    };
+    const payload = await request.text();
 
     try {
-      body = await request.json();
-    } catch {
-      return new Response("Invalid JSON", { status: 400 });
-    }
-
-    if (!body.fullName || !body.status) {
-      return new Response("Missing fullName or status", { status: 400 });
-    }
-
-    try {
-      await ctx.runMutation(internal.indexing.updateJobStatus, {
-        fullName: body.fullName,
-        status: body.status,
-        commitId: body.commitId,
-        filesTotal: body.filesTotal,
-        filesIndexed: body.filesIndexed,
-        chunksIndexed: body.chunksIndexed,
-        error: body.error,
-        startedAt: body.startedAt,
-        completedAt: body.completedAt,
-        defaultBranch: body.defaultBranch,
+      await ctx.runAction(internal.indexingActions.handleGithubWebhook, {
+        payload,
+        signature,
+        event,
       });
     } catch (error) {
-      console.error("Turbo Puffer callback failed", error);
-      return new Response("Callback error", { status: 500 });
+      console.error("GitHub webhook failed", error);
+      return new Response("Webhook error", { status: 400 });
     }
 
     return new Response(null, { status: 200 });
