@@ -214,10 +214,7 @@ export const createTrialSetupIntent = action({
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: "never",
-      },
+      payment_method_types: ["card"],
       metadata: { userId: user._id, purpose: "trial" },
     });
 
@@ -325,10 +322,7 @@ export const createSetupIntent = action({
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: "never",
-      },
+      payment_method_types: ["card"],
     });
 
     if (!setupIntent.client_secret) {

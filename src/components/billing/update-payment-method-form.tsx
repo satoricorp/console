@@ -29,11 +29,9 @@ function hasWalletButtons(
 function UpdateForm({
   onSuccess,
   onCancel,
-  fetchClientSecret,
 }: {
   onSuccess: () => void;
   onCancel: () => void;
-  fetchClientSecret: () => Promise<string>;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -49,12 +47,7 @@ function UpdateForm({
     setSubmitting(true);
     setError(null);
 
-    const result = await confirmStripeSetupIntent(
-      stripe,
-      elements,
-      returnUrl,
-      fetchClientSecret,
-    );
+    const result = await confirmStripeSetupIntent(stripe, elements, returnUrl);
     if ("error" in result) {
       setError(result.error);
       setSubmitting(false);
@@ -63,7 +56,7 @@ function UpdateForm({
 
     onSuccess();
     setSubmitting(false);
-  }, [stripe, elements, returnUrl, fetchClientSecret, onSuccess]);
+  }, [stripe, elements, returnUrl, onSuccess]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -119,23 +112,17 @@ export function UpdatePaymentMethodForm({
   onCancel: () => void;
 }) {
   const { appearance, themeKey } = useStripeElementsAppearance();
-  const getElementsConfig = useAction(api.stripeActions.getStripeElementsConfig);
   const createSetupIntent = useAction(api.stripeActions.createSetupIntent);
-  const [currency, setCurrency] = useState("usd");
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const fetchClientSecret = useCallback(async () => {
-    const { clientSecret } = await createSetupIntent({});
-    return clientSecret;
-  }, [createSetupIntent]);
 
   useEffect(() => {
     let cancelled = false;
 
-    getElementsConfig({})
-      .then((config) => {
-        if (!cancelled) setCurrency(config.currency);
+    createSetupIntent({})
+      .then((intent) => {
+        if (!cancelled) setClientSecret(intent.clientSecret);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -151,7 +138,7 @@ export function UpdatePaymentMethodForm({
     return () => {
       cancelled = true;
     };
-  }, [getElementsConfig]);
+  }, [createSetupIntent]);
 
   if (loading) {
     return (
@@ -159,8 +146,12 @@ export function UpdatePaymentMethodForm({
     );
   }
 
-  if (error) {
-    return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error || !clientSecret) {
+    return (
+      <p className="text-sm text-red-600 dark:text-red-400">
+        {error ?? "Could not load card form"}
+      </p>
+    );
   }
 
   return (
@@ -168,17 +159,11 @@ export function UpdatePaymentMethodForm({
       key={themeKey}
       stripe={getStripe()}
       options={{
-        mode: "setup",
-        currency,
+        clientSecret,
         appearance,
-        paymentMethodTypes: ["card"],
       }}
     >
-      <UpdateForm
-        onSuccess={onSuccess}
-        onCancel={onCancel}
-        fetchClientSecret={fetchClientSecret}
-      />
+      <UpdateForm onSuccess={onSuccess} onCancel={onCancel} />
     </Elements>
   );
 }
