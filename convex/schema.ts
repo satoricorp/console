@@ -40,4 +40,15 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"]),
+
+  gxPrPushes: defineTable({
+    userId: v.string(),
+    sessionId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    payload: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_sessionId", ["sessionId"]),
 });
