@@ -76,7 +76,7 @@ function defineVariant(
 
 export const LOGO_VARIANTS = {
   header: defineVariant(
-    { widthRem: 6.25, heightRem: 1.95 },
+    { widthRem: 8.25, heightRem: 2.5 },
     { position: [0, 0, 2.55], fov: 28 },
     1.22,
     1.88,

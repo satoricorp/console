@@ -124,7 +124,7 @@ export const connectRepos = action({
 
       connected.push(repo.fullName);
 
-      const { shouldEnqueue } = await ctx.runMutation(
+      const { shouldEnqueue, batchOffset } = await ctx.runMutation(
         internal.indexing.ensureIndexJob,
         {
           fullName: repo.fullName,
@@ -137,11 +137,12 @@ export const connectRepos = action({
       );
 
       if (shouldEnqueue) {
-        await ctx.runAction(internal.indexingActions.enqueueIndexRepo, {
+        await ctx.runMutation(internal.indexing.scheduleIndexRepo, {
           fullName: repo.fullName,
           githubId: repo.githubId,
           trigger: "connect",
           githubAccessToken: accessToken,
+          batchOffset,
         });
       }
     }

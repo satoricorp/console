@@ -39,11 +39,13 @@ type GxLogoSceneProps = {
   variant?: LogoVariant;
   /** When false, no mouse parallax or float — used for icon PNG export. */
   interactive?: boolean;
-  /** Demand-loop header canvases repaint only while pointer input is active. */
+  /** Header: repaint on hover / ease-out only (demand frameloop). */
   hoverDrivenMotion?: boolean;
   /** HDR cubemap face size — lower for icon export to save GPU memory. */
   environmentResolution?: number;
 };
+
+const MOTION_EPS = 0.002;
 
 function SplineChrome() {
   return (
@@ -118,8 +120,8 @@ function damp(current: number, target: number, lambda: number, delta: number) {
   return current + (target - current) * (1 - Math.exp(-lambda * delta));
 }
 
-/** Stop the render loop when the tab is hidden (hero + header motion). */
-function PauseWhenHidden() {
+/** Stop the render loop when the tab is hidden. */
+function PauseWhenHidden({ continuous }: { continuous: boolean }) {
   const setFrameloop = useThree((state) => state.setFrameloop);
   const invalidate = useThree((state) => state.invalidate);
 
@@ -128,14 +130,14 @@ function PauseWhenHidden() {
       if (document.hidden) {
         setFrameloop("never");
       } else {
-        setFrameloop("always");
+        setFrameloop(continuous ? "always" : "demand");
         invalidate();
       }
     };
     sync();
     document.addEventListener("visibilitychange", sync);
     return () => document.removeEventListener("visibilitychange", sync);
-  }, [setFrameloop, invalidate]);
+  }, [continuous, setFrameloop, invalidate]);
 
   return null;
 }
@@ -157,19 +159,19 @@ function StaticLogoSync() {
 
 function MouseLook({
   children,
-  hoverDrivenMotion = false,
   variant,
+  hoverDrivenMotion = false,
 }: {
   children: React.ReactNode;
-  hoverDrivenMotion?: boolean;
   variant: LogoVariant;
+  hoverDrivenMotion?: boolean;
 }) {
   const groupRef = useRef<Group>(null);
-  const invalidate = useThree((state) => state.invalidate);
   const smoothPointer = useRef({ x: 0, y: 0 });
   const rotation = useRef({ x: 0, y: 0 });
   const globalPointer = useRef({ x: 0, y: 0 });
   const [hovered, setHovered] = useState(false);
+  const invalidate = useThree((state) => state.invalidate);
   const settings = MOUSE_SMOOTHING[variant];
   const trackGlobally = variant === "hero";
 
@@ -179,12 +181,11 @@ function MouseLook({
     const onPointerMove = (event: PointerEvent) => {
       globalPointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
       globalPointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      if (hoverDrivenMotion) invalidate();
     };
 
     window.addEventListener("pointermove", onPointerMove);
     return () => window.removeEventListener("pointermove", onPointerMove);
-  }, [hoverDrivenMotion, invalidate, trackGlobally]);
+  }, [trackGlobally]);
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -235,7 +236,16 @@ function MouseLook({
 
     group.rotation.y = rotation.current.y;
     group.rotation.x = rotation.current.x;
-    if (hoverDrivenMotion && hovered) invalidate();
+
+    if (!hoverDrivenMotion) return;
+
+    const animating =
+      hovered ||
+      Math.abs(rotation.current.x) > MOTION_EPS ||
+      Math.abs(rotation.current.y) > MOTION_EPS ||
+      Math.abs(smoothPointer.current.x) > MOTION_EPS ||
+      Math.abs(smoothPointer.current.y) > MOTION_EPS;
+    if (animating) invalidate();
   });
 
   return (
@@ -372,8 +382,8 @@ export function GxLogoScene({
       />
       {interactive ? (
         <>
-          <PauseWhenHidden />
-          <MouseLook hoverDrivenMotion={hoverDrivenMotion} variant={variant}>
+          <PauseWhenHidden continuous={isHero} />
+          <MouseLook variant={variant} hoverDrivenMotion={hoverDrivenMotion}>
             {content}
           </MouseLook>
         </>

@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { indexLogMessage, isIndexJobIncomplete, STALL_WATCHDOG_MS } from "./lib/turbopuffer/indexLog";
 
 const indexJobStatus = v.union(
   v.literal("pending"),
@@ -9,6 +11,8 @@ const indexJobStatus = v.union(
 );
 
 const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
+
+const indexFile = v.object({ path: v.string(), sha: v.string() });
 
 function namespaceForRepo(fullName: string) {
   return `repo-${fullName.replace("/", "-")}`;
@@ -21,6 +25,31 @@ export const getJobByFullName = internalQuery({
       .query("repoIndexJobs")
       .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
       .unique();
+  },
+});
+
+export const getIndexPlan = internalQuery({
+  args: { fullName: v.string() },
+  handler: async (ctx, { fullName }) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+      .unique();
+
+    if (!job?.indexFiles || !job.commitId || !job.defaultBranch) {
+      return null;
+    }
+
+    return {
+      commitId: job.commitId,
+      branch: job.defaultBranch,
+      indexFiles: job.indexFiles,
+      filesSkipped: job.filesSkipped ?? 0,
+      treeTruncated: job.treeTruncated ?? false,
+      startedAt: job.startedAt ?? Date.now(),
+      chunksIndexed: job.chunksIndexed ?? 0,
+      filesIndexed: job.filesIndexed ?? 0,
+    };
   },
 });
 
@@ -40,8 +69,41 @@ export const ensureIndexJob = internalMutation({
       .unique();
 
     if (existing) {
+      if (isIndexJobIncomplete(existing)) {
+        const batchOffset = existing.filesIndexed ?? 0;
+        const line = indexLogMessage(
+          args.fullName,
+          {
+            commitId: existing.commitId,
+            filesIndexed: batchOffset,
+            filesTotal: existing.filesTotal,
+            chunksIndexed: existing.chunksIndexed,
+            batchOffset,
+          },
+          "Job incomplete — will resume where we left off",
+        );
+        console.log(line);
+        await ctx.db.patch(existing._id, { indexLog: line });
+        return { jobId: existing._id, shouldEnqueue: true, batchOffset };
+      }
+
       if (existing.status === "indexing" && args.trigger === "connect") {
-        return { jobId: existing._id, shouldEnqueue: false };
+        const line = indexLogMessage(
+          args.fullName,
+          { commitId: existing.commitId },
+          "Index stalled with no checkpoint — restarting from beginning",
+        );
+        console.log(line);
+        await ctx.db.patch(existing._id, {
+          status: "pending",
+          indexLog: line,
+          indexFiles: undefined,
+          filesIndexed: undefined,
+          filesTotal: undefined,
+          chunksIndexed: undefined,
+          error: undefined,
+        });
+        return { jobId: existing._id, shouldEnqueue: true, batchOffset: 0 };
       }
 
       if (existing.status === "ready" && args.trigger === "connect") {
@@ -53,6 +115,9 @@ export const ensureIndexJob = internalMutation({
         trigger: args.trigger,
         error: undefined,
         defaultBranch: args.defaultBranch ?? existing.defaultBranch,
+        indexFiles: undefined,
+        filesSkipped: undefined,
+        treeTruncated: undefined,
       });
       return { jobId: existing._id, shouldEnqueue: true };
     }
@@ -72,6 +137,42 @@ export const ensureIndexJob = internalMutation({
   },
 });
 
+export const saveIndexPlan = internalMutation({
+  args: {
+    fullName: v.string(),
+    commitId: v.string(),
+    defaultBranch: v.string(),
+    indexFiles: v.array(indexFile),
+    filesSkipped: v.number(),
+    treeTruncated: v.boolean(),
+    startedAt: v.number(),
+    chunksIndexed: v.number(),
+    filesIndexed: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
+      .unique();
+
+    if (!job) {
+      throw new Error(`No index job found for ${args.fullName}`);
+    }
+
+    await ctx.db.patch(job._id, {
+      commitId: args.commitId,
+      defaultBranch: args.defaultBranch,
+      indexFiles: args.indexFiles,
+      filesSkipped: args.filesSkipped,
+      treeTruncated: args.treeTruncated,
+      startedAt: args.startedAt,
+      filesTotal: args.indexFiles.length,
+      filesIndexed: args.filesIndexed,
+      chunksIndexed: args.chunksIndexed,
+    });
+  },
+});
+
 export const updateJobStatus = internalMutation({
   args: {
     fullName: v.string(),
@@ -80,12 +181,16 @@ export const updateJobStatus = internalMutation({
     filesTotal: v.optional(v.number()),
     filesIndexed: v.optional(v.number()),
     chunksIndexed: v.optional(v.number()),
+    filesSkipped: v.optional(v.number()),
+    treeTruncated: v.optional(v.boolean()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     defaultBranch: v.optional(v.string()),
+    clearIndexFiles: v.optional(v.boolean()),
+    indexLog: v.optional(v.string()),
   },
-  handler: async (ctx, { fullName, status, ...fields }) => {
+  handler: async (ctx, { fullName, status, clearIndexFiles, ...fields }) => {
     const job = await ctx.db
       .query("repoIndexJobs")
       .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
@@ -95,6 +200,85 @@ export const updateJobStatus = internalMutation({
       throw new Error(`No index job found for ${fullName}`);
     }
 
-    await ctx.db.patch(job._id, { status, ...fields });
+    await ctx.db.patch(job._id, {
+      status,
+      ...fields,
+      ...(clearIndexFiles ? { indexFiles: undefined } : {}),
+    });
+  },
+});
+
+export const scheduleIndexRepo = internalMutation({
+  args: {
+    fullName: v.string(),
+    githubId: v.number(),
+    trigger: indexTrigger,
+    githubAccessToken: v.optional(v.string()),
+    commitId: v.optional(v.string()),
+    githubAppInstallationId: v.optional(v.number()),
+    batchOffset: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, args);
+  },
+});
+
+const stallWatchdogArgs = {
+  fullName: v.string(),
+  githubId: v.number(),
+  trigger: indexTrigger,
+  checkpoint: v.number(),
+  commitId: v.optional(v.string()),
+  githubAccessToken: v.optional(v.string()),
+  githubAppInstallationId: v.optional(v.number()),
+};
+
+export const scheduleStallWatchdog = internalMutation({
+  args: stallWatchdogArgs,
+  handler: async (ctx, args) => {
+    await ctx.scheduler.runAfter(
+      STALL_WATCHDOG_MS,
+      internal.indexing.resumeIfStalled,
+      args,
+    );
+  },
+});
+
+export const resumeIfStalled = internalMutation({
+  args: stallWatchdogArgs,
+  handler: async (ctx, args) => {
+    const job = await ctx.db
+      .query("repoIndexJobs")
+      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
+      .unique();
+
+    if (!job || !isIndexJobIncomplete(job)) return;
+    if ((job.filesIndexed ?? 0) > args.checkpoint) return;
+
+    const batchOffset = job.filesIndexed ?? args.checkpoint;
+    const line = indexLogMessage(
+      args.fullName,
+      {
+        commitId: job.commitId,
+        filesIndexed: batchOffset,
+        filesTotal: job.filesTotal,
+        chunksIndexed: job.chunksIndexed,
+        batchOffset,
+      },
+      "Stalled (timeout/killed) — auto-resuming",
+    );
+    console.log(line);
+
+    await ctx.db.patch(job._id, { indexLog: line });
+
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, {
+      fullName: args.fullName,
+      githubId: args.githubId,
+      trigger: args.trigger,
+      commitId: args.commitId ?? job.commitId,
+      githubAccessToken: args.githubAccessToken,
+      githubAppInstallationId: args.githubAppInstallationId,
+      batchOffset,
+    });
   },
 });

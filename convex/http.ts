@@ -3,191 +3,25 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
 
+function repoFullNameFromBody(body: Record<string, unknown>): string | undefined {
+  if (typeof body.repoFullName === "string") return body.repoFullName;
+  const repo = body.repo;
+  if (repo && typeof repo === "object") {
+    const repoRecord = repo as Record<string, unknown>;
+    if (typeof repoRecord.fullName === "string") return repoRecord.fullName;
+    if (
+      typeof repoRecord.owner === "string" &&
+      typeof repoRecord.name === "string"
+    ) {
+      return `${repoRecord.owner}/${repoRecord.name}`;
+    }
+  }
+  return undefined;
+}
+
 const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth);
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function optionalString(value: unknown) {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function optionalStringArray(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
-function readBearerToken(request: Request) {
-  const header = request.headers.get("authorization");
-  const prefix = "Bearer ";
-  if (!header?.startsWith(prefix)) return null;
-  const token = header.slice(prefix.length).trim();
-  return token.length > 0 ? token : null;
-}
-
-function optionalBodyString(body: JsonRecord, key: string) {
-  const value = body[key];
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
-function buildRequestId(body: JsonRecord) {
-  const repo = isRecord(body.repo) ? body.repo : {};
-  const push = isRecord(body.push) ? body.push : {};
-  const remoteUrl = optionalString(repo.remote_url) ?? optionalString(repo.root_path);
-  const headCommitId = optionalString(push.head_commit_id);
-  const createdAt = typeof body.created_at === "number" ? body.created_at : 0;
-  return [
-    optionalString(push.github_pull_request_url),
-    remoteUrl && headCommitId ? `${remoteUrl}:${headCommitId}` : undefined,
-    `${remoteUrl ?? "unknown"}:${createdAt}`,
-  ].find((value): value is string => Boolean(value))!;
-}
-
-function changeFields(change: unknown) {
-  const row = isRecord(change) ? change : {};
-  return {
-    changeId: optionalString(row.id),
-    jjChangeId: optionalString(row.jj_change_id),
-    currentCommitId: optionalString(row.current_commit_id),
-    description: optionalString(row.description),
-    status: optionalString(row.status),
-    files: optionalStringArray(row.files),
-  };
-}
-
-function normalizeGxPrPayload(body: unknown, userId: string) {
-  if (!isRecord(body)) {
-    return { error: "Invalid JSON payload" as const };
-  }
-
-  if (body.event !== "gx.pr") {
-    return { error: "Expected event gx.pr" as const };
-  }
-
-  if (typeof body.created_at !== "number") {
-    return { error: "Missing created_at" as const };
-  }
-
-  const repo = isRecord(body.repo) ? body.repo : {};
-  const push = isRecord(body.push) ? body.push : {};
-  const metadata = isRecord(body.metadata) ? body.metadata : {};
-  const stack = Array.isArray(body.stack) ? body.stack : [];
-  const debugJson = JSON.stringify(body, null, 2);
-
-  const adds =
-    stack.length > 0
-      ? stack.filter(isRecord).map((entry, index) => {
-          const change = changeFields(entry.change);
-          return {
-            order: index,
-            ...change,
-            branchName: optionalString(entry.branch_name),
-            baseBranchName: optionalString(entry.base_branch_name),
-            githubPullRequestUrl: optionalString(entry.github_pull_request_url),
-            patch: optionalString(entry.patch),
-            debugJson: JSON.stringify(entry, null, 2),
-          };
-        })
-      : [
-          {
-            order: 0,
-            ...changeFields(body.change),
-            branchName: optionalString(repo.branch_name),
-            baseBranchName: undefined,
-            githubPullRequestUrl: optionalString(push.github_pull_request_url),
-            patch: undefined,
-            debugJson,
-          },
-        ];
-
-  const firstAdd = adds[0];
-
-  return {
-    value: {
-      userId,
-      requestId: buildRequestId(body),
-      event: "gx.pr",
-      createdAt: body.created_at,
-      gxVersion: optionalString(body.gx_version),
-      repoRootPath: optionalString(repo.root_path),
-      repoBackend: optionalString(repo.backend),
-      repoRemoteUrl: optionalString(repo.remote_url),
-      repoBranchName: optionalString(repo.branch_name),
-      headCommitId: optionalString(push.head_commit_id),
-      githubPullRequestUrl: optionalString(push.github_pull_request_url),
-      title:
-        optionalString(metadata.pr_title) ??
-        optionalString(metadata.title) ??
-        firstAdd?.description,
-      description: firstAdd?.description,
-      status: firstAdd?.status,
-      debugJson,
-      adds,
-    },
-  };
-}
-
-http.route({
-  path: "/gx/auth/complete",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response("Invalid JSON", { status: 400 });
-    }
-
-    if (!isRecord(body)) {
-      return new Response("Invalid JSON payload", { status: 400 });
-    }
-
-    const githubAccessToken = optionalBodyString(body, "github_access_token");
-    const machineId = optionalBodyString(body, "machine_id");
-    const machineName = optionalBodyString(body, "machine_name");
-    if (!githubAccessToken || !machineId || !machineName) {
-      return new Response("Missing github_access_token, machine_id, or machine_name", {
-        status: 400,
-      });
-    }
-
-    try {
-      const result = await ctx.runAction(api.gxAuthActions.completeCliAuth, {
-        githubAccessToken,
-        machineId,
-        machineName,
-        gxVersion: optionalString(body.gx_version),
-      });
-      return Response.json(result);
-    } catch (error) {
-      console.error("GX auth complete failed", error);
-      return new Response("GX auth complete failed", { status: 500 });
-    }
-  }),
-});
-
-http.route({
-  path: "/gx/auth/revoke",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const token = readBearerToken(request);
-    if (!token) {
-      return new Response("Missing bearer token", { status: 401 });
-    }
-
-    const result = await ctx.runMutation(internal.gxAuth.revokeCliToken, {
-      token,
-    });
-    return Response.json(result);
-  }),
-});
 
 http.route({
   path: "/stripe/webhook",
@@ -215,63 +49,45 @@ http.route({
 });
 
 http.route({
-  path: "/turbo-puffer/should-index",
+  path: "/github/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.TURBO_PUFFER_CALLBACK_SECRET;
-    if (!secret) {
-      return new Response("Callback secret not configured", { status: 500 });
+    const signature = request.headers.get("x-hub-signature-256");
+    if (!signature) {
+      return new Response("Missing x-hub-signature-256 header", { status: 400 });
     }
 
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${secret}`) {
-      return new Response("Unauthorized", { status: 401 });
+    const event = request.headers.get("x-github-event");
+    if (!event) {
+      return new Response("Missing x-github-event header", { status: 400 });
     }
 
-    let body: { fullName?: string };
+    const payload = await request.text();
+
     try {
-      body = await request.json();
-    } catch {
-      return new Response("Invalid JSON", { status: 400 });
+      await ctx.runAction(internal.indexingActions.handleGithubWebhook, {
+        payload,
+        signature,
+        event,
+      });
+    } catch (error) {
+      console.error("GitHub webhook failed", error);
+      return new Response("Webhook error", { status: 400 });
     }
 
-    if (!body.fullName) {
-      return new Response("Missing fullName", { status: 400 });
-    }
-
-    const job = await ctx.runQuery(internal.indexing.getJobByFullName, {
-      fullName: body.fullName,
-    });
-
-    return Response.json({ shouldIndex: job !== null });
+    return new Response(null, { status: 200 });
   }),
 });
 
 http.route({
-  path: "/turbo-puffer/callback",
+  path: "/gx/auth/complete",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.TURBO_PUFFER_CALLBACK_SECRET;
-    if (!secret) {
-      return new Response("Callback secret not configured", { status: 500 });
-    }
-
-    const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${secret}`) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
     let body: {
-      fullName: string;
-      status: "pending" | "indexing" | "ready" | "failed";
-      commitId?: string;
-      filesTotal?: number;
-      filesIndexed?: number;
-      chunksIndexed?: number;
-      error?: string;
-      startedAt?: number;
-      completedAt?: number;
-      defaultBranch?: string;
+      github_access_token?: string;
+      machine_id?: string;
+      machine_name?: string;
+      gx_version?: string;
     };
 
     try {
@@ -280,29 +96,46 @@ http.route({
       return new Response("Invalid JSON", { status: 400 });
     }
 
-    if (!body.fullName || !body.status) {
-      return new Response("Missing fullName or status", { status: 400 });
+    if (!body.github_access_token || !body.machine_id || !body.machine_name) {
+      return new Response(
+        "Missing github_access_token, machine_id, or machine_name",
+        { status: 400 },
+      );
     }
 
     try {
-      await ctx.runMutation(internal.indexing.updateJobStatus, {
-        fullName: body.fullName,
-        status: body.status,
-        commitId: body.commitId,
-        filesTotal: body.filesTotal,
-        filesIndexed: body.filesIndexed,
-        chunksIndexed: body.chunksIndexed,
-        error: body.error,
-        startedAt: body.startedAt,
-        completedAt: body.completedAt,
-        defaultBranch: body.defaultBranch,
+      const result = await ctx.runAction(api.gxAuthActions.completeCliAuth, {
+        githubAccessToken: body.github_access_token,
+        machineId: body.machine_id,
+        machineName: body.machine_name,
+        gxVersion: body.gx_version,
       });
+      return Response.json(result);
     } catch (error) {
-      console.error("Turbo Puffer callback failed", error);
-      return new Response("Callback error", { status: 500 });
+      const message =
+        error instanceof Error ? error.message : "Authentication failed";
+      const status = message.includes("Sign in to the console") ? 403 : 401;
+      return new Response(message, { status });
+    }
+  }),
+});
+
+http.route({
+  path: "/gx/auth/revoke",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response("Unauthorized", { status: 401 });
     }
 
-    return new Response(null, { status: 200 });
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (!token) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    await ctx.runMutation(api.gxAuth.revokeCliToken, { token });
+    return new Response(null, { status: 204 });
   }),
 });
 
@@ -310,48 +143,65 @@ http.route({
   path: "/gx/pr",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const token = readBearerToken(request);
-    if (!token) {
-      return new Response("Missing bearer token", { status: 401 });
-    }
+    const secret = process.env.GX_WEBHOOK_SECRET;
+    const provided =
+      request.headers.get("x-gx-webhook-secret") ??
+      request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-    const auth = await ctx.runMutation(internal.gxAuth.resolveCliToken, {
-      token,
-    });
-    if (!auth) {
+    if (!secret || provided !== secret) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    let body: unknown;
+    let body: Record<string, unknown>;
     try {
-      body = await request.json();
+      body = (await request.json()) as Record<string, unknown>;
     } catch {
-      return new Response("Invalid JSON", { status: 400 });
+      return new Response("Invalid JSON body", { status: 400 });
     }
 
-    const normalized = normalizeGxPrPayload(body, auth.userId);
-    if ("error" in normalized) {
-      return new Response(normalized.error, { status: 400 });
+    const sessionId =
+      typeof body.sessionId === "string"
+        ? body.sessionId
+        : typeof body.session_id === "string"
+          ? body.session_id
+          : undefined;
+
+    let userId =
+      typeof body.userId === "string"
+        ? body.userId
+        : typeof body.user_id === "string"
+          ? body.user_id
+          : undefined;
+
+    if (!userId) {
+      const repoFullName = repoFullNameFromBody(body);
+      if (repoFullName) {
+        const resolvedUserId = await ctx.runQuery(
+          internal.gxPrHttp.findUserIdForRepo,
+          { repoFullName },
+        );
+        if (resolvedUserId) userId = resolvedUserId;
+      }
     }
 
-    try {
-      const result = await ctx.runMutation(
-        internal.gxPullRequests.upsertFromPr,
-        normalized.value,
-      );
-      const siteUrl = process.env.SITE_URL?.replace(/\/$/, "");
-      return Response.json(
-        {
-          id: result.id,
-          url: siteUrl ? `${siteUrl}/reviews/${result.id}` : undefined,
-          inserted: result.inserted,
-        },
-        { status: result.inserted ? 201 : 200 },
-      );
-    } catch (error) {
-      console.error("GX PR ingest failed", error);
-      return new Response("GX PR ingest failed", { status: 500 });
+    if (!userId) {
+      return new Response("Missing userId (or repo linked to a connected repo)", {
+        status: 400,
+      });
     }
+
+    const payload =
+      body.payload !== undefined && typeof body.payload === "object"
+        ? body.payload
+        : body;
+
+    await ctx.runMutation(internal.gxPr.ingestPush, {
+      userId,
+      sessionId,
+      payload,
+    });
+
+    return Response.json({ ok: true });
   }),
 });
 

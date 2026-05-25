@@ -29,11 +29,9 @@ function hasWalletButtons(
 function TrialSubscribeForm({
   trialDays,
   onSuccess,
-  fetchClientSecret,
 }: {
   trialDays: number;
   onSuccess: () => void;
-  fetchClientSecret: () => Promise<string>;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -50,12 +48,7 @@ function TrialSubscribeForm({
     setSubmitting(true);
     setError(null);
 
-    const result = await confirmStripeSetupIntent(
-      stripe,
-      elements,
-      returnUrl,
-      fetchClientSecret,
-    );
+    const result = await confirmStripeSetupIntent(stripe, elements, returnUrl);
     if ("error" in result) {
       setError(result.error);
       setSubmitting(false);
@@ -70,7 +63,7 @@ function TrialSubscribeForm({
     } finally {
       setSubmitting(false);
     }
-  }, [stripe, elements, returnUrl, fetchClientSecret, startTrial, onSuccess]);
+  }, [stripe, elements, returnUrl, startTrial, onSuccess]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -126,24 +119,19 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
   const { appearance, themeKey } = useStripeElementsAppearance();
   const getElementsConfig = useAction(api.stripeActions.getStripeElementsConfig);
   const createSetupIntent = useAction(api.stripeActions.createTrialSetupIntent);
-  const [currency, setCurrency] = useState("usd");
   const [trialDays, setTrialDays] = useState(14);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const fetchClientSecret = useCallback(async () => {
-    const { clientSecret } = await createSetupIntent({});
-    return clientSecret;
-  }, [createSetupIntent]);
 
   useEffect(() => {
     let cancelled = false;
 
-    getElementsConfig({})
-      .then((config) => {
+    Promise.all([getElementsConfig({}), createSetupIntent({})])
+      .then(([config, intent]) => {
         if (!cancelled) {
-          setCurrency(config.currency);
           setTrialDays(config.trialDays);
+          setClientSecret(intent.clientSecret);
         }
       })
       .catch((err: unknown) => {
@@ -160,7 +148,7 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [getElementsConfig]);
+  }, [getElementsConfig, createSetupIntent]);
 
   if (loading) {
     return (
@@ -168,8 +156,12 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
     );
   }
 
-  if (error) {
-    return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error || !clientSecret) {
+    return (
+      <p className="text-sm text-red-600 dark:text-red-400">
+        {error ?? "Could not load payment form"}
+      </p>
+    );
   }
 
   return (
@@ -177,17 +169,11 @@ export function SubscribePaymentForm({ onSuccess }: { onSuccess: () => void }) {
       key={themeKey}
       stripe={getStripe()}
       options={{
-        mode: "setup",
-        currency,
+        clientSecret,
         appearance,
-        paymentMethodTypes: ["card"],
       }}
     >
-      <TrialSubscribeForm
-        trialDays={trialDays}
-        onSuccess={onSuccess}
-        fetchClientSecret={fetchClientSecret}
-      />
+      <TrialSubscribeForm trialDays={trialDays} onSuccess={onSuccess} />
     </Elements>
   );
 }

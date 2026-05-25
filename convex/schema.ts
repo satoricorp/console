@@ -11,65 +11,6 @@ const indexJobStatus = v.union(
 const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
 
 export default defineSchema({
-  gxCliSessions: defineTable({
-    tokenHash: v.string(),
-    userId: v.string(),
-    githubUserId: v.number(),
-    githubLogin: v.string(),
-    machineId: v.string(),
-    machineName: v.string(),
-    gxVersion: v.optional(v.string()),
-    createdAt: v.number(),
-    lastUsedAt: v.optional(v.number()),
-    revokedAt: v.optional(v.number()),
-  })
-    .index("by_tokenHash", ["tokenHash"])
-    .index("by_userId", ["userId"])
-    .index("by_userId_machineId", ["userId", "machineId"]),
-
-  gxPullRequests: defineTable({
-    userId: v.string(),
-    requestId: v.string(),
-    event: v.string(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    gxVersion: v.optional(v.string()),
-    repoRootPath: v.optional(v.string()),
-    repoBackend: v.optional(v.string()),
-    repoRemoteUrl: v.optional(v.string()),
-    repoBranchName: v.optional(v.string()),
-    headCommitId: v.optional(v.string()),
-    githubPullRequestUrl: v.optional(v.string()),
-    title: v.optional(v.string()),
-    description: v.optional(v.string()),
-    status: v.optional(v.string()),
-    addCount: v.number(),
-    debugJson: v.string(),
-  })
-    .index("by_userId", ["userId"])
-    .index("by_userId_createdAt", ["userId", "createdAt"])
-    .index("by_requestId", ["requestId"]),
-
-  gxAdds: defineTable({
-    gxPullRequestId: v.id("gxPullRequests"),
-    userId: v.string(),
-    createdAt: v.number(),
-    order: v.number(),
-    changeId: v.optional(v.string()),
-    jjChangeId: v.optional(v.string()),
-    currentCommitId: v.optional(v.string()),
-    description: v.optional(v.string()),
-    status: v.optional(v.string()),
-    branchName: v.optional(v.string()),
-    baseBranchName: v.optional(v.string()),
-    githubPullRequestUrl: v.optional(v.string()),
-    files: v.array(v.string()),
-    patch: v.optional(v.string()),
-    debugJson: v.string(),
-  })
-    .index("by_gxPullRequestId", ["gxPullRequestId"])
-    .index("by_userId_createdAt", ["userId", "createdAt"]),
-
   billingCustomers: defineTable({
     userId: v.string(),
     stripeCustomerId: v.string(),
@@ -104,11 +45,38 @@ export default defineSchema({
     fullName: v.string(),
     private: v.boolean(),
     defaultBranch: v.optional(v.string()),
-  connectedAt: v.number(),
-  accessVerifiedAt: v.optional(v.number()),
-})
+    connectedAt: v.number(),
+    accessVerifiedAt: v.optional(v.number()),
+  })
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"]),
+
+  gxCliSessions: defineTable({
+    userId: v.string(),
+    tokenHash: v.string(),
+    githubUserId: v.number(),
+    githubLogin: v.string(),
+    machineId: v.string(),
+    machineName: v.string(),
+    gxVersion: v.optional(v.string()),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_userId", ["userId"])
+    .index("by_userId_machineId", ["userId", "machineId"]),
+
+  gxPrPushes: defineTable({
+    userId: v.string(),
+    sessionId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    payload: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_sessionId", ["sessionId"]),
 
   repoIndexJobs: defineTable({
     fullName: v.string(),
@@ -123,6 +91,12 @@ export default defineSchema({
     filesTotal: v.optional(v.number()),
     filesIndexed: v.optional(v.number()),
     chunksIndexed: v.optional(v.number()),
+    filesSkipped: v.optional(v.number()),
+    treeTruncated: v.optional(v.boolean()),
+    indexLog: v.optional(v.string()),
+    indexFiles: v.optional(
+      v.array(v.object({ path: v.string(), sha: v.string() })),
+    ),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),

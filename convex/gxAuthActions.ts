@@ -43,8 +43,13 @@ async function githubFetch<T>(url: string, accessToken: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function resolveGithubEmail(accessToken: string, githubUser: GitHubUser) {
-  if (githubUser.email) return githubUser.email;
+async function resolveGithubEmail(
+  accessToken: string,
+  githubUser: GitHubUser,
+): Promise<string> {
+  if (githubUser.email) {
+    return githubUser.email;
+  }
 
   try {
     const emails = await githubFetch<GitHubEmail[]>(
@@ -52,13 +57,16 @@ async function resolveGithubEmail(accessToken: string, githubUser: GitHubUser) {
       accessToken,
     );
     const primary = emails.find((entry) => entry.primary && entry.verified);
-    return primary?.email ?? emails[0]?.email ?? fallbackGithubEmail(githubUser);
+    if (primary?.email) {
+      return primary.email;
+    }
+    if (emails[0]?.email) {
+      return emails[0].email;
+    }
   } catch {
-    return fallbackGithubEmail(githubUser);
+    // Fall through to noreply address.
   }
-}
 
-function fallbackGithubEmail(githubUser: GitHubUser) {
   return `${githubUser.id}+${githubUser.login}@users.noreply.github.com`;
 }
 
@@ -69,12 +77,6 @@ export const completeCliAuth = action({
     machineName: v.string(),
     gxVersion: v.optional(v.string()),
   },
-  returns: v.object({
-    token: v.string(),
-    user_id: v.string(),
-    login: v.string(),
-    session_id: v.id("gxCliSessions"),
-  }),
   handler: async (ctx, args): Promise<CompleteCliAuthResult> => {
     const githubUser = await githubFetch<GitHubUser>(
       "https://api.github.com/user",
@@ -86,7 +88,7 @@ export const completeCliAuth = action({
     }
 
     const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
-    const userId: string = await ctx.runMutation(internal.gxAuth.ensureGithubUser, {
+    const userId = await ctx.runMutation(internal.gxAuth.ensureGithubUser, {
       githubUserId: githubUser.id,
       githubLogin: githubUser.login,
       name: githubUser.name?.trim() || githubUser.login,

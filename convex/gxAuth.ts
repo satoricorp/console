@@ -1,28 +1,21 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { authComponent } from "./auth";
 import { hashToken } from "./gxAuthUtils";
 
-export const resolveCliToken = internalMutation({
-  args: { token: v.string() },
-  returns: v.union(
-    v.object({
-      userId: v.string(),
-      githubUserId: v.optional(v.number()),
-      githubLogin: v.optional(v.string()),
-      sessionId: v.string(),
-      machineId: v.optional(v.string()),
-    }),
-    v.null(),
-  ),
-  handler: async (ctx, { token }) => {
-    const tokenHash = await hashToken(token);
+export const resolveCliToken = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.token);
     const session = await ctx.db
       .query("gxCliSessions")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-      .unique();
+      .first();
 
-    if (!session || session.revokedAt !== undefined) {
+    if (!session || session.revokedAt) {
       return null;
     }
 
@@ -47,16 +40,16 @@ export const ensureGithubUser = internalMutation({
     image: v.optional(v.string()),
     accessToken: v.string(),
   },
-  returns: v.string(),
   handler: async (ctx, args) => {
     const now = Date.now();
+
     const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "account",
       where: [
         { field: "providerId", value: "github" },
         { field: "accountId", value: String(args.githubUserId) },
       ],
-    })) as { userId?: string | null } | null;
+    })) as { _id?: string; userId?: string | null } | null;
 
     if (account?.userId) {
       await ctx.runMutation(components.betterAuth.adapter.updateOne, {
@@ -120,10 +113,10 @@ export const finishCliLogin = internalMutation({
     gxVersion: v.optional(v.string()),
     token: v.string(),
   },
-  returns: v.id("gxCliSessions"),
   handler: async (ctx, args) => {
     const now = Date.now();
     const tokenHash = await hashToken(args.token);
+
     const existingForMachine = await ctx.db
       .query("gxCliSessions")
       .withIndex("by_userId_machineId", (q) =>
@@ -137,7 +130,7 @@ export const finishCliLogin = internalMutation({
       }
     }
 
-    return await ctx.db.insert("gxCliSessions", {
+    const sessionId = await ctx.db.insert("gxCliSessions", {
       userId: args.userId,
       tokenHash,
       githubUserId: args.githubUserId,
@@ -148,20 +141,71 @@ export const finishCliLogin = internalMutation({
       createdAt: now,
       lastUsedAt: now,
     });
+
+    return sessionId;
   },
 });
 
-export const revokeCliToken = internalMutation({
-  args: { token: v.string() },
-  returns: v.object({ revoked: v.boolean() }),
-  handler: async (ctx, { token }) => {
-    const tokenHash = await hashToken(token);
+export const revokeCliToken = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.token);
     const session = await ctx.db
       .query("gxCliSessions")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-      .unique();
+      .first();
 
     if (!session || session.revokedAt) {
+      return { revoked: false };
+    }
+
+    await ctx.db.patch(session._id, { revokedAt: Date.now() });
+    return { revoked: true };
+  },
+});
+
+export const getMyCliSessions = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      return null;
+    }
+
+    const sessions = await ctx.db
+      .query("gxCliSessions")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+
+    return sessions
+      .filter((session) => !session.revokedAt)
+      .map((session) => ({
+        sessionId: session._id,
+        machineId: session.machineId,
+        machineName: session.machineName,
+        githubLogin: session.githubLogin,
+        gxVersion: session.gxVersion,
+        createdAt: session.createdAt,
+        lastUsedAt: session.lastUsedAt,
+      }))
+      .sort((a, b) => (b.lastUsedAt ?? b.createdAt) - (a.lastUsedAt ?? a.createdAt));
+  },
+});
+
+export const revokeMyCliSession = mutation({
+  args: {
+    sessionId: v.id("gxCliSessions"),
+  },
+  handler: async (ctx, args) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      throw new Error("Sign in required");
+    }
+
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.userId !== user._id || session.revokedAt) {
       return { revoked: false };
     }
 
