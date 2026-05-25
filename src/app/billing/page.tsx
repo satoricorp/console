@@ -74,11 +74,11 @@ function BillingContent() {
 
   useEffect(() => {
     if (!session?.user) {
-      setBillingDetails(null);
       return;
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- This effect owns async billing-detail loading state.
     setDetailsLoading(true);
 
     getBillingDetails({})

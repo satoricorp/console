@@ -48,7 +48,7 @@ export function GxLogo({
   /** Header is a small canvas — allow Retina DPR without the hero's continuous loop cost. */
   const dpr =
     isHeader
-      ? ([1, 2] as const)
+      ? ([1, 2] as [number, number])
       : !motionEnabled || variant === "hero"
         ? 1
         : pixelSize && (variant === "icon" || variant === "iconX")

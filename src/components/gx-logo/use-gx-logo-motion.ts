@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { WebGLRenderer } from "three";
 
 function isSoftwareWebGlRenderer(gl: WebGLRenderer): boolean {
@@ -37,17 +37,10 @@ export function assessGxLogoMotionCapability(): boolean {
 }
 
 export function useGxLogoMotion(requested: boolean) {
-  const [motionEnabled, setMotionEnabled] = useState(false);
+  const [motionEnabled, setMotionEnabled] = useState(
+    () => requested && assessGxLogoMotionCapability(),
+  );
   const gpuBlocked = useRef(false);
-
-  useEffect(() => {
-    if (!requested) {
-      setMotionEnabled(false);
-      return;
-    }
-    if (gpuBlocked.current) return;
-    setMotionEnabled(assessGxLogoMotionCapability());
-  }, [requested]);
 
   const disableMotion = useCallback((gl: WebGLRenderer) => {
     if (!isSoftwareWebGlRenderer(gl)) return;
@@ -55,5 +48,5 @@ export function useGxLogoMotion(requested: boolean) {
     setMotionEnabled(false);
   }, []);
 
-  return { motionEnabled, disableMotion };
+  return { motionEnabled: requested && motionEnabled, disableMotion };
 }

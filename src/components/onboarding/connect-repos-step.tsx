@@ -45,14 +45,6 @@ export function ConnectReposStep() {
 
   useEffect(() => {
     if (!authReady) {
-      if (!sessionPending && !convexAuthLoading) {
-        setLoading(false);
-        if (session?.user && !isAuthenticated) {
-          setError(
-            "Could not verify your session. Try signing out and signing in again.",
-          );
-        }
-      }
       return;
     }
 

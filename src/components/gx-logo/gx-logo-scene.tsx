@@ -39,6 +39,8 @@ type GxLogoSceneProps = {
   variant?: LogoVariant;
   /** When false, no mouse parallax or float — used for icon PNG export. */
   interactive?: boolean;
+  /** Demand-loop header canvases repaint only while pointer input is active. */
+  hoverDrivenMotion?: boolean;
   /** HDR cubemap face size — lower for icon export to save GPU memory. */
   environmentResolution?: number;
 };
@@ -155,12 +157,15 @@ function StaticLogoSync() {
 
 function MouseLook({
   children,
+  hoverDrivenMotion = false,
   variant,
 }: {
   children: React.ReactNode;
+  hoverDrivenMotion?: boolean;
   variant: LogoVariant;
 }) {
   const groupRef = useRef<Group>(null);
+  const invalidate = useThree((state) => state.invalidate);
   const smoothPointer = useRef({ x: 0, y: 0 });
   const rotation = useRef({ x: 0, y: 0 });
   const globalPointer = useRef({ x: 0, y: 0 });
@@ -174,11 +179,12 @@ function MouseLook({
     const onPointerMove = (event: PointerEvent) => {
       globalPointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
       globalPointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      if (hoverDrivenMotion) invalidate();
     };
 
     window.addEventListener("pointermove", onPointerMove);
     return () => window.removeEventListener("pointermove", onPointerMove);
-  }, [trackGlobally]);
+  }, [hoverDrivenMotion, invalidate, trackGlobally]);
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -229,6 +235,7 @@ function MouseLook({
 
     group.rotation.y = rotation.current.y;
     group.rotation.x = rotation.current.x;
+    if (hoverDrivenMotion && hovered) invalidate();
   });
 
   return (
@@ -238,10 +245,12 @@ function MouseLook({
         onPointerOver: (e) => {
           e.stopPropagation();
           setHovered(true);
+          if (hoverDrivenMotion) invalidate();
         },
         onPointerOut: (e) => {
           e.stopPropagation();
           setHovered(false);
+          if (hoverDrivenMotion) invalidate();
         },
       })}
     >
@@ -337,6 +346,7 @@ function defaultEnvironmentResolution(variant: LogoVariant) {
 export function GxLogoScene({
   variant = "header",
   interactive = true,
+  hoverDrivenMotion = false,
   environmentResolution,
 }: GxLogoSceneProps) {
   const config = getLogoConfig(variant);
@@ -363,7 +373,9 @@ export function GxLogoScene({
       {interactive ? (
         <>
           <PauseWhenHidden />
-          <MouseLook variant={variant}>{content}</MouseLook>
+          <MouseLook hoverDrivenMotion={hoverDrivenMotion} variant={variant}>
+            {content}
+          </MouseLook>
         </>
       ) : (
         content

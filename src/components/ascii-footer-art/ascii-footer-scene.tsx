@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/immutability -- Three.js animation APIs intentionally mutate scene objects. */
+
 import { useLayoutEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
@@ -90,10 +92,7 @@ function configureTexture(texture: Texture) {
 
 export function AsciiFooterScene() {
   const meshRef = useRef<Mesh>(null);
-  const wanderRef = useRef<WanderState | null>(null);
-  if (!wanderRef.current) {
-    wanderRef.current = createWanderState();
-  }
+  const wanderRef = useRef<WanderState>(createWanderState());
 
   const texture = useTexture(NEBULA_TEXTURE);
   const viewport = useThree((state) => state.viewport);

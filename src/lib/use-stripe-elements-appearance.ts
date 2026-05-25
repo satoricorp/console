@@ -37,7 +37,6 @@ export function useStripeElementsAppearance() {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = (event: MediaQueryListEvent) => setIsDark(event.matches);
-    setIsDark(media.matches);
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
   }, []);
