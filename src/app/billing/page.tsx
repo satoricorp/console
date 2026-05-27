@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
 import { Button } from "@/components/button";
 import { SubscribePaymentForm } from "@/components/billing/subscribe-payment-form";
+import { isStripeSignupEnabled } from "@/lib/feature-flags";
 import { StripeDashboardLinks } from "@/components/billing/stripe-dashboard-links";
 import { UpdatePaymentMethodForm } from "@/components/billing/update-payment-method-form";
 
@@ -133,6 +134,7 @@ function BillingContent() {
   const paymentMethod =
     stripeBilling?.customer?.paymentMethod ?? billingDetails?.paymentMethod ?? null;
   const isActive = subscription?.isActive ?? false;
+  const stripeSignupEnabled = isStripeSignupEnabled();
 
   return (
     <>
@@ -265,6 +267,16 @@ function BillingContent() {
             stripeSubscriptionId={subscription?.stripeSubscriptionId}
             stripeSubscriptionUrl={subscription?.stripeDashboardUrl}
           />
+        </div>
+      ) : !stripeSignupEnabled ? (
+        <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Subscriptions are not open yet
+          </p>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Join the waitlist on the home page. We&apos;ll email you when billing
+            is available.
+          </p>
         </div>
       ) : (
         <div className="space-y-6">

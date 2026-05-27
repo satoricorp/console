@@ -15,6 +15,12 @@ const resolveCliTokenRef = makeFunctionReference<
   } | null
 >("gxAuth:resolveCliToken");
 
+const ingestCliPushRef = makeFunctionReference<
+  "mutation",
+  { token: string; payload: unknown },
+  null
+>("gxPr:ingestCliPush");
+
 function getConvexUrl(): string {
   const url = process.env.CONVEX_URL;
   if (!url) {
@@ -54,4 +60,11 @@ export async function resolveCliToken(
     sessionId: result.sessionId,
     machineId: result.machineId,
   };
+}
+
+export async function ingestCliPush(
+  token: string,
+  payload: unknown,
+): Promise<void> {
+  await getClient().mutation(ingestCliPushRef, { token, payload });
 }

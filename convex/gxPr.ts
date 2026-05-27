@@ -1,24 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
-
-function repoFullNameFromPayload(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object") return undefined;
-  const record = payload as Record<string, unknown>;
-  if (typeof record.repoFullName === "string") return record.repoFullName;
-  const repo = record.repo;
-  if (repo && typeof repo === "object") {
-    const repoRecord = repo as Record<string, unknown>;
-    if (typeof repoRecord.fullName === "string") return repoRecord.fullName;
-    if (
-      typeof repoRecord.owner === "string" &&
-      typeof repoRecord.name === "string"
-    ) {
-      return `${repoRecord.owner}/${repoRecord.name}`;
-    }
-  }
-  return undefined;
-}
+import { hashToken } from "./gxAuthUtils";
+import { repoFullNameFromPayload } from "./lib/gxPrPayload";
 
 export const ingestPush = internalMutation({
   args: {
@@ -30,6 +14,33 @@ export const ingestPush = internalMutation({
     await ctx.db.insert("gxPrPushes", {
       userId,
       sessionId,
+      repoFullName: repoFullNameFromPayload(payload),
+      payload,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/** Called by gx-cloud after Postgres ingest; auth = valid `gx pr` CLI bearer token. */
+export const ingestCliPush = mutation({
+  args: {
+    token: v.string(),
+    payload: v.any(),
+  },
+  handler: async (ctx, { token, payload }) => {
+    const tokenHash = await hashToken(token);
+    const session = await ctx.db
+      .query("gxCliSessions")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+
+    if (!session || session.revokedAt) {
+      throw new Error("Unauthorized");
+    }
+
+    await ctx.db.insert("gxPrPushes", {
+      userId: session.userId,
+      sessionId: session._id,
       repoFullName: repoFullNameFromPayload(payload),
       payload,
       createdAt: Date.now(),

@@ -30,6 +30,12 @@ function getTrialDays() {
   return days;
 }
 
+function assertStripeSignupEnabled() {
+  if (process.env.STRIPE_SIGNUP_ENABLED !== "true") {
+    throw new Error("Subscriptions are not available yet");
+  }
+}
+
 function getSubscriptionPeriodEnd(subscription: Stripe.Subscription) {
   if (subscription.trial_end) {
     return subscription.trial_end * 1000;
@@ -173,6 +179,7 @@ export const getBillingDetails = action({
 export const getStripeElementsConfig = action({
   args: {},
   handler: async (ctx) => {
+    assertStripeSignupEnabled();
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
       throw new Error("Sign in to manage billing");
@@ -192,6 +199,7 @@ export const getStripeElementsConfig = action({
 export const createTrialSetupIntent = action({
   args: {},
   handler: async (ctx) => {
+    assertStripeSignupEnabled();
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
       throw new Error("Sign in to start your trial");
@@ -231,6 +239,7 @@ export const startTrialSubscription = action({
     paymentMethodId: v.string(),
   },
   handler: async (ctx, { paymentMethodId }) => {
+    assertStripeSignupEnabled();
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
       throw new Error("Sign in to start your trial");

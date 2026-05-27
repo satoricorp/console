@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
-import { requireAuth } from "../middleware/auth";
+import { bearerToken, requireAuth } from "../middleware/auth";
 import type { PushBundle } from "../types";
+import { syncPushToConvex } from "../sync-convex-push";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -34,6 +35,11 @@ gxPrRoutes.post("/pr", async (c) => {
   }
 
   const auth = c.get("auth");
+  const cliToken = bearerToken(c.req.header("Authorization"));
+  if (!cliToken) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
   const indexFields = extractIndexFields(payload);
   const db = getSql();
 
@@ -76,6 +82,13 @@ gxPrRoutes.post("/pr", async (c) => {
       )
       RETURNING id
     `;
+
+    try {
+      await syncPushToConvex(cliToken, payload, auth);
+    } catch (syncError) {
+      console.error("Failed to sync gx.pr event to Convex", syncError);
+      return c.json({ error: "Failed to sync event to console" }, 500);
+    }
 
     const url = reviewUrl(row.id);
     return c.json({ id: row.id, ...(url ? { url } : {}) }, 201);

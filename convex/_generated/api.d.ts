@@ -20,6 +20,7 @@ import type * as gxReviewActions from "../gxReviewActions.js";
 import type * as http from "../http.js";
 import type * as indexing from "../indexing.js";
 import type * as indexingActions from "../indexingActions.js";
+import type * as lib_gxPrPayload from "../lib/gxPrPayload.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
@@ -39,6 +40,7 @@ import type * as searchActions from "../searchActions.js";
 import type * as stripeActions from "../stripeActions.js";
 import type * as stripeUrls from "../stripeUrls.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
+import type * as waitlist from "../waitlist.js";
 
 import type {
   ApiFromModules,
@@ -59,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   indexing: typeof indexing;
   indexingActions: typeof indexingActions;
+  "lib/gxPrPayload": typeof lib_gxPrPayload;
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;
@@ -78,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   stripeActions: typeof stripeActions;
   stripeUrls: typeof stripeUrls;
   stripeWebhookActions: typeof stripeWebhookActions;
+  waitlist: typeof waitlist;
 }>;
 
 /**

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { isStripeSignupEnabled } from "@/lib/feature-flags";
 import { GitHubIcon } from "@/components/github-icon";
 
 type SessionUser = {
@@ -144,14 +145,16 @@ export function UserMenu() {
             CLI devices
           </a>
 
-          <a
-            role="menuitem"
-            href="/billing"
-            onClick={() => setOpen(false)}
-            className="flex w-full rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            Billing
-          </a>
+          {isStripeSignupEnabled() ? (
+            <a
+              role="menuitem"
+              href="/billing"
+              onClick={() => setOpen(false)}
+              className="flex w-full rounded-lg px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Billing
+            </a>
+          ) : null}
 
           {githubUrl ? (
             <a

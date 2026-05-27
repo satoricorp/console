@@ -3,19 +3,14 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
 
+import { repoFullNameFromPayload } from "./lib/gxPrPayload";
+
 function repoFullNameFromBody(body: Record<string, unknown>): string | undefined {
   if (typeof body.repoFullName === "string") return body.repoFullName;
-  const repo = body.repo;
-  if (repo && typeof repo === "object") {
-    const repoRecord = repo as Record<string, unknown>;
-    if (typeof repoRecord.fullName === "string") return repoRecord.fullName;
-    if (
-      typeof repoRecord.owner === "string" &&
-      typeof repoRecord.name === "string"
-    ) {
-      return `${repoRecord.owner}/${repoRecord.name}`;
-    }
-  }
+  const fromPayload = repoFullNameFromPayload(body);
+  if (fromPayload) return fromPayload;
+  const payload = body.payload;
+  if (payload !== undefined) return repoFullNameFromPayload(payload);
   return undefined;
 }
 

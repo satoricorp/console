@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { resolveCliToken } from "../convex-client";
+import { devAuthContext } from "../dev-auth";
 import type { AuthContext } from "../types";
 
 export type AppEnv = {
@@ -8,7 +9,7 @@ export type AppEnv = {
   };
 };
 
-function bearerToken(header: string | undefined): string | null {
+export function bearerToken(header: string | undefined): string | null {
   if (!header?.startsWith("Bearer ")) {
     return null;
   }
@@ -23,6 +24,13 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   try {
+    const devAuth = devAuthContext(token);
+    if (devAuth) {
+      c.set("auth", devAuth);
+      await next();
+      return;
+    }
+
     const resolved = await resolveCliToken(token);
     if (!resolved) {
       return c.json({ error: "Unauthorized" }, 401);
