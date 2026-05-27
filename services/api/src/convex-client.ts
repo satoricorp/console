@@ -17,9 +17,25 @@ const resolveCliTokenRef = makeFunctionReference<
 
 const ingestCliPushRef = makeFunctionReference<
   "mutation",
-  { token: string; payload: unknown },
+  {
+    token: string;
+    bookmark: {
+      postgresBookmarkId: string;
+      latestEventId: string;
+      repoFullName: string;
+      branchName: string;
+      title: string | null;
+      revision: number;
+      mergeStatus: "open" | "merged" | "closed";
+      githubPrUrl: string | null;
+      githubPrNumber: number | null;
+      headCommitId: string | null;
+      remoteHeadSha: string | null;
+      updatedAt: number;
+    };
+  },
   null
->("gxPr:ingestCliPush");
+>("gxPr:ingestCliBookmark");
 
 const ingestDevPushRef = makeFunctionReference<
   "mutation",
@@ -27,10 +43,23 @@ const ingestDevPushRef = makeFunctionReference<
     devSecret: string;
     userId: string;
     sessionId?: string;
-    payload: unknown;
+    bookmark: {
+      postgresBookmarkId: string;
+      latestEventId: string;
+      repoFullName: string;
+      branchName: string;
+      title: string | null;
+      revision: number;
+      mergeStatus: "open" | "merged" | "closed";
+      githubPrUrl: string | null;
+      githubPrNumber: number | null;
+      headCommitId: string | null;
+      remoteHeadSha: string | null;
+      updatedAt: number;
+    };
   },
   null
->("gxPr:ingestDevPush");
+>("gxPr:ingestDevBookmark");
 
 function getConvexUrl(): string {
   const url = process.env.CONVEX_URL;
@@ -73,23 +102,49 @@ export async function resolveCliToken(
   };
 }
 
-export async function ingestCliPush(
+export async function ingestCliBookmark(
   token: string,
-  payload: unknown,
+  bookmark: {
+    postgresBookmarkId: string;
+    latestEventId: string;
+    repoFullName: string;
+    branchName: string;
+    title: string | null;
+    revision: number;
+    mergeStatus: "open" | "merged" | "closed";
+    githubPrUrl: string | null;
+    githubPrNumber: number | null;
+    headCommitId: string | null;
+    remoteHeadSha: string | null;
+    updatedAt: number;
+  },
 ): Promise<void> {
-  await getClient().mutation(ingestCliPushRef, { token, payload });
+  await getClient().mutation(ingestCliPushRef, { token, bookmark });
 }
 
-export async function ingestDevPush(
+export async function ingestDevBookmark(
   devSecret: string,
   userId: string,
   sessionId: string | undefined,
-  payload: unknown,
+  bookmark: {
+    postgresBookmarkId: string;
+    latestEventId: string;
+    repoFullName: string;
+    branchName: string;
+    title: string | null;
+    revision: number;
+    mergeStatus: "open" | "merged" | "closed";
+    githubPrUrl: string | null;
+    githubPrNumber: number | null;
+    headCommitId: string | null;
+    remoteHeadSha: string | null;
+    updatedAt: number;
+  },
 ): Promise<void> {
   await getClient().mutation(ingestDevPushRef, {
     devSecret,
     userId,
     sessionId,
-    payload,
+    bookmark,
   });
 }

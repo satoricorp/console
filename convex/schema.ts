@@ -78,6 +78,30 @@ export default defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_sessionId", ["sessionId"]),
 
+  gxBookmarks: defineTable({
+    userId: v.string(),
+    postgresBookmarkId: v.string(),
+    latestEventId: v.string(),
+    repoFullName: v.string(),
+    branchName: v.string(),
+    title: v.optional(v.string()),
+    revision: v.number(),
+    mergeStatus: v.union(
+      v.literal("open"),
+      v.literal("merged"),
+      v.literal("closed"),
+    ),
+    githubPrUrl: v.optional(v.string()),
+    githubPrNumber: v.optional(v.number()),
+    headCommitId: v.optional(v.string()),
+    remoteHeadSha: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_updatedAt", ["userId", "updatedAt"])
+    .index("by_userId_postgresBookmarkId", ["userId", "postgresBookmarkId"])
+    .index("by_userId_repo_branch", ["userId", "repoFullName", "branchName"]),
+
   waitlistEmails: defineTable({
     email: v.string(),
     createdAt: v.number(),

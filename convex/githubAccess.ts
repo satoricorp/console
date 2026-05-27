@@ -3,6 +3,11 @@
 import type { ActionCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 
+// GitHub App permissions required by GX merge/status flows:
+// - contents: read/write
+// - pull_requests: read
+// - checks: read
+// - actions: read (actions: write is only needed for future rerun support)
 export type GithubAccessResult =
   | { ok: true; defaultBranch?: string }
   | { ok: false; status: number; message: string };

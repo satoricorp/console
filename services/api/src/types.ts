@@ -121,3 +121,20 @@ export type GxPrEventRow = {
   github_pr_url: string | null;
   payload: PushBundle;
 };
+
+export type MergeStatus = "open" | "merged" | "closed";
+
+export type BookmarkSyncPayload = {
+  postgresBookmarkId: string;
+  latestEventId: string;
+  repoFullName: string;
+  branchName: string;
+  title: string | null;
+  revision: number;
+  mergeStatus: MergeStatus;
+  githubPrUrl: string | null;
+  githubPrNumber: number | null;
+  headCommitId: string | null;
+  remoteHeadSha: string | null;
+  updatedAt: number;
+};

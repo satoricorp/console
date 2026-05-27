@@ -1,4 +1,4 @@
-import type { AuthContext } from "../types";
+import type { AuthContext } from "./types";
 
 export function devAuthContext(token: string): AuthContext | null {
   const devKey = process.env.GX_CLOUD_API_KEY?.trim();
