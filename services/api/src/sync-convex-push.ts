@@ -1,37 +1,44 @@
-import { ingestCliPush } from "./convex-client";
+import { ingestCliPush, ingestDevPush } from "./convex-client";
 import type { AuthContext } from "./types";
 import type { PushBundle } from "./types";
+
+function trimPushPayload(payload: PushBundle): PushBundle {
+  const trimmed: PushBundle = { ...payload };
+  if (Array.isArray(trimmed.stack) && trimmed.stack.length > 0) {
+    trimmed.sessions = [];
+    return trimmed;
+  }
+  if (Array.isArray(trimmed.sessions)) {
+    trimmed.sessions = trimmed.sessions.map((session) => ({
+      ...session,
+      requests: session.requests.map((request) => ({
+        ...request,
+        request_body: undefined,
+        request_headers: "",
+        responses: request.responses.map((response) => ({
+          ...response,
+          response_body: undefined,
+          response_headers: "",
+        })),
+      })),
+    }));
+  }
+  return trimmed;
+}
 
 export async function syncPushToConvex(
   cliToken: string,
   payload: PushBundle,
   auth: AuthContext,
 ): Promise<void> {
+  const trimmed = trimPushPayload(payload);
   const devKey = process.env.GX_CLOUD_API_KEY?.trim();
-  const siteUrl = process.env.CONVEX_SITE_URL?.replace(/\/$/, "");
   const webhookSecret = process.env.GX_WEBHOOK_SECRET?.trim();
 
-  if (devKey && cliToken === devKey && siteUrl && webhookSecret) {
-    const response = await fetch(`${siteUrl}/gx/pr`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-gx-webhook-secret": webhookSecret,
-      },
-      body: JSON.stringify({
-        user_id: auth.userId,
-        session_id: auth.sessionId,
-        payload,
-      }),
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      throw new Error(
-        `Convex gx/pr sync failed (${response.status})${detail ? `: ${detail}` : ""}`,
-      );
-    }
+  if (devKey && cliToken === devKey && webhookSecret) {
+    await ingestDevPush(webhookSecret, auth.userId, auth.sessionId, trimmed);
     return;
   }
 
-  await ingestCliPush(cliToken, payload);
+  await ingestCliPush(cliToken, trimmed);
 }

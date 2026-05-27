@@ -48,6 +48,29 @@ export const ingestCliPush = mutation({
   },
 });
 
+/** Local gx-cloud dev uploads (GX_CLOUD_API_KEY + GX_WEBHOOK_SECRET). */
+export const ingestDevPush = mutation({
+  args: {
+    devSecret: v.string(),
+    userId: v.string(),
+    sessionId: v.optional(v.string()),
+    payload: v.any(),
+  },
+  handler: async (ctx, { devSecret, userId, sessionId, payload }) => {
+    const expected = process.env.GX_WEBHOOK_SECRET;
+    if (!expected || devSecret !== expected) {
+      throw new Error("Unauthorized");
+    }
+    await ctx.db.insert("gxPrPushes", {
+      userId,
+      sessionId,
+      repoFullName: repoFullNameFromPayload(payload),
+      payload,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 export const listMyPushes = query({
   args: {},
   handler: async (ctx) => {

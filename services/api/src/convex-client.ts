@@ -21,6 +21,17 @@ const ingestCliPushRef = makeFunctionReference<
   null
 >("gxPr:ingestCliPush");
 
+const ingestDevPushRef = makeFunctionReference<
+  "mutation",
+  {
+    devSecret: string;
+    userId: string;
+    sessionId?: string;
+    payload: unknown;
+  },
+  null
+>("gxPr:ingestDevPush");
+
 function getConvexUrl(): string {
   const url = process.env.CONVEX_URL;
   if (!url) {
@@ -67,4 +78,18 @@ export async function ingestCliPush(
   payload: unknown,
 ): Promise<void> {
   await getClient().mutation(ingestCliPushRef, { token, payload });
+}
+
+export async function ingestDevPush(
+  devSecret: string,
+  userId: string,
+  sessionId: string | undefined,
+  payload: unknown,
+): Promise<void> {
+  await getClient().mutation(ingestDevPushRef, {
+    devSecret,
+    userId,
+    sessionId,
+    payload,
+  });
 }
