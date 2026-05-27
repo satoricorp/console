@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Console",
-  description: "Sign in with GitHub",
+  description: "Join the Console waitlist",
 };
 
 export default async function RootLayout({

@@ -13,13 +13,3 @@ export function getStripe() {
   return stripePromise;
 }
 
-export const stripeElementsAppearance = {
-  theme: "stripe" as const,
-  variables: {
-    colorPrimary: "#18181b",
-    colorBackground: "#ffffff",
-    colorText: "#18181b",
-    colorDanger: "#dc2626",
-    borderRadius: "8px",
-  },
-};

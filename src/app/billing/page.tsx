@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
 import { Button } from "@/components/button";
 import { SubscribePaymentForm } from "@/components/billing/subscribe-payment-form";
+import { isStripeSignupEnabled } from "@/lib/feature-flags";
 import { StripeDashboardLinks } from "@/components/billing/stripe-dashboard-links";
 import { UpdatePaymentMethodForm } from "@/components/billing/update-payment-method-form";
 
@@ -74,11 +75,11 @@ function BillingContent() {
 
   useEffect(() => {
     if (!session?.user) {
-      setBillingDetails(null);
       return;
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- This effect owns async billing-detail loading state.
     setDetailsLoading(true);
 
     getBillingDetails({})
@@ -133,6 +134,7 @@ function BillingContent() {
   const paymentMethod =
     stripeBilling?.customer?.paymentMethod ?? billingDetails?.paymentMethod ?? null;
   const isActive = subscription?.isActive ?? false;
+  const stripeSignupEnabled = isStripeSignupEnabled();
 
   return (
     <>
@@ -266,6 +268,16 @@ function BillingContent() {
             stripeSubscriptionUrl={subscription?.stripeDashboardUrl}
           />
         </div>
+      ) : !stripeSignupEnabled ? (
+        <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Subscriptions are not open yet
+          </p>
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            Join the waitlist on the home page. We&apos;ll email you when billing
+            is available.
+          </p>
+        </div>
       ) : (
         <div className="space-y-6">
           <div className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
@@ -289,8 +301,9 @@ function BillingContent() {
               Start your free trial
             </p>
             <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-              {billingDetails?.trialDays ?? 14}-day trial. Add a card to begin —
-              you will not be charged until the trial ends.
+              {billingDetails?.trialDays ?? 14}-day free trial
+              {planPrice ? `, then ${planPrice}` : ", then $28/month"}. Add a card
+              to begin — you will not be charged until the trial ends.
             </p>
             {!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ? (
               <p className="text-sm text-red-600 dark:text-red-400">

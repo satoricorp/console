@@ -1,0 +1,140 @@
+export type AuthContext = {
+  userId: string;
+  githubUserId: number;
+  githubUserLogin: string;
+  sessionId: string;
+  machineId: string;
+};
+
+export type PushBundle = {
+  event: string;
+  created_at: number;
+  gx_version: string;
+  repo: RepoPayload;
+  push: PushPayload;
+  change?: ChangePayload;
+  stack?: StackPayload[];
+  sessions?: SessionPayload[];
+  metadata?: Record<string, string>;
+};
+
+export type RepoPayload = {
+  root_path: string;
+  backend: string;
+  default_remote?: string;
+  default_branch?: string;
+  remote_url?: string;
+  branch_name?: string;
+};
+
+export type PushPayload = {
+  remote_name?: string;
+  branch_name?: string;
+  head_commit_id: string;
+  github_pull_request_url?: string;
+};
+
+export type ChangePayload = {
+  id: number;
+  jj_change_id: string;
+  current_commit_id: string;
+  description: string;
+  parent_change_id?: string;
+  status: string;
+  files: string[];
+};
+
+export type StackPayload = {
+  change: ChangePayload;
+  branch_name: string;
+  base_branch_name: string;
+  patch: string;
+  github_pull_request_url?: string;
+};
+
+export type SessionPayload = {
+  id: string;
+  created_at: number;
+  ended_at?: number;
+  command: string;
+  cwd: string;
+  client_pid?: number;
+  exit_code?: number;
+  gx_version: string;
+  source?: string;
+  process_name?: string;
+  parent_pid?: number;
+  last_seen_at?: number;
+  end_reason?: string;
+  repo_root?: string;
+  requests: RequestPayload[];
+};
+
+export type RequestPayload = {
+  id: string;
+  session_id?: string;
+  created_at?: number;
+  provider: string;
+  endpoint: string;
+  method: string;
+  model?: string;
+  request_body?: string;
+  request_headers?: string;
+  responses?: ResponsePayload[];
+};
+
+export type ResponsePayload = {
+  id: string;
+  request_id?: string;
+  created_at?: number;
+  completed_at?: number;
+  status_code: number;
+  response_body?: string;
+  response_headers?: string;
+  is_streaming?: boolean;
+  duration_ms?: number;
+  provider_request_id?: string;
+  finish_reason?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+  error?: string;
+};
+
+export type GxPrEventRow = {
+  id: string;
+  event: string;
+  created_at_ms: number;
+  ingested_at: Date;
+  gx_version: string;
+  github_user_id: number | null;
+  github_user_login: string | null;
+  user_id: string | null;
+  session_id: string | null;
+  machine_id: string | null;
+  repo_root_path: string | null;
+  repo_backend: string | null;
+  remote_url: string | null;
+  branch_name: string | null;
+  head_commit_id: string;
+  github_pr_url: string | null;
+  payload: PushBundle;
+};
+
+export type MergeStatus = "open" | "merged" | "closed";
+
+export type BookmarkSyncPayload = {
+  postgresBookmarkId: string;
+  latestEventId: string;
+  repoFullName: string;
+  branchName: string;
+  title: string | null;
+  revision: number;
+  mergeStatus: MergeStatus;
+  githubPrUrl: string | null;
+  githubPrNumber: number | null;
+  headCommitId: string | null;
+  remoteHeadSha: string | null;
+  updatedAt: number;
+};

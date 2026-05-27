@@ -17,7 +17,7 @@ type PrDebugTrayProps = {
 export function PrDebugTray({ open, onOpenChange, data }: PrDebugTrayProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-xl">
+      <SheetContent className="w-full sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Incoming data</SheetTitle>
           <SheetDescription>

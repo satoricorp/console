@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
@@ -22,7 +22,7 @@ export function ConnectReposStep() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const listAvailableRepos = useAction(api.repoActions.listAvailableRepos);
-  const connectRepos = useMutation(api.repos.connectRepos);
+  const connectRepos = useAction(api.repoActions.connectRepos);
   const connectedRepos = useQuery(
     api.repos.getMyConnectedRepos,
     session?.user && isAuthenticated ? {} : "skip",
@@ -45,14 +45,6 @@ export function ConnectReposStep() {
 
   useEffect(() => {
     if (!authReady) {
-      if (!sessionPending && !convexAuthLoading) {
-        setLoading(false);
-        if (session?.user && !isAuthenticated) {
-          setError(
-            "Could not verify your session. Try signing out and signing in again.",
-          );
-        }
-      }
       return;
     }
 

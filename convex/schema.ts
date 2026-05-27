@@ -1,6 +1,15 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const indexJobStatus = v.union(
+  v.literal("pending"),
+  v.literal("indexing"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
+
 export default defineSchema({
   billingCustomers: defineTable({
     userId: v.string(),
@@ -37,9 +46,26 @@ export default defineSchema({
     private: v.boolean(),
     defaultBranch: v.optional(v.string()),
     connectedAt: v.number(),
+    accessVerifiedAt: v.optional(v.number()),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"]),
+
+  gxCliSessions: defineTable({
+    userId: v.string(),
+    tokenHash: v.string(),
+    githubUserId: v.number(),
+    githubLogin: v.string(),
+    machineId: v.string(),
+    machineName: v.string(),
+    gxVersion: v.optional(v.string()),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_userId", ["userId"])
+    .index("by_userId_machineId", ["userId", "machineId"]),
 
   gxPrPushes: defineTable({
     userId: v.string(),
@@ -51,4 +77,59 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_sessionId", ["sessionId"]),
+
+  gxBookmarks: defineTable({
+    userId: v.string(),
+    postgresBookmarkId: v.string(),
+    latestEventId: v.string(),
+    repoFullName: v.string(),
+    branchName: v.string(),
+    title: v.optional(v.string()),
+    revision: v.number(),
+    mergeStatus: v.union(
+      v.literal("open"),
+      v.literal("merged"),
+      v.literal("closed"),
+    ),
+    githubPrUrl: v.optional(v.string()),
+    githubPrNumber: v.optional(v.number()),
+    headCommitId: v.optional(v.string()),
+    remoteHeadSha: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_updatedAt", ["userId", "updatedAt"])
+    .index("by_userId_postgresBookmarkId", ["userId", "postgresBookmarkId"])
+    .index("by_userId_repo_branch", ["userId", "repoFullName", "branchName"]),
+
+  waitlistEmails: defineTable({
+    email: v.string(),
+    createdAt: v.number(),
+  }).index("by_email", ["email"]),
+
+  repoIndexJobs: defineTable({
+    fullName: v.string(),
+    githubId: v.number(),
+    owner: v.string(),
+    name: v.string(),
+    defaultBranch: v.optional(v.string()),
+    commitId: v.optional(v.string()),
+    turbopufferNamespace: v.string(),
+    status: indexJobStatus,
+    trigger: v.optional(indexTrigger),
+    filesTotal: v.optional(v.number()),
+    filesIndexed: v.optional(v.number()),
+    chunksIndexed: v.optional(v.number()),
+    filesSkipped: v.optional(v.number()),
+    treeTruncated: v.optional(v.boolean()),
+    indexLog: v.optional(v.string()),
+    indexFiles: v.optional(
+      v.array(v.object({ path: v.string(), sha: v.string() })),
+    ),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_fullName", ["fullName"])
+    .index("by_status", ["status"]),
 });

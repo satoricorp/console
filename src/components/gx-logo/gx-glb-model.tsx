@@ -2,10 +2,17 @@
 
 import { useLayoutEffect, useMemo } from "react";
 import { Center, useGLTF } from "@react-three/drei";
-import { Box3, MeshPhysicalMaterial, Vector3, type Mesh } from "three";
+import {
+  Box3,
+  MeshPhysicalMaterial,
+  Vector3,
+  type BufferGeometry,
+  type Mesh,
+} from "three";
 
 import { GX_HEADER_MESH_PATH, GX_MESH_PATH } from "./constants";
 import type { LogoVariantConfig } from "./constants";
+import { clipGeometryToGlyphX } from "./gx-mesh-glyph";
 
 /** Correct Blender export orientation until rotation is applied in Blender. */
 const BLENDER_MESH_ROTATION: [number, number, number] = [Math.PI, 0, 0];
@@ -32,6 +39,16 @@ export function GxGlbModel({ config }: GxGlbModelProps) {
     clone.rotation.set(...BLENDER_MESH_ROTATION);
     clone.updateMatrixWorld(true);
 
+    if (config.glyph === "x") {
+      clone.traverse((child) => {
+        const mesh = child as Mesh;
+        if (!mesh.isMesh) return;
+        mesh.geometry = clipGeometryToGlyphX(
+          mesh.geometry as BufferGeometry,
+        );
+      });
+    }
+
     const box = new Box3().setFromObject(clone);
     const center = box.getCenter(new Vector3());
     clone.position.sub(center);
@@ -39,13 +56,33 @@ export function GxGlbModel({ config }: GxGlbModelProps) {
 
     const sizedBox = new Box3().setFromObject(clone);
     const size = sizedBox.getSize(new Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
     const variantScale = config.textSize / 1.48;
-    const fitScale =
-      (config.targetMaxDimension / maxDim) * variantScale;
+
+    let fitScale: number;
+    if (config.squareFit) {
+      const halfFov = (config.camera.fov * Math.PI) / 360;
+      const padding = config.squareFitPadding ?? 0.86;
+      const viewPlane =
+        2 * config.camera.position[2] * Math.tan(halfFov) * padding;
+      const scaleX = viewPlane / Math.max(size.x, 0.001);
+      const scaleY = viewPlane / Math.max(size.y, 0.001);
+      // Fill the square at full size — variantScale < 1 was shrinking gx vs x.
+      fitScale = Math.min(scaleX, scaleY);
+    } else {
+      const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+      fitScale = (config.targetMaxDimension / maxDim) * variantScale;
+    }
 
     return { model: clone, scale: fitScale };
-  }, [scene, config.textSize, config.targetMaxDimension]);
+  }, [
+    scene,
+    config.textSize,
+    config.targetMaxDimension,
+    config.squareFit,
+    config.camera,
+    config.glyph,
+    config.squareFitPadding,
+  ]);
 
   useLayoutEffect(() => {
     const chrome = createChromeMaterial();

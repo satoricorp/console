@@ -33,6 +33,12 @@ type ContainerConfig = {
 export type LogoVariantConfig = ContainerConfig & {
   camera: CameraConfig;
   meshPath: string;
+  /** gx = full mark (mesh or text); x = single-letter export for tiny favicons. */
+  glyph: "gx" | "x";
+  /** Fit width and height inside the camera square (icon export). */
+  squareFit?: boolean;
+  /** Padding inside the square view (0–1). */
+  squareFitPadding?: number;
   /** Scene units — max axis after centering; header uses smaller fit. */
   targetMaxDimension: number;
   textSize: number;
@@ -42,17 +48,27 @@ export type LogoVariantConfig = ContainerConfig & {
   smoothPasses: number;
 };
 
+type VariantOptions = {
+  glyph?: "gx" | "x";
+  squareFit?: boolean;
+  squareFitPadding?: number;
+};
+
 function defineVariant(
   container: ContainerConfig,
   camera: CameraConfig,
   textSize: number,
   targetMaxDimension: number,
   meshPath: string,
+  options: VariantOptions = {},
 ): LogoVariantConfig {
   return {
     ...container,
     camera,
     meshPath,
+    glyph: options.glyph ?? "gx",
+    squareFit: options.squareFit,
+    squareFitPadding: options.squareFitPadding,
     targetMaxDimension,
     ...splinePill(textSize),
   };
@@ -60,11 +76,29 @@ function defineVariant(
 
 export const LOGO_VARIANTS = {
   header: defineVariant(
-    { widthRem: 6.25, heightRem: 1.95 },
+    { widthRem: 8.25, heightRem: 2.5 },
     { position: [0, 0, 2.55], fov: 28 },
     1.22,
     1.88,
     GX_HEADER_MESH_PATH,
+  ),
+  /** Square export — full gx mark with padding so letters are not clipped. */
+  icon: defineVariant(
+    { widthRem: 1, heightRem: 1 },
+    { position: [0, 0, 2.55], fov: 28 },
+    1.48,
+    1.88,
+    GX_HEADER_MESH_PATH,
+    { squareFit: true, squareFitPadding: 0.86 },
+  ),
+  /** Tiny favicons — chrome "x" clipped from gx-icon.glb (same material as header). */
+  iconX: defineVariant(
+    { widthRem: 1, heightRem: 1 },
+    { position: [0, 0, 2.55], fov: 28 },
+    1.48,
+    1.88,
+    GX_HEADER_MESH_PATH,
+    { glyph: "x", squareFit: true, squareFitPadding: 0.74 },
   ),
   hero: defineVariant(
     { widthRem: 24, heightRem: 14, maxWidthRem: 26 },
@@ -76,6 +110,15 @@ export const LOGO_VARIANTS = {
 } as const satisfies Record<string, LogoVariantConfig>;
 
 export type LogoVariant = keyof typeof LOGO_VARIANTS;
+
+/** Icon export / design preview — 1024 matches capture output; 4096 cubemap was ~400MB per canvas. */
+export const ICON_ENVIRONMENT_RESOLUTION = 1024;
+
+/** Nav bar — 1024 keeps chrome sharp; canvas is small so GPU cost stays low. */
+export const HEADER_ENVIRONMENT_RESOLUTION = 1024;
+
+/** Hero is large but one canvas; 1024 keeps chrome without a second 2048 map in the header. */
+export const HERO_ENVIRONMENT_RESOLUTION = 1024;
 
 export function getLogoConfig(variant: LogoVariant = "header") {
   return LOGO_VARIANTS[variant];
