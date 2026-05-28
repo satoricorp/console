@@ -1,8 +1,8 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAction, useConvexAuth } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
@@ -53,19 +53,9 @@ export function PrConsole() {
     Boolean(session?.user) &&
     isAuthenticated;
 
-  const listMyBookmarks = useAction(api.gxBookmarkActions.listMyBookmarks);
-  const getBookmarkDetail = useAction(api.gxBookmarkActions.getBookmarkDetail);
-  const updateBookmarkTitle = useAction(api.gxBookmarkActions.updateBookmarkTitle);
-
-  const [bookmarks, setBookmarks] = useState<BookmarkListItem[]>([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(
     searchParams.get("bookmark"),
   );
-  const [selectedDetail, setSelectedDetail] = useState<BookmarkDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [trayOpen, setTrayOpen] = useState(false);
   const [showMerged, setShowMerged] = useState(false);
   const [groupByRepo, setGroupByRepo] = useState(false);
@@ -74,98 +64,49 @@ export function PrConsole() {
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
 
-  const reloadBookmarks = useCallback(
-    async (preferredBookmarkId?: string | null) => {
-      setListLoading(true);
-      setListError(null);
-      try {
-        const next = (await listMyBookmarks({
-          mergeStatus: showMerged ? undefined : "open",
-        })) as BookmarkListItem[];
-        setBookmarks(next);
+  const bookmarks = useQuery(
+    api.gxPr.listConsoleBookmarks,
+    authReady ? { mergeStatus: showMerged ? undefined : "open" } : "skip",
+  ) as BookmarkListItem[] | undefined;
 
-        const candidateId = preferredBookmarkId;
-        const resolvedId =
-          (candidateId && next.some((item) => item.id === candidateId)
-            ? candidateId
-            : next[0]?.id) ?? null;
-        setSelectedId(resolvedId);
-      } catch (error) {
-        setBookmarks([]);
-        setSelectedId(null);
-        setListError(
-          error instanceof Error ? error.message : "Failed to load bookmarks.",
-        );
-      } finally {
-        setListLoading(false);
-      }
-    },
-    [listMyBookmarks, showMerged],
-  );
+  const selectedDetail = useQuery(
+    api.gxPr.getConsoleBookmarkDetail,
+    authReady && selectedId
+      ? { bookmarkId: selectedId, includePayload: true }
+      : "skip",
+  ) as BookmarkDetail | null | undefined;
 
-  useEffect(() => {
-    if (!authReady) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- This effect intentionally triggers async state updates via bookmark reload.
-    void reloadBookmarks(selectedId ?? searchParams.get("bookmark"));
-  }, [authReady, reloadBookmarks, searchParams, selectedId]);
+  const updateBookmarkTitle = useMutation(api.gxPr.updateConsoleBookmarkTitle);
 
   useEffect(() => {
     const fromUrl = searchParams.get("bookmark");
-    if (!fromUrl) return;
-    if (bookmarks.some((bookmark) => bookmark.id === fromUrl)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL param changes should update selected bookmark.
+    if (fromUrl) {
       setSelectedId(fromUrl);
     }
-  }, [bookmarks, searchParams]);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (bookmarks === undefined) {
+      return;
+    }
+    const fromUrl = searchParams.get("bookmark");
+    const candidateId = selectedId ?? fromUrl;
+    const resolvedId =
+      (candidateId && bookmarks.some((item) => item.id === candidateId)
+        ? candidateId
+        : bookmarks[0]?.id) ?? null;
+    if (resolvedId !== selectedId) {
+      setSelectedId(resolvedId);
+    }
+  }, [bookmarks, searchParams, selectedId]);
 
   const selected = useMemo(() => {
-    if (!bookmarks.length) return null;
+    if (!bookmarks?.length) return null;
     if (!selectedId) return bookmarks[0];
     return bookmarks.find((bookmark) => bookmark.id === selectedId) ?? bookmarks[0];
   }, [bookmarks, selectedId]);
 
   useEffect(() => {
-    if (!selected) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clearing detail state when selection disappears.
-      setSelectedDetail(null);
-      setDetailError(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setDetailError(null);
-    void getBookmarkDetail({
-      bookmarkId: selected.id,
-      includePayload: true,
-    })
-      .then((detail) => {
-        if (cancelled) return;
-        if (!detail) {
-          setDetailError("Bookmark not found.");
-          setSelectedDetail(null);
-          return;
-        }
-        setSelectedDetail(detail as BookmarkDetail);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setDetailError(
-          error instanceof Error ? error.message : "Failed to load bookmark detail.",
-        );
-        setSelectedDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getBookmarkDetail, selected]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset inline title editor when active bookmark changes.
     setIsEditingTitle(false);
     setTitleDraft(selectedDetail ? titleForBookmark(selectedDetail) : "");
     setTitleError(null);
@@ -201,12 +142,7 @@ export function PrConsole() {
         bookmarkId: selectedDetail.id,
         title: trimmed,
       });
-      setSelectedDetail({
-        ...selectedDetail,
-        title: trimmed,
-      });
       setIsEditingTitle(false);
-      await reloadBookmarks(selectedDetail.id);
     } catch (error) {
       setTitleError(
         error instanceof Error ? error.message : "Failed to update bookmark title.",
@@ -218,7 +154,7 @@ export function PrConsole() {
 
   const groupedBookmarks = useMemo(() => {
     const grouped = new Map<string, BookmarkListItem[]>();
-    for (const bookmark of bookmarks) {
+    for (const bookmark of bookmarks ?? []) {
       const list = grouped.get(bookmark.repoFullName);
       if (list) {
         list.push(bookmark);
@@ -228,6 +164,9 @@ export function PrConsole() {
     }
     return grouped;
   }, [bookmarks]);
+
+  const listLoading = authReady && bookmarks === undefined;
+  const detailLoading = authReady && Boolean(selectedId) && selectedDetail === undefined;
 
   if (!authReady || listLoading) {
     return (
@@ -240,6 +179,9 @@ export function PrConsole() {
       </div>
     );
   }
+
+  const detailError =
+    selectedId && selectedDetail === null ? "Bookmark not found." : null;
 
   return (
     <div className="flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-6 py-8">
@@ -311,12 +253,7 @@ export function PrConsole() {
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
         <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-72">
-          {listError ? (
-            <div className="rounded-lg border border-red-300 p-4 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
-              {listError}
-            </div>
-          ) : null}
-          {bookmarks.length === 0 ? (
+          {!bookmarks?.length ? (
             <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
               No bookmarks yet.
             </div>

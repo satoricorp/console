@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAction } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
@@ -12,47 +12,22 @@ export default function ReviewPage() {
   const router = useRouter();
   const eventId = params.id ?? "";
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const getBookmarkIdForEvent = useAction(api.gxBookmarkActions.getBookmarkIdForEvent);
-  const [loading, setLoading] = useState(false);
+  const bookmarkId = useQuery(
+    api.gxPr.getBookmarkIdForEvent,
+    session?.user && eventId ? { eventId } : "skip",
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session?.user || !eventId) {
+    if (bookmarkId === undefined) {
       return;
     }
-
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- This effect owns async bookmark lookup state.
-    setLoading(true);
-    setError(null);
-
-    void getBookmarkIdForEvent({ eventId })
-      .then((bookmarkId) => {
-        if (cancelled) return;
-        if (!bookmarkId) {
-          setError("Bookmark not found for this review.");
-          return;
-        }
-        router.replace(`/?bookmark=${encodeURIComponent(bookmarkId)}`);
-      })
-      .catch((fetchError) => {
-        if (cancelled) return;
-        setError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Failed to load review.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId, getBookmarkIdForEvent, router, session?.user]);
+    if (bookmarkId === null) {
+      setError("Bookmark not found for this review. Run gx pr again to sync it.");
+      return;
+    }
+    router.replace(`/?bookmark=${encodeURIComponent(bookmarkId)}`);
+  }, [bookmarkId, router]);
 
   if (sessionPending) {
     return (
@@ -77,7 +52,7 @@ export default function ReviewPage() {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">GX Review</h1>
-      {loading ? (
+      {bookmarkId === undefined ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Resolving bookmark…
         </p>

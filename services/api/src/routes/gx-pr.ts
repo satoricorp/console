@@ -197,6 +197,28 @@ gxPrRoutes.post("/pr", async (c) => {
           updated_at_ms
       `;
 
+      let remoteHeadSha = bookmarkRow.remote_head_sha;
+      const githubToken = process.env.GITHUB_TOKEN?.trim();
+      if (githubToken) {
+        try {
+          const { getRemoteBranchSha } = await import("../github");
+          remoteHeadSha = await getRemoteBranchSha(
+            githubToken,
+            repoFullName,
+            branchName,
+          );
+          if (remoteHeadSha) {
+            await tx`
+              UPDATE gx_bookmarks
+              SET remote_head_sha = ${remoteHeadSha}
+              WHERE id = ${bookmarkRow.id}
+            `;
+          }
+        } catch (shaError) {
+          console.warn("Failed to resolve remote branch SHA during ingest", shaError);
+        }
+      }
+
       const bookmark: BookmarkSyncPayload = {
         postgresBookmarkId: bookmarkRow.id,
         latestEventId: bookmarkRow.latest_event_id,
@@ -208,8 +230,9 @@ gxPrRoutes.post("/pr", async (c) => {
         githubPrUrl: bookmarkRow.github_pr_url,
         githubPrNumber: bookmarkRow.github_pr_number,
         headCommitId: bookmarkRow.head_commit_id,
-        remoteHeadSha: bookmarkRow.remote_head_sha,
+        remoteHeadSha,
         updatedAt: Number(bookmarkRow.updated_at_ms),
+        latestPayload: payload,
       };
 
       return { eventId: eventRow.id, bookmark };

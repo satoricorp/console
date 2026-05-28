@@ -47,13 +47,17 @@ export function PrPushPreview({ payload }: PrPushPreviewProps) {
     treeModel.resetPaths(changedPaths);
   }, [treeModel, changedPaths]);
 
-  const visibleDiffs = useMemo(
-    () =>
-      fileDiffs.filter((fileDiff) =>
-        fileDiffMatchesSelection(fileDiff, selectedPaths),
-      ),
-    [fileDiffs, selectedPaths],
-  );
+  const visibleDiffs = useMemo(() => {
+    if (fileDiffs.length === 0) {
+      return [];
+    }
+    if (selectedPaths.length === 0) {
+      return fileDiffs;
+    }
+    return fileDiffs.filter((fileDiff) =>
+      fileDiffMatchesSelection(fileDiff, selectedPaths),
+    );
+  }, [fileDiffs, selectedPaths]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">

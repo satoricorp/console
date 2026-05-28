@@ -163,3 +163,90 @@ bookmarksRoutes.patch("/:id", async (c) => {
 
   return c.json(serializeBookmark(row));
 });
+
+bookmarksRoutes.post("/:id/apply", async (c) => {
+  const id = c.req.param("id");
+  const auth = c.get("auth");
+  const db = getSql();
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const ops =
+    typeof body === "object" &&
+    body !== null &&
+    "ops" in body &&
+    Array.isArray(body.ops)
+      ? body.ops
+      : null;
+
+  if (!ops || ops.length === 0) {
+    return c.json({ error: "ops[] is required" }, 400);
+  }
+
+  const existing = await db<BookmarkRow[]>`
+    SELECT *
+    FROM gx_bookmarks
+    WHERE id = ${id}
+      AND user_id = ${auth.userId}
+    LIMIT 1
+  `;
+  if (!existing[0]) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const { applyBookmarkOps, WorkerRequestError } = await import(
+    "../jj-worker-client"
+  );
+  const { syncBookmarkToConvex } = await import("../sync-bookmark");
+  const cliToken = c.req.header("Authorization")?.slice("Bearer ".length).trim();
+
+  try {
+    const result = await applyBookmarkOps({
+      bookmarkId: id,
+      userId: auth.userId,
+      ops: ops as import("../jj-worker-client").JjOp[],
+    });
+
+    const updatedRows = await db<BookmarkRow[]>`
+      SELECT *
+      FROM gx_bookmarks
+      WHERE id = ${id}
+        AND user_id = ${auth.userId}
+      LIMIT 1
+    `;
+    const updated = updatedRows[0];
+    if (!updated) {
+      return c.json({ error: "Bookmark missing after apply" }, 500);
+    }
+
+    try {
+      await syncBookmarkToConvex(updated, auth, cliToken);
+    } catch (syncError) {
+      console.error("Failed to sync bookmark apply to Convex", syncError);
+      return c.json({ error: "Applied in Postgres but Convex sync failed" }, 500);
+    }
+
+    return c.json({
+      ...result,
+      bookmark: serializeBookmark(updated),
+    });
+  } catch (error) {
+    if (error instanceof WorkerRequestError) {
+      const status =
+        error.status >= 400 && error.status < 600
+          ? (error.status as 400 | 404 | 409 | 502 | 503)
+          : 502;
+      return c.json({ error: error.message }, status);
+    }
+    if (error instanceof Error && error.message.includes("JJ_WORKER_URL")) {
+      return c.json({ error: error.message }, 503);
+    }
+    console.error("Failed to apply bookmark ops", error);
+    return c.json({ error: "Failed to apply bookmark ops" }, 500);
+  }
+});

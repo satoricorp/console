@@ -171,6 +171,9 @@ export function mergeBlockedReason(pull: GithubPullDetails): string | null {
   if (pull.merged) {
     return `PR #${pull.number} is already merged.`;
   }
+  if (pull.draft) {
+    return `PR #${pull.number} is still a draft.`;
+  }
   if (pull.mergeable === false) {
     if (pull.mergeable_state === "dirty") {
       return `PR #${pull.number} has merge conflicts with ${pull.base.ref}. Reconcile or resolve conflicts on GitHub, then try again.`;
@@ -225,7 +228,7 @@ async function listOpenPullRequests(
   return (await response.json()) as GithubPullDetails[];
 }
 
-async function remoteBranchExists(
+export async function remoteBranchExists(
   accessToken: string,
   repoFullName: string,
   branch: string,
@@ -301,6 +304,85 @@ export async function getBranchDriftStatus(
     return "gx_ahead";
   }
   return "unknown";
+}
+
+/** True when base already points at head (GX land done or equivalent external update). */
+export async function isHeadIntegratedOnBase(
+  accessToken: string,
+  repoFullName: string,
+  baseBranch: string,
+  headSha: string,
+): Promise<boolean> {
+  const baseSha = await getRemoteBranchSha(
+    accessToken,
+    repoFullName,
+    baseBranch,
+  );
+  if (!baseSha) {
+    return false;
+  }
+  if (baseSha === headSha) {
+    return true;
+  }
+  const response = await fetch(
+    `https://api.github.com/repos/${repoFullName}/compare/${headSha}...${baseSha}`,
+    { headers: githubHeaders(accessToken) },
+  );
+  if (!response.ok) {
+    return false;
+  }
+  const payload = (await response.json()) as {
+    status?: "identical" | "ahead" | "behind" | "diverged";
+  };
+  return payload.status === "behind" || payload.status === "identical";
+}
+
+export async function landBranchToBase(
+  accessToken: string,
+  repoFullName: string,
+  headBranch: string,
+  baseBranch: string,
+): Promise<{ sha: string; baseBranch: string; headBranch: string }> {
+  const headSha = await getRemoteBranchSha(
+    accessToken,
+    repoFullName,
+    headBranch,
+  );
+  if (!headSha) {
+    throw new Error(
+      `Branch ${headBranch} is not on GitHub. Run gx pr to publish it first.`,
+    );
+  }
+
+  const encodedBase = baseBranch
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const response = await fetch(
+    `https://api.github.com/repos/${repoFullName}/git/refs/heads/${encodedBase}`,
+    {
+      method: "PATCH",
+      headers: {
+        ...githubHeaders(accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ sha: headSha, force: true }),
+    },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      githubErrorMessage(response.status, body, `Update ${baseBranch}`),
+    );
+  }
+
+  const payload = (await response.json()) as { object?: { sha?: string } };
+  return {
+    sha: payload.object?.sha ?? headSha,
+    baseBranch,
+    headBranch,
+  };
 }
 
 async function findCanonicalOpenPullRequest(
@@ -672,8 +754,16 @@ export async function getCheckStatusForRef(
   if (combinedStatusResponse.ok) {
     const payload = (await combinedStatusResponse.json()) as {
       state?: string;
+      statuses?: unknown[];
+      total_count?: number;
     };
-    combinedStatus = combinedStateToCheckStatus(payload.state);
+    const statusCount = payload.total_count ?? payload.statuses?.length ?? 0;
+    // GitHub returns state=pending with zero contexts when no CI has reported yet.
+    if (payload.state === "pending" && statusCount === 0) {
+      combinedStatus = "none";
+    } else {
+      combinedStatus = combinedStateToCheckStatus(payload.state);
+    }
   }
 
   return mergeCheckStatuses(checkRunsStatus, combinedStatus);
@@ -747,11 +837,112 @@ export async function markPullRequestReady(
   );
   if (!response.ok) {
     const body = await response.text();
+    const graphqlReady = await markPullRequestReadyGraphql(
+      accessToken,
+      repoFullName,
+      pullNumber,
+    );
+    if (graphqlReady) {
+      return graphqlReady;
+    }
     throw new Error(
       `Failed to mark PR #${pullNumber} ready for review (${response.status}): ${body}`,
     );
   }
-  return (await response.json()) as GithubPullDetails;
+  const updated = (await response.json()) as GithubPullDetails;
+  if (updated.draft) {
+    const graphqlReady = await markPullRequestReadyGraphql(
+      accessToken,
+      repoFullName,
+      pullNumber,
+    );
+    if (graphqlReady) {
+      return graphqlReady;
+    }
+  }
+  return updated;
+}
+
+async function markPullRequestReadyGraphql(
+  accessToken: string,
+  repoFullName: string,
+  pullNumber: number,
+): Promise<GithubPullDetails | null> {
+  const [owner, name] = repoFullName.split("/");
+  const lookup = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      ...githubHeaders(accessToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `query PullNode($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          pullRequest(number: $number) { id isDraft }
+        }
+      }`,
+      variables: { owner, name, number: pullNumber },
+    }),
+  });
+  if (!lookup.ok) {
+    return null;
+  }
+  const lookupPayload = (await lookup.json()) as {
+    data?: {
+      repository?: { pullRequest?: { id: string; isDraft: boolean } | null };
+    };
+    errors?: unknown;
+  };
+  const pullRequestId = lookupPayload.data?.repository?.pullRequest?.id;
+  if (!pullRequestId) {
+    return null;
+  }
+
+  const readyResponse = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      ...githubHeaders(accessToken),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      query: `mutation MarkReady($pullRequestId: ID!) {
+        markPullRequestAsReady(input: { pullRequestId: $pullRequestId }) {
+          pullRequest { id }
+        }
+      }`,
+      variables: { pullRequestId },
+    }),
+  });
+  if (!readyResponse.ok) {
+    return null;
+  }
+  const readyPayload = (await readyResponse.json()) as {
+    data?: { markPullRequestAsReady?: { pullRequest?: { id: string } | null } };
+    errors?: unknown;
+  };
+  if (readyPayload.errors || !readyPayload.data?.markPullRequestAsReady?.pullRequest) {
+    return null;
+  }
+  return getPullRequest(accessToken, repoFullName, pullNumber);
+}
+
+export async function waitUntilPullReadyForMerge(
+  accessToken: string,
+  repoFullName: string,
+  pullNumber: number,
+  attempts = 12,
+): Promise<GithubPullDetails> {
+  let pull = await getPullRequest(accessToken, repoFullName, pullNumber);
+  for (let attempt = 0; attempt < attempts && pull.draft; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    pull = await getPullRequest(accessToken, repoFullName, pullNumber);
+  }
+  if (pull.draft) {
+    throw new Error(
+      `PR #${pullNumber} is still a draft. Open it on GitHub, click "Ready for review", then merge again.`,
+    );
+  }
+  return pull;
 }
 
 export async function waitForMergeability(
@@ -832,7 +1023,7 @@ export async function mergePullRequestOnGithub(
   pull: GithubPullDetails,
 ): Promise<GithubMergeResult & { pull: GithubPullDetails; markedReady: boolean }> {
   let markedReady = false;
-  let current = pull;
+  let current = await getPullRequest(accessToken, repoFullName, pull.number);
 
   if (current.draft) {
     current = await markPullRequestReady(
@@ -841,6 +1032,11 @@ export async function mergePullRequestOnGithub(
       current.number,
     );
     markedReady = true;
+    current = await waitUntilPullReadyForMerge(
+      accessToken,
+      repoFullName,
+      current.number,
+    );
     current = await waitForMergeability(
       accessToken,
       repoFullName,
@@ -867,6 +1063,48 @@ export async function mergePullRequestOnGithub(
 
   if (!mergeResponse.ok) {
     const body = await mergeResponse.text();
+    if (mergeResponse.status === 405 && body.includes("draft")) {
+      current = await markPullRequestReady(
+        accessToken,
+        repoFullName,
+        current.number,
+      );
+      markedReady = true;
+      current = await waitUntilPullReadyForMerge(
+        accessToken,
+        repoFullName,
+        current.number,
+      );
+      current = await waitForMergeability(
+        accessToken,
+        repoFullName,
+        current.number,
+      );
+      const retryResponse = await fetch(
+        `https://api.github.com/repos/${repoFullName}/pulls/${current.number}/merge`,
+        {
+          method: "PUT",
+          headers: {
+            ...githubHeaders(accessToken),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ merge_method: "merge" }),
+        },
+      );
+      if (!retryResponse.ok) {
+        const retryBody = await retryResponse.text();
+        throw new Error(
+          githubErrorMessage(retryResponse.status, retryBody, "Merge"),
+        );
+      }
+      const result = (await retryResponse.json()) as GithubMergeResult;
+      if (!result.merged) {
+        throw new Error(
+          result.message ?? "GitHub did not merge the pull request.",
+        );
+      }
+      return { ...result, pull: current, markedReady };
+    }
     throw new Error(githubErrorMessage(mergeResponse.status, body, "Merge"));
   }
 
