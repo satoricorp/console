@@ -5,7 +5,8 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { verifyGithubRepoAccess } from "./githubAccess";
-import { buildPrChatContext } from "./lib/prChatContext";
+import { buildPrChatContext, buildSessionSummaryForPins } from "./lib/prChatContext";
+import { chatPinValidator } from "./lib/chatPin";
 import { generateChatResponse } from "./lib/prChat/generateChatResponse";
 import { queryReviewContext } from "./lib/turbopuffer/queryReviewContext";
 
@@ -21,11 +22,14 @@ const sourceValidator = v.object({
   commit_id: v.string(),
 });
 
+const pinValidator = v.object(chatPinValidator);
+
 export const sendMessage = action({
   args: {
     bookmarkId: v.string(),
     message: v.string(),
     history: v.array(historyMessage),
+    pins: v.optional(v.array(pinValidator)),
   },
   returns: v.object({
     reply: v.string(),
@@ -80,6 +84,11 @@ export const sendMessage = action({
     });
 
     const prContext = buildPrChatContext(bookmark.payload);
+    const pins = args.pins ?? [];
+    const pinnedFiles = [...new Set(pins.map((pin) => pin.filePath))];
+    const sessionSummary =
+      buildSessionSummaryForPins(bookmark.payload, pinnedFiles) ??
+      prContext.sessionSummary;
     const prTitle =
       bookmark.title?.trim() || bookmark.branchName || "Untitled PR";
 
@@ -89,7 +98,13 @@ export const sendMessage = action({
       query: trimmedMessage,
       prTitle,
       prBody: prContext.prBody,
-      sessionSummary: prContext.sessionSummary,
+      sessionSummary,
+      pinnedSelections: pins.map((pin) => ({
+        filePath: pin.filePath,
+        startLine: pin.startLine,
+        endLine: pin.endLine,
+        text: pin.text,
+      })),
       limit: 8,
     });
 
@@ -106,7 +121,8 @@ export const sendMessage = action({
       prTitle,
       prBody: prContext.prBody,
       changedFiles: prContext.changedFiles,
-      sessionSummary: prContext.sessionSummary,
+      sessionSummary,
+      pinnedSelections: pins,
       retrievedChunks,
       history: args.history,
       message: trimmedMessage,

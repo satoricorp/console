@@ -1,22 +1,26 @@
 "use client";
 
-import type { FileDiffMetadata } from "@pierre/diffs";
+import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { FileTree, useFileTree, useFileTreeSelection } from "@pierre/trees/react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   extractFileDiffs,
   extractPaths,
   fileDiffMatchesSelection,
 } from "@/lib/gx-pr-payload";
+import { chatPinFromDiffSelection, type ChatPin } from "@/lib/chat-pin";
 
 type PrPushPreviewProps = {
   payload: unknown;
+  onAddChatPin?: (pin: ChatPin) => void;
 };
 
 const diffOptions = {
   theme: "pierre-dark",
   diffStyle: "split",
+  enableLineSelection: true,
+  enableGutterUtility: true,
 } as const;
 
 function dedupeFileDiffs(fileDiffs: FileDiffMetadata[]): FileDiffMetadata[] {
@@ -30,7 +34,46 @@ function dedupeFileDiffs(fileDiffs: FileDiffMetadata[]): FileDiffMetadata[] {
   return unique;
 }
 
-export function PrPushPreview({ payload }: PrPushPreviewProps) {
+function DiffFilePanel({
+  fileDiff,
+  onAddChatPin,
+}: {
+  fileDiff: FileDiffMetadata;
+  onAddChatPin?: (pin: ChatPin) => void;
+}) {
+  const handleGutterUtilityClick = useCallback(
+    (range: SelectedLineRange) => {
+      if (!onAddChatPin) return;
+      onAddChatPin(chatPinFromDiffSelection(fileDiff, range));
+    },
+    [fileDiff, onAddChatPin],
+  );
+
+  return (
+    <FileDiff
+      key={fileDiff.name}
+      fileDiff={fileDiff}
+      options={{
+        ...diffOptions,
+        onGutterUtilityClick: onAddChatPin ? handleGutterUtilityClick : undefined,
+      }}
+      renderGutterUtility={
+        onAddChatPin
+          ? () => (
+              <button
+                type="button"
+                className="rounded border border-zinc-600 bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-100"
+              >
+                Add to chat
+              </button>
+            )
+          : undefined
+      }
+    />
+  );
+}
+
+export function PrPushPreview({ payload, onAddChatPin }: PrPushPreviewProps) {
   const fileDiffs = useMemo(
     () => dedupeFileDiffs(extractFileDiffs(payload)),
     [payload],
@@ -83,10 +126,10 @@ export function PrPushPreview({ payload }: PrPushPreviewProps) {
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-2">
           {visibleDiffs.length > 0 ? (
             visibleDiffs.map((fileDiff) => (
-              <FileDiff
+              <DiffFilePanel
                 key={fileDiff.name}
                 fileDiff={fileDiff}
-                options={diffOptions}
+                onAddChatPin={onAddChatPin}
               />
             ))
           ) : fileDiffs.length > 0 ? (

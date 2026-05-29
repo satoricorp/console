@@ -144,10 +144,36 @@ function assistantTextFromResponses(responses: unknown): string | undefined {
   return undefined;
 }
 
-export function buildSessionSummary(
+function requestMentionsFiles(
+  requestRecord: Record<string, unknown>,
+  filePaths: string[],
+): boolean {
+  if (filePaths.length === 0) return true;
+
+  const body =
+    typeof requestRecord.request_body === "string"
+      ? requestRecord.request_body
+      : "";
+  if (!body) return false;
+
+  for (const filePath of filePaths) {
+    if (body.includes(filePath)) return true;
+    const basename = filePath.split("/").pop();
+    if (basename && body.includes(basename)) return true;
+  }
+
+  return false;
+}
+
+function buildSessionSummaryFromPayload(
   payload: unknown,
-  maxLength = 6000,
+  options?: {
+    maxLength?: number;
+    filePaths?: string[];
+  },
 ): string | undefined {
+  const maxLength = options?.maxLength ?? 6000;
+  const filePaths = options?.filePaths ?? [];
   const record = asRecord(payload);
   const sessions = record?.sessions;
   if (!Array.isArray(sessions) || sessions.length === 0) return undefined;
@@ -166,9 +192,24 @@ export function buildSessionSummary(
       ? sessionRecord.requests
       : [];
 
-    parts.push(`### ${command} (${requests.length} requests)`);
+    const matchingRequests = requests.filter((request) => {
+      const requestRecord = asRecord(request);
+      return (
+        requestRecord && requestMentionsFiles(requestRecord, filePaths)
+      );
+    });
+    const selectedRequests =
+      filePaths.length > 0 ? matchingRequests : requests;
 
-    for (const request of requests.slice(-8)) {
+    if (filePaths.length > 0 && selectedRequests.length === 0) {
+      continue;
+    }
+
+    parts.push(
+      `### ${command} (${selectedRequests.length}/${requests.length} requests)`,
+    );
+
+    for (const request of selectedRequests.slice(-8)) {
       const requestRecord = asRecord(request);
       if (!requestRecord) continue;
 
@@ -196,6 +237,25 @@ export function buildSessionSummary(
   const summary = parts.join("\n").trim();
   if (!summary) return undefined;
   return truncate(summary, maxLength);
+}
+
+export function buildSessionSummary(
+  payload: unknown,
+  maxLength = 6000,
+): string | undefined {
+  return buildSessionSummaryFromPayload(payload, { maxLength });
+}
+
+export function buildSessionSummaryForPins(
+  payload: unknown,
+  pinnedFiles: string[],
+  maxLength = 4000,
+): string | undefined {
+  if (pinnedFiles.length === 0) return undefined;
+  return buildSessionSummaryFromPayload(payload, {
+    maxLength,
+    filePaths: pinnedFiles,
+  });
 }
 
 export type PrChatContext = {

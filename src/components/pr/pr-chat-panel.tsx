@@ -4,6 +4,7 @@ import { useAction, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
+import { chatPinToInput, type ChatPin } from "@/lib/chat-pin";
 
 type BookmarkForChat = {
   id: string;
@@ -25,13 +26,15 @@ type ChatMessage = {
 
 type PrChatPanelProps = {
   bookmark: BookmarkForChat;
+  pins: ChatPin[];
+  onRemovePin: (pinId: string) => void;
 };
 
 function titleForBookmark(bookmark: BookmarkForChat) {
   return bookmark.title?.trim() || bookmark.branchName;
 }
 
-export function PrChatPanel({ bookmark }: PrChatPanelProps) {
+export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
   const sendMessage = useAction(api.prChatActions.sendMessage);
   const connectedRepos = useQuery(api.repos.getMyConnectedRepos);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -102,6 +105,7 @@ export function PrChatPanel({ bookmark }: PrChatPanelProps) {
         bookmarkId: bookmark.id,
         message: trimmed,
         history: history.slice(0, -1),
+        pins: pins.length > 0 ? pins.map(chatPinToInput) : undefined,
       });
 
       setMessages((current) => [
@@ -169,7 +173,9 @@ export function PrChatPanel({ bookmark }: PrChatPanelProps) {
         {messages.length === 0 ? (
           <p className="text-sm text-zinc-500">
             Ask about this PR, its diffs, or the agent sessions captured by{" "}
-            <code className="text-xs">gx pr</code>.
+            <code className="text-xs">gx pr</code>. Select lines in the diff and
+            click <span className="font-medium">Add to chat</span> to pin code
+            context.
           </p>
         ) : (
           messages.map((message) => (
@@ -184,8 +190,8 @@ export function PrChatPanel({ bookmark }: PrChatPanelProps) {
               <p className="whitespace-pre-wrap">{message.content}</p>
               {message.sources && message.sources.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-                  {message.sources.slice(0, 4).map((source) => (
-                    <li key={`${message.id}-${source.file_path}-${source.symbol ?? ""}`}>
+                  {message.sources.slice(0, 4).map((source, index) => (
+                    <li key={`${message.id}-source-${index}`}>
                       {source.file_path}
                       {source.symbol ? ` · ${source.symbol}` : ""}
                     </li>
@@ -204,6 +210,27 @@ export function PrChatPanel({ bookmark }: PrChatPanelProps) {
         onSubmit={handleSend}
         className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800"
       >
+        {pins.length > 0 ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {pins.map((pin) => (
+              <span
+                key={pin.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-zinc-300 bg-zinc-50 px-2 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                title={pin.text}
+              >
+                <span className="truncate font-medium">{pin.label}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemovePin(pin.id)}
+                  className="rounded px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                  aria-label={`Remove ${pin.label}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         {error ? (
           <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>
         ) : null}

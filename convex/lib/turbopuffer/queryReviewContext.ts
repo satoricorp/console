@@ -7,6 +7,13 @@ import {
   getNamespace,
 } from "./turbopufferClient";
 
+export type PinnedSelection = {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+};
+
 export type QueryReviewContextRequest = {
   fullName: string;
   changedFiles: string[];
@@ -15,6 +22,7 @@ export type QueryReviewContextRequest = {
   prTitle?: string;
   prBody?: string;
   sessionSummary?: string;
+  pinnedSelections?: PinnedSelection[];
   limit?: number;
 };
 
@@ -30,11 +38,29 @@ type RankedRow = {
 
 export async function queryReviewContext(request: QueryReviewContextRequest) {
   const limit = request.limit ?? 8;
+  const pinnedSelections = request.pinnedSelections ?? [];
+  const pinnedFiles = [
+    ...new Set([
+      ...request.changedFiles,
+      ...pinnedSelections.map((pin) => pin.filePath),
+    ]),
+  ];
+  const pinnedText = pinnedSelections
+    .map((pin) => {
+      const lineLabel =
+        pin.startLine === pin.endLine
+          ? `${pin.startLine}`
+          : `${pin.startLine}-${pin.endLine}`;
+      return `${pin.filePath}:${lineLabel}\n${pin.text}`;
+    })
+    .join("\n\n");
+
   const queryText = [
     request.query,
     request.prTitle,
     request.prBody,
     request.sessionSummary,
+    pinnedText,
     ...(request.symbols ?? []),
   ]
     .filter(Boolean)
@@ -71,7 +97,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     });
   }
 
-  const pathFilters = request.changedFiles.map(
+  const pathFilters = pinnedFiles.map(
     (filePath) => ["file_path", "Eq", filePath] as ["file_path", "Eq", string],
   );
 
@@ -117,11 +143,13 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     );
   }
 
-  const changedFileSet = new Set(request.changedFiles);
-  const fused = reciprocalRankFusion(resultLists, changedFileSet).slice(
-    0,
-    Math.max(limit * 2, 20),
-  );
+  const changedFileSet = new Set(pinnedFiles);
+  const pinnedFileSet = new Set(pinnedSelections.map((pin) => pin.filePath));
+  const fused = reciprocalRankFusion(
+    resultLists,
+    changedFileSet,
+    pinnedFileSet,
+  ).slice(0, Math.max(limit * 2, 20));
 
   return {
     results: fused.slice(0, limit).map((row) => ({
@@ -139,6 +167,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
 function reciprocalRankFusion(
   resultLists: RankedRow[][],
   changedFiles = new Set<string>(),
+  pinnedFiles = new Set<string>(),
   k = 60,
 ): RankedRow[] {
   const scores = new Map<string | number, number>();
@@ -150,6 +179,9 @@ function reciprocalRankFusion(
       let score = (scores.get(id) ?? 0) + 1 / (k + rank + 1);
       if (row.file_path && changedFiles.has(row.file_path)) {
         score += 0.05;
+      }
+      if (row.file_path && pinnedFiles.has(row.file_path)) {
+        score += 0.15;
       }
       scores.set(id, score);
       rows.set(id, row);

@@ -9,7 +9,9 @@ import { Button } from "@/components/button";
 import { PrChatPanel } from "./pr-chat-panel";
 import { PrDebugTray } from "./pr-debug-tray";
 import { PrMergeBar } from "./pr-merge-bar";
-import { PrPushPreview } from "./pr-push-preview";
+import { PrStackReview } from "./pr-stack-review";
+import { extractStackChanges } from "@/lib/gx-stack";
+import type { ChatPin } from "@/lib/chat-pin";
 
 type BookmarkListItem = {
   id: string;
@@ -64,6 +66,7 @@ export function PrConsole() {
   const [titleDraft, setTitleDraft] = useState("");
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [chatPins, setChatPins] = useState<ChatPin[]>([]);
 
   const bookmarks = useQuery(
     api.gxPr.listConsoleBookmarks,
@@ -113,6 +116,22 @@ export function PrConsole() {
     setTitleError(null);
   }, [selectedDetail]);
 
+  useEffect(() => {
+    setChatPins([]);
+  }, [selectedId]);
+
+  function handleAddChatPin(pin: ChatPin) {
+    setChatPins((current) => {
+      const existing = current.find((entry) => entry.id === pin.id);
+      if (existing) return current;
+      return [...current, pin];
+    });
+  }
+
+  function handleRemoveChatPin(pinId: string) {
+    setChatPins((current) => current.filter((pin) => pin.id !== pinId));
+  }
+
   function setBookmarkQueryParam(bookmarkId: string | null) {
     const params = new URLSearchParams(searchParams.toString());
     if (bookmarkId) {
@@ -152,6 +171,28 @@ export function PrConsole() {
       setIsSavingTitle(false);
     }
   }
+
+  const stackBookmarks = useMemo(() => {
+    if (!selectedDetail?.payload || !bookmarks?.length) {
+      return bookmarks?.map((bookmark) => ({
+        id: bookmark.id,
+        branchName: bookmark.branchName,
+        title: bookmark.title,
+      })) ?? [];
+    }
+
+    const stackBranches = new Set(
+      extractStackChanges(selectedDetail.payload).map((change) => change.branchName),
+    );
+
+    return bookmarks
+      .filter((bookmark) => stackBranches.has(bookmark.branchName))
+      .map((bookmark) => ({
+        id: bookmark.id,
+        branchName: bookmark.branchName,
+        title: bookmark.title,
+      }));
+  }, [bookmarks, selectedDetail?.payload]);
 
   const groupedBookmarks = useMemo(() => {
     const grouped = new Map<string, BookmarkListItem[]>();
@@ -340,7 +381,13 @@ export function PrConsole() {
           ) : selectedDetail ? (
             <>
               <PrMergeBar bookmark={selectedDetail} />
-              <PrPushPreview payload={selectedDetail.payload} />
+              <PrStackReview
+                bookmarkId={selectedDetail.id}
+                repoFullName={selectedDetail.repoFullName}
+                payload={selectedDetail.payload}
+                stackBookmarks={stackBookmarks}
+                onAddChatPin={handleAddChatPin}
+              />
             </>
           ) : (
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-300 p-8 text-sm text-zinc-500 dark:border-zinc-700">
@@ -349,7 +396,13 @@ export function PrConsole() {
           )}
         </div>
 
-        {selectedDetail ? <PrChatPanel bookmark={selectedDetail} /> : null}
+        {selectedDetail ? (
+          <PrChatPanel
+            bookmark={selectedDetail}
+            pins={chatPins}
+            onRemovePin={handleRemoveChatPin}
+          />
+        ) : null}
       </div>
 
       <PrDebugTray

@@ -525,6 +525,7 @@ async function loadAuthorizedPublishContext(
   accessToken: string;
   target: NonNullable<ReturnType<typeof mergeTargetFromPayload>>;
   localHeadSha: string | null;
+  payload: unknown;
 }> {
   const user = await authComponent.safeGetAuthUser(ctx);
   if (!user) {
@@ -563,6 +564,7 @@ async function loadAuthorizedPublishContext(
     accessToken,
     target,
     localHeadSha: headCommitIdFromPayload(fromConvex.payload),
+    payload: fromConvex.payload,
   };
 }
 
@@ -573,7 +575,7 @@ export const getPublishStatus = action({
   },
   returns: branchPublishStatusValidator,
   handler: async (ctx, { bookmarkId }) => {
-    const { userId, accessToken, target, localHeadSha } =
+    const { userId, accessToken, target, localHeadSha, payload } =
       await loadAuthorizedPublishContext(ctx, bookmarkId);
     const status = await githubAdapter.fetchStatus({
       accessToken,
@@ -582,6 +584,19 @@ export const getPublishStatus = action({
       baseBranch: target.baseBranch,
       localHeadSha,
     });
+    const approvalBlockedReason = await ctx.runAction(
+      internal.gxChangeReviewActions.loadStackApprovalBlockReason,
+      {
+        userId,
+        bookmarkId,
+        payload,
+      },
+    );
+    if (approvalBlockedReason) {
+      status.canLand = false;
+      status.landBlockedReason = approvalBlockedReason;
+      status.message = approvalBlockedReason;
+    }
     if (status.integratedOnBase) {
       await maybeMarkBookmarkMerged(
         ctx,
@@ -608,8 +623,20 @@ export const landBookmark = action({
     repoFullName: v.string(),
   }),
   handler: async (ctx, { bookmarkId }) => {
-    const { userId, accessToken, target, localHeadSha } =
+    const { userId, accessToken, target, localHeadSha, payload } =
       await loadAuthorizedPublishContext(ctx, bookmarkId);
+    const approvalBlockedReason = await ctx.runAction(
+      internal.gxChangeReviewActions.loadStackApprovalBlockReason,
+      {
+        userId,
+        bookmarkId,
+        payload,
+      },
+    );
+    if (approvalBlockedReason) {
+      throw new Error(approvalBlockedReason);
+    }
+
     const status = await githubAdapter.fetchStatus({
       accessToken,
       repoFullName: target.repoFullName,

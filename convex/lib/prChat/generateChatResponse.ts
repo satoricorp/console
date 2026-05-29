@@ -37,6 +37,13 @@ export type GenerateChatResponseRequest = {
   prBody?: string;
   changedFiles: string[];
   sessionSummary?: string;
+  pinnedSelections?: Array<{
+    filePath: string;
+    side: "additions" | "deletions";
+    startLine: number;
+    endLine: number;
+    text: string;
+  }>;
   retrievedChunks: RetrievedChunk[];
   history: ChatHistoryMessage[];
   message: string;
@@ -55,6 +62,23 @@ function formatRetrievedChunks(chunks: RetrievedChunk[]): string {
         chunk.commit_id ? ` @ ${chunk.commit_id.slice(0, 12)}` : "",
       ].join("");
       return `${header}\n${chunk.content}`;
+    })
+    .join("\n\n---\n\n");
+}
+
+function formatPinnedSelections(
+  pins: NonNullable<GenerateChatResponseRequest["pinnedSelections"]>,
+): string {
+  if (pins.length === 0) return "No code pinned for this question.";
+
+  return pins
+    .map((pin) => {
+      const lineLabel =
+        pin.startLine === pin.endLine
+          ? `${pin.startLine}`
+          : `${pin.startLine}-${pin.endLine}`;
+      const sideLabel = pin.side === "additions" ? "new" : "old";
+      return `[${pin.filePath}:${lineLabel} (${sideLabel})]\n${pin.text}`;
     })
     .join("\n\n---\n\n");
 }
@@ -79,6 +103,9 @@ function buildSystemPrompt(request: GenerateChatResponseRequest): string {
     request.prBody ? `\nPR description:\n${request.prBody}` : "",
     request.sessionSummary
       ? `\nAgent sessions from gx pr:\n${request.sessionSummary}`
+      : "",
+    request.pinnedSelections && request.pinnedSelections.length > 0
+      ? `\nUser pinned code (prioritize this when answering):\n${formatPinnedSelections(request.pinnedSelections)}`
       : "",
     `\nRetrieved code:\n${formatRetrievedChunks(request.retrievedChunks)}`,
   ]
