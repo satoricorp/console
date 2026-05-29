@@ -18,6 +18,7 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  pins?: ChatPin[];
   sources?: Array<{
     file_path: string;
     symbol?: string;
@@ -28,13 +29,50 @@ type PrChatPanelProps = {
   bookmark: BookmarkForChat;
   pins: ChatPin[];
   onRemovePin: (pinId: string) => void;
+  onClearPins: () => void;
 };
+
+function PinBadge({
+  pin,
+  onRemove,
+}: {
+  pin: ChatPin;
+  onRemove?: () => void;
+}) {
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-xs ${
+        onRemove
+          ? "border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+          : "border-zinc-600 bg-zinc-800 text-zinc-200 dark:border-zinc-300 dark:bg-zinc-200 dark:text-zinc-800"
+      }`}
+      title={pin.text}
+    >
+      <span className="truncate font-medium">{pin.label}</span>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+          aria-label={`Remove ${pin.label}`}
+        >
+          ×
+        </button>
+      ) : null}
+    </span>
+  );
+}
 
 function titleForBookmark(bookmark: BookmarkForChat) {
   return bookmark.title?.trim() || bookmark.branchName;
 }
 
-export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
+export function PrChatPanel({
+  bookmark,
+  pins,
+  onRemovePin,
+  onClearPins,
+}: PrChatPanelProps) {
   const sendMessage = useAction(api.prChatActions.sendMessage);
   const connectedRepos = useQuery(api.repos.getMyConnectedRepos);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -81,16 +119,22 @@ export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
     const trimmed = draft.trim();
     if (!trimmed || isSending) return;
 
+    const attachedPins = pins.length > 0 ? pins.map((pin) => ({ ...pin })) : undefined;
+
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
       content: trimmed,
+      pins: attachedPins,
     };
 
     setDraft("");
     setError(null);
     setIsSending(true);
     setMessages((current) => [...current, userMessage]);
+    if (attachedPins) {
+      onClearPins();
+    }
 
     try {
       const history = [...messages, userMessage]
@@ -105,7 +149,7 @@ export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
         bookmarkId: bookmark.id,
         message: trimmed,
         history: history.slice(0, -1),
-        pins: pins.length > 0 ? pins.map(chatPinToInput) : undefined,
+        pins: attachedPins?.map(chatPinToInput),
       });
 
       setMessages((current) => [
@@ -173,9 +217,8 @@ export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
         {messages.length === 0 ? (
           <p className="text-sm text-zinc-500">
             Ask about this PR, its diffs, or the agent sessions captured by{" "}
-            <code className="text-xs">gx pr</code>. Select lines in the diff and
-            click <span className="font-medium">Add to chat</span> to pin code
-            context.
+            <code className="text-xs">gx pr</code>. Select lines in the diff to
+            attach code context to your next message.
           </p>
         ) : (
           messages.map((message) => (
@@ -187,6 +230,13 @@ export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
                   : "mr-6 border border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
               }`}
             >
+              {message.pins && message.pins.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {message.pins.map((pin) => (
+                    <PinBadge key={`${message.id}-${pin.id}`} pin={pin} />
+                  ))}
+                </div>
+              ) : null}
               <p className="whitespace-pre-wrap">{message.content}</p>
               {message.sources && message.sources.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-xs text-zinc-500">
@@ -213,21 +263,11 @@ export function PrChatPanel({ bookmark, pins, onRemovePin }: PrChatPanelProps) {
         {pins.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {pins.map((pin) => (
-              <span
+              <PinBadge
                 key={pin.id}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-zinc-300 bg-zinc-50 px-2 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-                title={pin.text}
-              >
-                <span className="truncate font-medium">{pin.label}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemovePin(pin.id)}
-                  className="rounded px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
-                  aria-label={`Remove ${pin.label}`}
-                >
-                  ×
-                </button>
-              </span>
+                pin={pin}
+                onRemove={() => onRemovePin(pin.id)}
+              />
             ))}
           </div>
         ) : null}

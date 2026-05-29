@@ -122,14 +122,17 @@ export function PrConsole() {
 
   function handleAddChatPin(pin: ChatPin) {
     setChatPins((current) => {
-      const existing = current.find((entry) => entry.id === pin.id);
-      if (existing) return current;
+      if (current.some((entry) => entry.id === pin.id)) return current;
       return [...current, pin];
     });
   }
 
   function handleRemoveChatPin(pinId: string) {
     setChatPins((current) => current.filter((pin) => pin.id !== pinId));
+  }
+
+  function handleClearChatPins() {
+    setChatPins([]);
   }
 
   function setBookmarkQueryParam(bookmarkId: string | null) {
@@ -401,6 +404,7 @@ export function PrConsole() {
             bookmark={selectedDetail}
             pins={chatPins}
             onRemovePin={handleRemoveChatPin}
+            onClearPins={handleClearChatPins}
           />
         ) : null}
       </div>

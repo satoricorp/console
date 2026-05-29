@@ -20,7 +20,6 @@ const diffOptions = {
   theme: "pierre-dark",
   diffStyle: "split",
   enableLineSelection: true,
-  enableGutterUtility: true,
 } as const;
 
 function dedupeFileDiffs(fileDiffs: FileDiffMetadata[]): FileDiffMetadata[] {
@@ -41,9 +40,9 @@ function DiffFilePanel({
   fileDiff: FileDiffMetadata;
   onAddChatPin?: (pin: ChatPin) => void;
 }) {
-  const handleGutterUtilityClick = useCallback(
-    (range: SelectedLineRange) => {
-      if (!onAddChatPin) return;
+  const handleLineSelectionEnd = useCallback(
+    (range: SelectedLineRange | null) => {
+      if (!onAddChatPin || !range) return;
       onAddChatPin(chatPinFromDiffSelection(fileDiff, range));
     },
     [fileDiff, onAddChatPin],
@@ -55,20 +54,8 @@ function DiffFilePanel({
       fileDiff={fileDiff}
       options={{
         ...diffOptions,
-        onGutterUtilityClick: onAddChatPin ? handleGutterUtilityClick : undefined,
+        onLineSelectionEnd: onAddChatPin ? handleLineSelectionEnd : undefined,
       }}
-      renderGutterUtility={
-        onAddChatPin
-          ? () => (
-              <button
-                type="button"
-                className="rounded border border-zinc-600 bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-100"
-              >
-                Add to chat
-              </button>
-            )
-          : undefined
-      }
     />
   );
 }
