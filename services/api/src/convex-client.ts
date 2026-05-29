@@ -51,6 +51,28 @@ const ingestDevPushRef = makeFunctionReference<
   null
 >("gxPr:ingestDevBookmark");
 
+const deleteDevBookmarkRef = makeFunctionReference<
+  "mutation",
+  {
+    devSecret: string;
+    userId: string;
+    postgresBookmarkId?: string;
+    repoFullName?: string;
+    branchName?: string;
+  },
+  { deleted: boolean }
+>("gxPr:deleteDevBookmark");
+
+const deleteCliBookmarkRef = makeFunctionReference<
+  "mutation",
+  {
+    token: string;
+    repoFullName: string;
+    branchName: string;
+  },
+  { deleted: boolean }
+>("gxPr:deleteCliBookmark");
+
 function getConvexUrl(): string {
   const url = process.env.CONVEX_URL;
   if (!url) {
@@ -150,4 +172,32 @@ export async function ingestDevBookmark(
     sessionId,
     bookmark: compactBookmark(bookmark),
   });
+}
+
+export async function deleteDevBookmark(
+  devSecret: string,
+  userId: string,
+  target:
+    | { postgresBookmarkId: string }
+    | { repoFullName: string; branchName: string },
+): Promise<boolean> {
+  const result = await getClient().mutation(deleteDevBookmarkRef, {
+    devSecret,
+    userId,
+    ...target,
+  });
+  return result.deleted;
+}
+
+export async function deleteCliBookmark(
+  token: string,
+  repoFullName: string,
+  branchName: string,
+): Promise<boolean> {
+  const result = await getClient().mutation(deleteCliBookmarkRef, {
+    token,
+    repoFullName,
+    branchName,
+  });
+  return result.deleted;
 }

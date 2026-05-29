@@ -193,6 +193,93 @@ export const ingestDevBookmark = mutation({
   },
 });
 
+/** Remove a bookmark row from Convex when gx-cloud deletes an empty publish. */
+export const deleteDevBookmark = mutation({
+  args: {
+    devSecret: v.string(),
+    userId: v.string(),
+    postgresBookmarkId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    branchName: v.optional(v.string()),
+  },
+  returns: v.object({ deleted: v.boolean() }),
+  handler: async (ctx, args) => {
+    const expected = process.env.GX_WEBHOOK_SECRET;
+    if (!expected || args.devSecret !== expected) {
+      throw new Error("Unauthorized");
+    }
+
+    let bookmark = null;
+    if (args.postgresBookmarkId) {
+      bookmark = await ctx.db
+        .query("gxBookmarks")
+        .withIndex("by_userId_postgresBookmarkId", (q) =>
+          q
+            .eq("userId", args.userId)
+            .eq("postgresBookmarkId", args.postgresBookmarkId!),
+        )
+        .first();
+    } else if (args.repoFullName && args.branchName) {
+      bookmark = await ctx.db
+        .query("gxBookmarks")
+        .withIndex("by_userId_repo_branch", (q) =>
+          q
+            .eq("userId", args.userId)
+            .eq("repoFullName", args.repoFullName!)
+            .eq("branchName", args.branchName!),
+        )
+        .first();
+    } else {
+      throw new Error("postgresBookmarkId or repoFullName+branchName required");
+    }
+
+    if (!bookmark) {
+      return { deleted: false };
+    }
+
+    await ctx.db.delete(bookmark._id);
+    return { deleted: true };
+  },
+});
+
+/** Called by gx-cloud when an empty publish removes a bookmark for a CLI session. */
+export const deleteCliBookmark = mutation({
+  args: {
+    token: v.string(),
+    repoFullName: v.string(),
+    branchName: v.string(),
+  },
+  returns: v.object({ deleted: v.boolean() }),
+  handler: async (ctx, { token, repoFullName, branchName }) => {
+    const tokenHash = await hashToken(token);
+    const session = await ctx.db
+      .query("gxCliSessions")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+
+    if (!session || session.revokedAt) {
+      throw new Error("Unauthorized");
+    }
+
+    const bookmark = await ctx.db
+      .query("gxBookmarks")
+      .withIndex("by_userId_repo_branch", (q) =>
+        q
+          .eq("userId", session.userId)
+          .eq("repoFullName", repoFullName)
+          .eq("branchName", branchName),
+      )
+      .first();
+
+    if (!bookmark) {
+      return { deleted: false };
+    }
+
+    await ctx.db.delete(bookmark._id);
+    return { deleted: true };
+  },
+});
+
 export const listMyPushes = query({
   args: {},
   handler: async (ctx) => {
@@ -453,6 +540,8 @@ export const getBookmarkWithPayload = internalQuery({
     v.null(),
     v.object({
       repoFullName: v.string(),
+      branchName: v.string(),
+      title: v.optional(v.string()),
       payload: v.any(),
     }),
   ),
@@ -470,6 +559,8 @@ export const getBookmarkWithPayload = internalQuery({
 
     return {
       repoFullName: bookmark.repoFullName,
+      branchName: bookmark.branchName,
+      title: bookmark.title,
       payload: bookmark.latestPayload,
     };
   },

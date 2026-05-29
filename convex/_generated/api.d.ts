@@ -25,6 +25,8 @@ import type * as indexingActions from "../indexingActions.js";
 import type * as lib_codeStorageAdapter from "../lib/codeStorageAdapter.js";
 import type * as lib_gxPrGithub from "../lib/gxPrGithub.js";
 import type * as lib_gxPrPayload from "../lib/gxPrPayload.js";
+import type * as lib_prChat_generateChatResponse from "../lib/prChat/generateChatResponse.js";
+import type * as lib_prChatContext from "../lib/prChatContext.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
@@ -38,6 +40,7 @@ import type * as lib_turbopuffer_runIndexRepo from "../lib/turbopuffer/runIndexR
 import type * as lib_turbopuffer_turbopufferClient from "../lib/turbopuffer/turbopufferClient.js";
 import type * as lib_turbopuffer_upsertDocuments from "../lib/turbopuffer/upsertDocuments.js";
 import type * as lib_turbopuffer_utils from "../lib/turbopuffer/utils.js";
+import type * as prChatActions from "../prChatActions.js";
 import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
 import type * as searchActions from "../searchActions.js";
@@ -70,6 +73,8 @@ declare const fullApi: ApiFromModules<{
   "lib/codeStorageAdapter": typeof lib_codeStorageAdapter;
   "lib/gxPrGithub": typeof lib_gxPrGithub;
   "lib/gxPrPayload": typeof lib_gxPrPayload;
+  "lib/prChat/generateChatResponse": typeof lib_prChat_generateChatResponse;
+  "lib/prChatContext": typeof lib_prChatContext;
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;
@@ -83,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/turbopufferClient": typeof lib_turbopuffer_turbopufferClient;
   "lib/turbopuffer/upsertDocuments": typeof lib_turbopuffer_upsertDocuments;
   "lib/turbopuffer/utils": typeof lib_turbopuffer_utils;
+  prChatActions: typeof prChatActions;
   repoActions: typeof repoActions;
   repos: typeof repos;
   searchActions: typeof searchActions;

@@ -2,11 +2,15 @@
 
 import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
 import { embedQuery } from "./embedTextBatch";
-import { getNamespace } from "./turbopufferClient";
+import {
+  ensureNamespaceSchema,
+  getNamespace,
+} from "./turbopufferClient";
 
 export type QueryReviewContextRequest = {
   fullName: string;
   changedFiles: string[];
+  query?: string;
   symbols?: string[];
   prTitle?: string;
   prBody?: string;
@@ -27,6 +31,7 @@ type RankedRow = {
 export async function queryReviewContext(request: QueryReviewContextRequest) {
   const limit = request.limit ?? 8;
   const queryText = [
+    request.query,
     request.prTitle,
     request.prBody,
     request.sessionSummary,
@@ -36,6 +41,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     .join("\n");
 
   const ns = getNamespace(request.fullName);
+  await ensureNamespaceSchema(request.fullName);
   const embedding = queryText ? await embedQuery(queryText) : null;
 
   const queries: Query[] = [];
@@ -87,12 +93,32 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     return { results: [] };
   }
 
-  const response = await ns.multiQuery({ queries });
-  const resultLists: RankedRow[][] = response.results.map(
-    (result) => (result.rows ?? []) as RankedRow[],
-  );
+  let resultLists: RankedRow[][];
+  try {
+    const response = await ns.multiQuery({ queries });
+    resultLists = response.results.map(
+      (result) => (result.rows ?? []) as RankedRow[],
+    );
+  } catch (error) {
+    const pathFilterOnly =
+      queries.length === 1 && pathFilters.length > 0 && !embedding;
+    if (pathFilterOnly) {
+      return { results: [] };
+    }
 
-  const fused = reciprocalRankFusion(resultLists).slice(
+    const fallbackQueries = queries.filter((query) => !query.filters);
+    if (fallbackQueries.length === 0) {
+      throw error;
+    }
+
+    const response = await ns.multiQuery({ queries: fallbackQueries });
+    resultLists = response.results.map(
+      (result) => (result.rows ?? []) as RankedRow[],
+    );
+  }
+
+  const changedFileSet = new Set(request.changedFiles);
+  const fused = reciprocalRankFusion(resultLists, changedFileSet).slice(
     0,
     Math.max(limit * 2, 20),
   );
@@ -110,14 +136,22 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
   };
 }
 
-function reciprocalRankFusion(resultLists: RankedRow[][], k = 60): RankedRow[] {
+function reciprocalRankFusion(
+  resultLists: RankedRow[][],
+  changedFiles = new Set<string>(),
+  k = 60,
+): RankedRow[] {
   const scores = new Map<string | number, number>();
   const rows = new Map<string | number, RankedRow>();
 
   for (const list of resultLists) {
     list.forEach((row, rank) => {
       const id = row.id;
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank + 1));
+      let score = (scores.get(id) ?? 0) + 1 / (k + rank + 1);
+      if (row.file_path && changedFiles.has(row.file_path)) {
+        score += 0.05;
+      }
+      scores.set(id, score);
       rows.set(id, row);
     });
   }

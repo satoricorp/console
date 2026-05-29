@@ -6,6 +6,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
+import { PrChatPanel } from "./pr-chat-panel";
 import { PrDebugTray } from "./pr-debug-tray";
 import { PrMergeBar } from "./pr-merge-bar";
 import { PrPushPreview } from "./pr-push-preview";
@@ -184,7 +185,7 @@ export function PrConsole() {
     selectedId && selectedDetail === null ? "Bookmark not found." : null;
 
   return (
-    <div className="flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-6 py-8">
+    <div className="flex min-h-0 w-full max-w-[96rem] flex-1 flex-col gap-4 px-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           {selectedDetail && isEditingTitle ? (
@@ -251,7 +252,7 @@ export function PrConsole() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
         <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-72">
           {!bookmarks?.length ? (
             <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
@@ -347,6 +348,8 @@ export function PrConsole() {
             </div>
           )}
         </div>
+
+        {selectedDetail ? <PrChatPanel bookmark={selectedDetail} /> : null}
       </div>
 
       <PrDebugTray

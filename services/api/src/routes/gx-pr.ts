@@ -4,6 +4,8 @@ import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
 import type { BookmarkSyncPayload, PushBundle } from "../types";
 import { syncPushToConvex } from "../sync-convex-push";
+import { deleteDevBookmark } from "../convex-client";
+import { isEffectivelyEmptyBookmark } from "../bookmark-empty";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -97,6 +99,11 @@ gxPrRoutes.post("/pr", async (c) => {
       "unknown";
     const inferredTitle = inferBookmarkTitle(payload, branchName);
     const githubPrNumber = parseGithubPrNumber(indexFields.github_pr_url);
+    const bookmarkIsEmpty = isEffectivelyEmptyBookmark(payload, {
+      headCommitId: indexFields.head_commit_id,
+      updatedAtMs: payload.created_at,
+      branchName,
+    });
 
     const ingestResult = await db.begin(async (tx) => {
       const [eventRow] = await tx<
@@ -137,6 +144,16 @@ gxPrRoutes.post("/pr", async (c) => {
         )
         RETURNING id
       `;
+
+      if (bookmarkIsEmpty) {
+        await tx`
+          DELETE FROM gx_bookmarks
+          WHERE user_id = ${auth.userId}
+            AND repo_full_name = ${repoFullName}
+            AND branch_name = ${branchName}
+        `;
+        return { eventId: eventRow.id, bookmark: null };
+      }
 
       const [bookmarkRow] = await tx<
         {
@@ -238,11 +255,29 @@ gxPrRoutes.post("/pr", async (c) => {
       return { eventId: eventRow.id, bookmark };
     });
 
-    try {
-      await syncPushToConvex(cliToken, ingestResult.bookmark, auth);
-    } catch (syncError) {
-      console.error("Failed to sync gx.pr event to Convex", syncError);
-      return c.json({ error: "Failed to sync event to console" }, 500);
+    if (ingestResult.bookmark) {
+      try {
+        await syncPushToConvex(cliToken, ingestResult.bookmark, auth);
+      } catch (syncError) {
+        console.error("Failed to sync gx.pr event to Convex", syncError);
+        return c.json({ error: "Failed to sync event to console" }, 500);
+      }
+    } else {
+      const devKey = process.env.GX_CLOUD_API_KEY?.trim();
+      const webhookSecret = process.env.GX_WEBHOOK_SECRET?.trim();
+      try {
+        if (devKey && cliToken === devKey && webhookSecret) {
+          await deleteDevBookmark(webhookSecret, auth.userId, {
+            repoFullName,
+            branchName,
+          });
+        } else {
+          const { deleteCliBookmark } = await import("../convex-client");
+          await deleteCliBookmark(cliToken, repoFullName, branchName);
+        }
+      } catch (syncError) {
+        console.warn("Failed to delete empty bookmark from Convex", syncError);
+      }
     }
 
     const url = reviewUrl(ingestResult.eventId);
