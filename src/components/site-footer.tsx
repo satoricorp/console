@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AsciiFooterArt } from "@/components/ascii-footer-art";
 import { SatoriLogo } from "@/components/satori-logo";
+import { authClient } from "@/lib/auth-client";
 
 const DOC_LINKS = [
   { label: "Documentation", href: "#" },
@@ -14,6 +15,12 @@ const linkClassName =
   "text-sm font-extralight text-white transition-colors hover:text-[var(--footer-link-hover)]";
 
 export function SiteFooter() {
+  const { data: session } = authClient.useSession();
+
+  if (session?.user) {
+    return null;
+  }
+
   return (
     <footer className="relative mt-auto h-[15.3rem] w-full border-t border-zinc-200 dark:border-zinc-800">
       <AsciiFooterArt className="absolute inset-0 h-full w-full" />
