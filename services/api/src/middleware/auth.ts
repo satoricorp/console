@@ -18,6 +18,21 @@ export function bearerToken(header: string | undefined): string | null {
 }
 
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
+  const webhookSecret = process.env.GX_WEBHOOK_SECRET?.trim();
+  const serverUserId = c.req.header("X-GX-User-Id")?.trim();
+  const serverSecret = c.req.header("X-GX-Webhook-Secret")?.trim();
+  if (webhookSecret && serverSecret === webhookSecret && serverUserId) {
+    c.set("auth", {
+      userId: serverUserId,
+      githubUserId: 0,
+      githubUserLogin: "console",
+      sessionId: "console",
+      machineId: "console",
+    });
+    await next();
+    return;
+  }
+
   const token = bearerToken(c.req.header("Authorization"));
   if (!token) {
     return c.json({ error: "Unauthorized" }, 401);

@@ -1,5 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { consolePayloadForConvex } from "./payload-storage";
 
 let client: ConvexHttpClient | null = null;
 
@@ -128,7 +129,9 @@ function compactBookmark(bookmark: BookmarkPayload): ConvexBookmarkPayload {
       : {}),
     ...(bookmark.headCommitId ? { headCommitId: bookmark.headCommitId } : {}),
     ...(bookmark.remoteHeadSha ? { remoteHeadSha: bookmark.remoteHeadSha } : {}),
-    ...(bookmark.latestPayload ? { latestPayload: bookmark.latestPayload } : {}),
+    ...(bookmark.latestPayload
+      ? { latestPayload: consolePayloadForConvex(bookmark.latestPayload) }
+      : {}),
   };
 }
 

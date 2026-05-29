@@ -123,6 +123,28 @@ export function chatPinFromDiffSelection(
   };
 }
 
+export function chatPinFromPending(pending: {
+  filePath: string;
+  side: "additions" | "deletions";
+  startLine: number;
+  endLine: number;
+  excerpt: string;
+}): ChatPin {
+  return {
+    id: `${pending.filePath}:${pending.side}:${pending.startLine}-${pending.endLine}`,
+    filePath: pending.filePath,
+    side: pending.side,
+    startLine: pending.startLine,
+    endLine: pending.endLine,
+    text: pending.excerpt,
+    label: formatChatPinLabel(
+      pending.filePath,
+      pending.startLine,
+      pending.endLine,
+    ),
+  };
+}
+
 export function chatPinToInput(pin: ChatPin): ChatPinInput {
   return {
     filePath: pin.filePath,

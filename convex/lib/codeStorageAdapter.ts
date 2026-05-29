@@ -1,6 +1,6 @@
 /**
  * Narrow GitHub integration — temporary storage + CI, not review/merge UX.
- * GX Cloud owns review; this adapter pushes nothing (gx/jj-worker push branches),
+ * GX Cloud owns review; this adapter pushes nothing (use gx pr --github from CLI),
  * reads SHA/drift/checks, and propagates GX-initiated land to the default branch.
  *
  * Swap `GitHubAdapter` for another `CodeStorageAdapter` when storage_backend changes.
@@ -36,7 +36,7 @@ export type PublishStatus = {
 };
 
 export interface CodeStorageAdapter {
-  /** Verify branch exists on remote after gx pr / jj-worker push (does not push). */
+  /** Verify branch exists on remote after gx pr --github (does not push). */
   publish(input: {
     accessToken: string;
     repoFullName: string;
@@ -82,7 +82,7 @@ export class GitHubAdapter implements CodeStorageAdapter {
     );
     if (!remoteSha) {
       throw new Error(
-        `Branch ${input.headBranch} does not exist on GitHub for ${input.repoFullName}. Run gx pr to publish it.`,
+        `Branch ${input.headBranch} does not exist on GitHub for ${input.repoFullName}. Run gx pr --github to publish it.`,
       );
     }
     return { remoteSha };
@@ -152,15 +152,15 @@ export class GitHubAdapter implements CodeStorageAdapter {
       landBlockedReason = message;
     } else if (!onRemote) {
       landBlockedReason =
-        "Push this body with gx pr to publish the branch to GitHub.";
+        "Push this body with gx pr --github to publish the branch to GitHub.";
       message = landBlockedReason;
     } else if (driftStatus === "gx_ahead") {
       landBlockedReason =
-        "GX is ahead of GitHub. Run gx pr to publish the latest revision.";
+        "GX is ahead of GitHub. Run gx pr --github to publish the latest revision.";
       message = landBlockedReason;
     } else if (driftStatus === "github_ahead") {
       landBlockedReason =
-        "GitHub branch moved since the last gx pr. Republish from GX before landing.";
+        "GitHub branch moved since the last gx pr --github. Republish from GX before landing.";
       message = landBlockedReason;
     } else if (checkStatus === "pending") {
       landBlockedReason =

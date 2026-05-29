@@ -1,25 +1,44 @@
 "use client";
 
-import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
+import type { DiffLineAnnotation, FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { FileTree, useFileTree, useFileTreeSelection } from "@pierre/trees/react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   extractFileDiffs,
   extractPaths,
   fileDiffMatchesSelection,
 } from "@/lib/gx-pr-payload";
-import { chatPinFromDiffSelection, type ChatPin } from "@/lib/chat-pin";
+import { chatPinFromDiffSelection, chatPinFromPending, type ChatPin } from "@/lib/chat-pin";
+import {
+  annotationsForFile,
+  createDiffComment,
+  pendingFromChatPin,
+  pendingSelectionRange,
+  type DiffComment,
+  type DiffCommentAnnotationMeta,
+  type PendingDiffComment,
+} from "@/lib/diff-comment";
+import { pathsEqual } from "@/lib/move-selection";
+import { renderDiffCommentAnnotation } from "./diff-inline-comment";
+import { usePrReviewWorkspace } from "./pr-review-workspace";
 
 type PrPushPreviewProps = {
   payload: unknown;
-  onAddChatPin?: (pin: ChatPin) => void;
 };
+
+const diffAnnotationCss = `
+[data-annotation-slot] {
+  padding: 8px 12px 12px;
+  box-sizing: border-box;
+}
+`;
 
 const diffOptions = {
   theme: "pierre-dark",
   diffStyle: "split",
   enableLineSelection: true,
+  unsafeCSS: diffAnnotationCss,
 } as const;
 
 function dedupeFileDiffs(fileDiffs: FileDiffMetadata[]): FileDiffMetadata[] {
@@ -35,32 +54,109 @@ function dedupeFileDiffs(fileDiffs: FileDiffMetadata[]): FileDiffMetadata[] {
 
 function DiffFilePanel({
   fileDiff,
-  onAddChatPin,
+  comments,
+  pendingComment,
+  onBeginComment,
+  onSaveComment,
+  onCancelComment,
+  onDeleteComment,
+  onPinToChat,
 }: {
   fileDiff: FileDiffMetadata;
-  onAddChatPin?: (pin: ChatPin) => void;
+  comments: DiffComment[];
+  pendingComment: PendingDiffComment | null;
+  onBeginComment: (pending: PendingDiffComment) => void;
+  onSaveComment: (comment: DiffComment) => void;
+  onCancelComment: () => void;
+  onDeleteComment: (commentId: string) => void;
+  onPinToChat?: (pin: ChatPin, message: string) => void;
 }) {
+  const lineAnnotations = useMemo(
+    () => annotationsForFile(fileDiff.name, comments, pendingComment),
+    [comments, fileDiff.name, pendingComment],
+  );
+
+  const selectedLines = useMemo((): SelectedLineRange | null => {
+    if (
+      pendingComment == null ||
+      pendingComment.filePath !== fileDiff.name
+    ) {
+      return null;
+    }
+    return pendingSelectionRange(pendingComment);
+  }, [fileDiff.name, pendingComment]);
+
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
-      if (!onAddChatPin || !range) return;
-      onAddChatPin(chatPinFromDiffSelection(fileDiff, range));
+      if (!range) return;
+      onBeginComment(pendingFromChatPin(chatPinFromDiffSelection(fileDiff, range)));
     },
-    [fileDiff, onAddChatPin],
+    [fileDiff, onBeginComment],
+  );
+
+  const handleSaveDraft = useCallback(
+    (body: string) => {
+      if (pendingComment == null) return;
+      onSaveComment(createDiffComment(pendingComment, body));
+    },
+    [onSaveComment, pendingComment],
+  );
+
+  const handlePinDraftToChat = useCallback(
+    (body: string) => {
+      if (!onPinToChat || pendingComment == null) return;
+      onPinToChat(chatPinFromPending(pendingComment), body);
+    },
+    [onPinToChat, pendingComment],
+  );
+
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<DiffCommentAnnotationMeta>) =>
+      renderDiffCommentAnnotation(annotation, {
+        pending: pendingComment,
+        onSaveDraft: handleSaveDraft,
+        onCancelDraft: onCancelComment,
+        onPinDraftToChat: onPinToChat ? handlePinDraftToChat : undefined,
+        onDeleteComment,
+      }),
+    [
+      handlePinDraftToChat,
+      handleSaveDraft,
+      onPinToChat,
+      onCancelComment,
+      onDeleteComment,
+      pendingComment,
+    ],
   );
 
   return (
     <FileDiff
       key={fileDiff.name}
       fileDiff={fileDiff}
+      lineAnnotations={lineAnnotations}
+      selectedLines={selectedLines}
+      renderAnnotation={renderAnnotation}
       options={{
         ...diffOptions,
-        onLineSelectionEnd: onAddChatPin ? handleLineSelectionEnd : undefined,
+        onLineSelectionEnd: handleLineSelectionEnd,
       }}
     />
   );
 }
 
-export function PrPushPreview({ payload, onAddChatPin }: PrPushPreviewProps) {
+export function PrPushPreview({
+  payload,
+}: PrPushPreviewProps) {
+  const {
+    diffComments,
+    pendingComment,
+    beginComment,
+    saveComment,
+    cancelComment,
+    deleteComment,
+    pinToChat,
+    reportFileSelection,
+  } = usePrReviewWorkspace();
   const fileDiffs = useMemo(
     () => dedupeFileDiffs(extractFileDiffs(payload)),
     [payload],
@@ -72,10 +168,18 @@ export function PrPushPreview({ payload, onAddChatPin }: PrPushPreviewProps) {
     initialExpansion: "open",
   });
   const selectedPaths = useFileTreeSelection(treeModel);
+  const lastReportedPathsRef = useRef<string[]>([]);
 
   useEffect(() => {
     treeModel.resetPaths(changedPaths);
   }, [treeModel, changedPaths]);
+
+  useEffect(() => {
+    const paths = [...selectedPaths];
+    if (pathsEqual(lastReportedPathsRef.current, paths)) return;
+    lastReportedPathsRef.current = paths;
+    reportFileSelection(paths);
+  }, [reportFileSelection, selectedPaths]);
 
   const visibleDiffs = useMemo(() => {
     if (fileDiffs.length === 0) {
@@ -116,7 +220,13 @@ export function PrPushPreview({ payload, onAddChatPin }: PrPushPreviewProps) {
               <DiffFilePanel
                 key={fileDiff.name}
                 fileDiff={fileDiff}
-                onAddChatPin={onAddChatPin}
+                comments={diffComments}
+                pendingComment={pendingComment}
+                onBeginComment={beginComment}
+                onSaveComment={saveComment}
+                onCancelComment={cancelComment}
+                onDeleteComment={deleteComment}
+                onPinToChat={pinToChat}
               />
             ))
           ) : fileDiffs.length > 0 ? (

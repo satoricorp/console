@@ -83,6 +83,18 @@ async function upsertBookmark(
   await ctx.db.insert("gxBookmarks", nextFields);
 }
 
+export const upsertServerBookmark = internalMutation({
+  args: {
+    userId: v.string(),
+    bookmark: v.object(bookmarkInputValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, { userId, bookmark }) => {
+    await upsertBookmark(ctx, userId, bookmark);
+    return null;
+  },
+});
+
 export const ingestPush = internalMutation({
   args: {
     userId: v.string(),
@@ -561,6 +573,7 @@ export const getBookmarkWithPayload = internalQuery({
       repoFullName: bookmark.repoFullName,
       branchName: bookmark.branchName,
       title: bookmark.title,
+      // Stack/change metadata for console UI. Full payload (sessions) is in Postgres.
       payload: bookmark.latestPayload,
     };
   },

@@ -12,8 +12,8 @@ import {
   reviewMapFromRecords,
   stackChangeFromPayload,
 } from "@/lib/gx-stack";
-import type { ChatPin } from "@/lib/chat-pin";
 import { PrPushPreview } from "./pr-push-preview";
+import { usePrReviewWorkspace } from "./pr-review-workspace";
 
 type StackBookmarkLink = {
   id: string;
@@ -22,11 +22,7 @@ type StackBookmarkLink = {
 };
 
 type PrStackReviewProps = {
-  bookmarkId: string;
-  repoFullName: string;
-  payload: unknown;
   stackBookmarks: StackBookmarkLink[];
-  onAddChatPin?: (pin: ChatPin) => void;
 };
 
 function changeTitle(description: string, fallback: string) {
@@ -34,29 +30,118 @@ function changeTitle(description: string, fallback: string) {
   return firstLine || fallback;
 }
 
-export function PrStackReview({
-  bookmarkId,
+function ChangeReviewEditor({
   repoFullName,
-  payload,
+  stackIndex,
+  initialApprovalPercent,
+  initialNotes,
+  onSave,
+}: {
+  repoFullName: string;
+  stackIndex: number;
+  initialApprovalPercent: number;
+  initialNotes: string;
+  onSave: (review: { approvalPercent: number; notes?: string }) => Promise<void>;
+}) {
+  const [approvalPercent, setApprovalPercent] = useState(initialApprovalPercent);
+  const [notes, setNotes] = useState(initialNotes);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function handleSaveReview() {
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({
+        approvalPercent,
+        notes: notes.trim() ? notes.trim() : undefined,
+      });
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Failed to save change review.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Review change #{stackIndex + 1}
+          </p>
+          <p className="text-xs text-zinc-500">{repoFullName}</p>
+        </div>
+
+        <label className="block space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">
+              Approval
+            </span>
+            <span className="font-mono text-sm text-zinc-900 dark:text-zinc-50">
+              {approvalPercent}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={approvalPercent}
+            disabled={isSaving}
+            onChange={(event) => setApprovalPercent(Number(event.target.value))}
+            className="w-full"
+            aria-label="Approval percentage"
+          />
+          <div className="flex justify-between text-xs text-zinc-500">
+            <span>0% reject</span>
+            <span>100% approve</span>
+          </div>
+        </label>
+
+        <label className="block space-y-1">
+          <span className="text-sm text-zinc-700 dark:text-zinc-300">Notes</span>
+          <textarea
+            value={notes}
+            disabled={isSaving}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={4}
+            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+            placeholder="Review notes (saved to Postgres)"
+          />
+        </label>
+
+        {saveError ? (
+          <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>
+        ) : null}
+
+        <Button
+          type="button"
+          disabled={isSaving}
+          onClick={() => void handleSaveReview()}
+        >
+          {isSaving ? "Saving…" : "Save review"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+export function PrStackReview({
   stackBookmarks,
-  onAddChatPin,
 }: PrStackReviewProps) {
+  const { bookmark, selectChange } = usePrReviewWorkspace();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const stackReview = useQuery(api.gxChangeReviews.getStackReviewStatus, {
-    bookmarkId,
+    bookmarkId: bookmark.id,
   });
   const upsertReview = useMutation(api.gxChangeReviews.upsertChangeReview);
 
-  const [approvalPercent, setApprovalPercent] = useState(
-    DEFAULT_APPROVAL_THRESHOLD_PERCENT,
-  );
-  const [notes, setNotes] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const changes = stackReview?.changes ?? [];
+  const changes = useMemo(() => stackReview?.changes ?? [], [stackReview?.changes]);
   const reviews = useMemo(
     () => reviewMapFromRecords(stackReview?.reviews ?? []),
     [stackReview?.reviews],
@@ -81,40 +166,14 @@ export function PrStackReview({
     : undefined;
 
   useEffect(() => {
-    if (!selectedChange) return;
-    setApprovalPercent(
-      selectedReview?.approvalPercent ?? DEFAULT_APPROVAL_THRESHOLD_PERCENT,
-    );
-    setNotes(selectedReview?.notes ?? "");
-    setSaveError(null);
-  }, [selectedChange?.jjChangeId, selectedReview]);
+    selectChange(selectedJjChangeId);
+  }, [selectChange, selectedJjChangeId]);
 
   function setChangeQueryParam(jjChangeId: string) {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("bookmark", bookmarkId);
+    params.set("bookmark", bookmark.id);
     params.set("change", jjChangeId);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }
-
-  async function handleSaveReview() {
-    if (!selectedChange) return;
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      await upsertReview({
-        bookmarkId,
-        jjChangeId: selectedChange.jjChangeId,
-        stackIndex: selectedChange.stackIndex,
-        approvalPercent,
-        notes: notes.trim() ? notes.trim() : undefined,
-      });
-    } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : "Failed to save change review.",
-      );
-    } finally {
-      setIsSaving(false);
-    }
   }
 
   if (stackReview === undefined) {
@@ -135,7 +194,7 @@ export function PrStackReview({
 
   const previewPayload = selectedChange
     ? payloadForStackChange(
-        stackChangeFromPayload(payload, selectedChange.jjChangeId) ?? {
+        stackChangeFromPayload(bookmark.payload, selectedChange.jjChangeId) ?? {
           stackIndex: selectedChange.stackIndex,
           jjChangeId: selectedChange.jjChangeId,
           changeId: selectedChange.changeId,
@@ -225,7 +284,7 @@ export function PrStackReview({
                       {change.baseBranchName}
                     </p>
                   </button>
-                  {linkedBookmark && linkedBookmark.id !== bookmarkId ? (
+                  {linkedBookmark && linkedBookmark.id !== bookmark.id ? (
                     <Link
                       href={`/?bookmark=${encodeURIComponent(linkedBookmark.id)}&change=${encodeURIComponent(change.jjChangeId)}`}
                       className="text-xs text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
@@ -251,73 +310,29 @@ export function PrStackReview({
       </section>
 
       {selectedChange ? (
-        <section className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                Review change #{selectedChange.stackIndex + 1}
-              </p>
-              <p className="text-xs text-zinc-500">{repoFullName}</p>
-            </div>
-
-            <label className="block space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-zinc-700 dark:text-zinc-300">
-                  Approval
-                </span>
-                <span className="font-mono text-sm text-zinc-900 dark:text-zinc-50">
-                  {approvalPercent}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={approvalPercent}
-                disabled={isSaving}
-                onChange={(event) =>
-                  setApprovalPercent(Number(event.target.value))
-                }
-                className="w-full"
-                aria-label="Approval percentage"
-              />
-              <div className="flex justify-between text-xs text-zinc-500">
-                <span>0% reject</span>
-                <span>100% approve</span>
-              </div>
-            </label>
-
-            <label className="block space-y-1">
-              <span className="text-sm text-zinc-700 dark:text-zinc-300">Notes</span>
-              <textarea
-                value={notes}
-                disabled={isSaving}
-                onChange={(event) => setNotes(event.target.value)}
-                rows={4}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-                placeholder="Review notes (saved to Postgres)"
-              />
-            </label>
-
-            {saveError ? (
-              <p className="text-xs text-red-600 dark:text-red-400">{saveError}</p>
-            ) : null}
-
-            <Button
-              type="button"
-              disabled={isSaving}
-              onClick={() => void handleSaveReview()}
-            >
-              {isSaving ? "Saving…" : "Save review"}
-            </Button>
-          </div>
-        </section>
+        <ChangeReviewEditor
+          key={selectedChange.jjChangeId}
+          repoFullName={bookmark.repoFullName}
+          stackIndex={selectedChange.stackIndex}
+          initialApprovalPercent={
+            selectedReview?.approvalPercent ?? DEFAULT_APPROVAL_THRESHOLD_PERCENT
+          }
+          initialNotes={selectedReview?.notes ?? ""}
+          onSave={async (review) => {
+            await upsertReview({
+              bookmarkId: bookmark.id,
+              jjChangeId: selectedChange.jjChangeId,
+              stackIndex: selectedChange.stackIndex,
+              approvalPercent: review.approvalPercent,
+              notes: review.notes,
+            });
+          }}
+        />
       ) : null}
 
       {previewPayload ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <PrPushPreview payload={previewPayload} onAddChatPin={onAddChatPin} />
+          <PrPushPreview payload={previewPayload} />
         </div>
       ) : null}
     </div>

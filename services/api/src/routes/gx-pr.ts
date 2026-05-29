@@ -2,10 +2,15 @@ import { Hono } from "hono";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
-import type { BookmarkSyncPayload, PushBundle } from "../types";
+import type { PushBundle, BookmarkSyncPayload } from "../types";
 import { syncPushToConvex } from "../sync-convex-push";
 import { deleteDevBookmark } from "../convex-client";
 import { isEffectivelyEmptyBookmark } from "../bookmark-empty";
+import {
+  inferBookmarkTitle,
+  parseGithubPrNumber,
+  repoFullNameFromRemoteUrl,
+} from "../bookmark-utils";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -22,49 +27,6 @@ function reviewUrl(eventId: string): string | undefined {
     return undefined;
   }
   return `${siteUrl}/reviews/${eventId}`;
-}
-
-function parseGithubPrNumber(githubPrUrl: string | null): number | null {
-  if (!githubPrUrl) return null;
-  const match = githubPrUrl.match(/\/pull\/(\d+)(?:\/|$)/);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function repoFullNameFromRemoteUrl(remoteUrl: string | null): string | null {
-  if (!remoteUrl) return null;
-  const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)/i);
-  if (!match) return null;
-  return `${match[1]}/${match[2]}`;
-}
-
-function branchSlugTitle(branchName: string): string {
-  const slug = branchName.split("/").at(-1) ?? branchName;
-  const words = slug
-    .replace(/[-_]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length === 0) return branchName;
-  return words.map((word) => word[0]!.toUpperCase() + word.slice(1)).join(" ");
-}
-
-function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
-  const stack = payload.stack;
-  if (Array.isArray(stack)) {
-    for (const item of stack) {
-      const change = item?.change;
-      if (!change) continue;
-      const firstLine = change.description?.split("\n")[0]?.trim();
-      if (firstLine) return firstLine;
-    }
-  }
-
-  const firstChangeLine = payload.change?.description?.split("\n")[0]?.trim();
-  if (firstChangeLine) return firstChangeLine;
-
-  return branchSlugTitle(branchName);
 }
 
 gxPrRoutes.post("/pr", async (c) => {
@@ -200,7 +162,7 @@ gxPrRoutes.post("/pr", async (c) => {
           github_pr_url = EXCLUDED.github_pr_url,
           github_pr_number = EXCLUDED.github_pr_number,
           updated_at_ms = EXCLUDED.updated_at_ms,
-          title = COALESCE(gx_bookmarks.title, EXCLUDED.title)
+          title = EXCLUDED.title
         RETURNING
           id,
           latest_event_id,

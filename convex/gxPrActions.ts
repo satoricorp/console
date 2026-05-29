@@ -385,7 +385,7 @@ export const createPullRequestForPush = action({
 
     if (!resolution.remoteBranchExists) {
       throw new Error(
-        `Branch ${target.headBranch} is not on GitHub yet. Run gx pr first.`,
+        `Branch ${target.headBranch} is not on GitHub yet. Run gx pr --github first.`,
       );
     }
 
@@ -536,14 +536,27 @@ async function loadAuthorizedPublishContext(
     userId: user._id,
     postgresBookmarkId: bookmarkId,
   });
-  if (!fromConvex?.payload) {
+
+  if (!fromConvex) {
+    throw new Error("Bookmark not found. Run gx pr to sync this body.");
+  }
+
+  let payload: unknown = fromConvex.payload ?? null;
+  if (!payload) {
+    payload = await ctx.runAction(
+      internal.gxBookmarkActions.loadBookmarkPayloadInternal,
+      {
+        userId: user._id,
+        bookmarkId,
+      },
+    );
+  }
+
+  if (!payload) {
     throw new Error("Bookmark payload not found. Run gx pr to sync this body.");
   }
 
-  const target = mergeTargetFromPayload(
-    fromConvex.payload,
-    fromConvex.repoFullName,
-  );
+  const target = mergeTargetFromPayload(payload, fromConvex.repoFullName);
   if (!target) {
     throw new Error(
       "This bookmark is missing repo or branch metadata required for GitHub.",
@@ -563,8 +576,8 @@ async function loadAuthorizedPublishContext(
     userId: user._id,
     accessToken,
     target,
-    localHeadSha: headCommitIdFromPayload(fromConvex.payload),
-    payload: fromConvex.payload,
+    localHeadSha: headCommitIdFromPayload(payload),
+    payload,
   };
 }
 

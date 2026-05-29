@@ -350,7 +350,7 @@ export async function landBranchToBase(
   );
   if (!headSha) {
     throw new Error(
-      `Branch ${headBranch} is not on GitHub. Run gx pr to publish it first.`,
+      `Branch ${headBranch} is not on GitHub. Run gx pr --github to publish it first.`,
     );
   }
 
@@ -524,7 +524,7 @@ export async function resolvePullForPush(
     canonicalPull: null,
     message: branchOnRemote
       ? `No open PR for ${headBranch}, but the branch exists on GitHub. Create a PR or run gx pr from this body.`
-      : `No open PR for ${headBranch}. Run gx pr to publish this body to GitHub.`,
+      : `No open PR for ${headBranch}. Run gx pr --github to publish this body to GitHub.`,
   };
 }
 

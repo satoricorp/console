@@ -3,6 +3,15 @@ export type ApplyResult = {
   revision: number;
   headCommitId: string;
   remoteHeadSha: string | null;
+  newJjChangeId?: string | null;
+  stackPayload?: Record<string, unknown> | null;
+};
+
+export type SplitLineRange = {
+  filePath: string;
+  side: "additions" | "deletions";
+  startLine: number;
+  endLine: number;
 };
 
 export type JjOp =
@@ -19,7 +28,15 @@ export type JjOp =
       targetChangeId: string;
     }
   | { type: "describe"; changeId: string; description: string }
-  | { type: "rebase"; ontoChangeId: string; changeIds: string[] };
+  | { type: "rebase"; ontoChangeId: string; changeIds: string[] }
+  | {
+      type: "split_to_change";
+      sourceChangeId: string;
+      sourceCommitId?: string;
+      description: string;
+      filePaths?: string[];
+      lineRanges?: SplitLineRange[];
+    };
 
 function workerUrl(): string {
   const url = process.env.JJ_WORKER_URL?.trim();

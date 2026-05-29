@@ -47,7 +47,22 @@ export const sendMessage = action({
       postgresBookmarkId: args.bookmarkId,
     });
 
-    if (!bookmark?.payload) {
+    let payload: unknown = bookmark?.payload ?? null;
+    if (!payload) {
+      try {
+        payload = await ctx.runAction(
+          internal.gxBookmarkActions.loadBookmarkPayloadInternal,
+          {
+            userId: user._id,
+            bookmarkId: args.bookmarkId,
+          },
+        );
+      } catch {
+        // DATABASE_URL often points at localhost, which Convex cloud cannot reach.
+      }
+    }
+
+    if (!bookmark || !payload) {
       throw new Error("Bookmark not found or missing payload. Run gx pr to sync.");
     }
 
@@ -83,11 +98,11 @@ export const sendMessage = action({
       defaultBranch: verification.defaultBranch,
     });
 
-    const prContext = buildPrChatContext(bookmark.payload);
+    const prContext = buildPrChatContext(payload);
     const pins = args.pins ?? [];
     const pinnedFiles = [...new Set(pins.map((pin) => pin.filePath))];
     const sessionSummary =
-      buildSessionSummaryForPins(bookmark.payload, pinnedFiles) ??
+      buildSessionSummaryForPins(payload, pinnedFiles) ??
       prContext.sessionSummary;
     const prTitle =
       bookmark.title?.trim() || bookmark.branchName || "Untitled PR";

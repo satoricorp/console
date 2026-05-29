@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import postgres from "postgres";
-import { action } from "./_generated/server";
+import { internalAction, action } from "./_generated/server";
 import { authComponent } from "./auth";
 
 const mergeStatusValidator = v.union(
@@ -18,6 +18,31 @@ function getSql() {
   }
   return postgres(url, { max: 1, idle_timeout: 5, connect_timeout: 10 });
 }
+
+/** Full PushBundle from Postgres (includes captured sessions). */
+export const loadBookmarkPayloadInternal = internalAction({
+  args: {
+    userId: v.string(),
+    bookmarkId: v.string(),
+  },
+  returns: v.union(v.null(), v.any()),
+  handler: async (_ctx, args) => {
+    const sql = getSql();
+    try {
+      const rows = await sql<{ payload: unknown }[]>`
+        SELECT e.payload
+        FROM gx_bookmarks b
+        JOIN gx_pr_events e ON e.id = b.latest_event_id
+        WHERE b.id = ${args.bookmarkId}
+          AND b.user_id = ${args.userId}
+        LIMIT 1
+      `;
+      return rows[0]?.payload ?? null;
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  },
+});
 
 const bookmarkShape = {
   id: v.string(),

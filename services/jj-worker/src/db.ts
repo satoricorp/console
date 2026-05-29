@@ -38,6 +38,7 @@ export type BookmarkRecord = {
   updated_at_ms: string;
   storage_backend: string;
   remote_url: string | null;
+  latest_payload: Record<string, unknown> | null;
 };
 
 export async function loadBookmark(
@@ -47,11 +48,12 @@ export async function loadBookmark(
 ): Promise<BookmarkRecord | null> {
   const db = getSql(databaseUrl);
   const rows = await db<
-    (BookmarkRecord & { remote_url: string | null })[]
+    BookmarkRecord[]
   >`
     SELECT
       b.*,
-      e.remote_url
+      e.remote_url,
+      e.payload AS latest_payload
     FROM gx_bookmarks b
     LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
     WHERE b.id = ${bookmarkId}
