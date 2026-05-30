@@ -13,6 +13,7 @@ import {
   reviewMapFromRecords,
   stackApprovalSummary,
 } from "@/lib/gx-stack";
+import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 import { PrPushPreview } from "./pr-push-preview";
 import { usePrReviewWorkspace } from "./pr-review-workspace";
 
@@ -317,6 +318,30 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
           }
           initialNotes={selectedReview?.notes ?? ""}
           onSave={async (review) => {
+            if (shouldUseLocalBookmarkApi()) {
+              const response = await fetch(
+                `/api/bookmarks/${encodeURIComponent(bookmark.id)}/change-reviews`,
+                {
+                  method: "POST",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    jjChangeId: selectedChange.jjChangeId,
+                    stackIndex: selectedChange.stackIndex,
+                    approvalPercent: review.approvalPercent,
+                    notes: review.notes,
+                  }),
+                },
+              );
+              if (!response.ok) {
+                const body = (await response.json().catch(() => null)) as {
+                  error?: string;
+                } | null;
+                throw new Error(body?.error ?? "Failed to save change review.");
+              }
+              return;
+            }
+
             await upsertReview({
               bookmarkId: bookmark.id,
               jjChangeId: selectedChange.jjChangeId,

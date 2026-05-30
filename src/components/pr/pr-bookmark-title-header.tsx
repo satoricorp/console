@@ -8,14 +8,7 @@ import {
   type BookmarkDetail,
   titleForBookmark,
 } from "./use-pr-console-bookmarks";
-
-function shouldUseLocalBookmarkApi(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
-}
+import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 
 export function PrBookmarkTitleHeader({
   bookmark,
@@ -45,10 +38,26 @@ export function PrBookmarkTitleHeader({
     setIsSavingTitle(true);
     setTitleError(null);
     try {
-      await updateBookmarkTitle({
-        bookmarkId: bookmark.id,
-        title: trimmed,
-      });
+      if (shouldUseLocalBookmarkApi()) {
+        const response = await fetch(
+          `/api/bookmarks/${encodeURIComponent(bookmark.id)}`,
+          {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: trimmed }),
+          },
+        );
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(body?.error ?? "Failed to update bookmark title.");
+        }
+      } else {
+        await updateBookmarkTitle({
+          bookmarkId: bookmark.id,
+          title: trimmed,
+        });
+      }
       setIsEditingTitle(false);
     } catch (error) {
       setTitleError(

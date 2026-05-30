@@ -6,6 +6,7 @@ import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
 import { extractMergeTarget } from "@/lib/gx-pr-payload";
+import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 
 type PrMergeBarProps = {
   bookmark: {
@@ -50,14 +51,6 @@ const driftClass: Record<PublishStatus["driftStatus"], string> = {
   gx_ahead: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   unknown: "border-zinc-300/40 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
 };
-
-function shouldUseLocalBookmarkApi(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
-}
 
 async function fetchPublishStatus(
   bookmark: PrMergeBarProps["bookmark"],

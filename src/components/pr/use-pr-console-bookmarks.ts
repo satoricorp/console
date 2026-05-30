@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { resolveReviewPayload, isReviewablePayload } from "@/lib/bookmark-review";
 import { extractStackChanges } from "@/lib/gx-stack";
+import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 
 export type BookmarkListItem = {
   id: string;
@@ -37,14 +38,6 @@ type PayloadState = {
 
 export function titleForBookmark(bookmark: { title?: string; branchName: string }) {
   return bookmark.title?.trim() || bookmark.branchName;
-}
-
-function shouldUseLocalBookmarkApi(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
 }
 
 async function closeBookmarkRequest(bookmarkId: string): Promise<void> {
