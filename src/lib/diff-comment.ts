@@ -99,5 +99,5 @@ export function formatCommentLineLabel(
   startLine: number,
   endLine: number,
 ): string {
-  return startLine === endLine ? `${startLine}` : `${startLine}–${endLine}`;
+  return startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
 }

@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { normalizeGitRemoteUrl } from "./github";
-import { resolveBookmarkHead, runJj, runJjMutate, ensureWorkerRepositoryConfig } from "./jj";
+import { resolveBookmarkHead, runJj } from "./jj";
 
 const workspaceLocks = new Map<string, Promise<void>>();
 
@@ -62,19 +62,6 @@ async function runGit(
   });
 }
 
-/** jj 0.40 has no `jj apply`; colocated repos use git apply for unified patches. */
-export async function applyUnifiedPatch(
-  cwd: string,
-  patchPath: string,
-): Promise<void> {
-  try {
-    await runGit(cwd, ["apply", patchPath]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`git apply ${patchPath} failed: ${message}`);
-  }
-}
-
 async function ensureWorkspace(
   workspaceRoot: string,
   userId: string,
@@ -94,100 +81,25 @@ async function ensureWorkspace(
       path.basename(root),
     ]);
     await runJj(root, ["git", "init", "--colocate"]);
-    await ensureWorkerRepositoryConfig(root);
-  } else {
-    await ensureWorkerRepositoryConfig(root);
   }
 
   await runJj(root, ["git", "fetch"]);
   return root;
 }
 
-async function ensureRemoteBookmarkTracked(
-  cwd: string,
-  branchName: string,
-): Promise<void> {
-  try {
-    await runJj(cwd, ["bookmark", "track", branchName, "--remote=origin"]);
-  } catch {
-    // Already tracked or no matching remote bookmark yet.
-  }
-}
-
-function activeBookmarkMarkerPath(cwd: string): string {
-  return path.join(cwd, ".gx-worker-active-bookmark");
-}
-
-async function readActiveBookmark(cwd: string): Promise<string | null> {
-  try {
-    const value = await readFile(activeBookmarkMarkerPath(cwd), "utf8");
-    const trimmed = value.trim();
-    return trimmed || null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeActiveBookmark(cwd: string, branchName: string): Promise<void> {
-  await writeFile(activeBookmarkMarkerPath(cwd), `${branchName}\n`, "utf8");
-}
-
-async function syncBookmarkFromOrigin(
+async function syncBookmark(
   cwd: string,
   branchName: string,
 ): Promise<void> {
   const remoteRef = `${branchName}@origin`;
   try {
-    await runJjMutate(cwd, ["edit", remoteRef]);
-    await runJjMutate(cwd, [
-      "bookmark",
-      "set",
-      branchName,
-      "-r",
-      "@",
-      "--allow-backwards",
-    ]);
-    await runJjMutate(cwd, ["edit", branchName]);
+    await runJj(cwd, ["edit", remoteRef]);
+    await runJj(cwd, ["bookmark", "set", branchName, "-r", "@"]);
+    await runJj(cwd, ["edit", branchName]);
   } catch {
-    await runJjMutate(cwd, [
-      "bookmark",
-      "set",
-      branchName,
-      "-r",
-      remoteRef,
-      "--allow-backwards",
-    ]);
-    await runJjMutate(cwd, ["edit", branchName]);
+    await runJj(cwd, ["bookmark", "set", branchName, "-r", remoteRef]);
+    await runJj(cwd, ["edit", branchName]);
   }
-}
-
-async function syncBookmark(
-  cwd: string,
-  branchName: string,
-): Promise<void> {
-  await ensureRemoteBookmarkTracked(cwd, branchName);
-
-  const previousBookmark = await readActiveBookmark(cwd);
-  const switchedBookmark =
-    previousBookmark != null && previousBookmark !== branchName;
-
-  if (switchedBookmark) {
-    await syncBookmarkFromOrigin(cwd, branchName);
-    await writeActiveBookmark(cwd, branchName);
-    return;
-  }
-
-  // Same bookmark: worker stack may be ahead of origin after server-side splits.
-  try {
-    await runJjMutate(cwd, ["edit", branchName]);
-    await writeActiveBookmark(cwd, branchName);
-    return;
-  } catch {
-    // Local bookmark missing; bootstrap from the remote tracking bookmark.
-  }
-
-  await syncBookmarkFromOrigin(cwd, branchName);
-  await writeActiveBookmark(cwd, branchName);
 }
 
 export async function withWorkspace<T>(
@@ -235,7 +147,6 @@ export async function pushBookmark(
   cwd: string,
   branchName: string,
 ): Promise<string> {
-  await ensureRemoteBookmarkTracked(cwd, branchName);
   await runJj(cwd, ["git", "push", "--bookmark", branchName]);
   return resolveBookmarkHead(cwd, branchName);
 }

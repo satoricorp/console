@@ -138,7 +138,7 @@ export function DiffCommentDraft({
   const modLabel =
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad|iPod/.test(navigator.platform)
-      ? "⌘"
+      ? "Cmd"
       : "Ctrl";
 
   return (
@@ -161,7 +161,7 @@ export function DiffCommentDraft({
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={handleKeyDown}
         rows={3}
-        placeholder={`Leave a comment on these lines… (${modLabel}↵ save, ${modLabel}⇧↵ pin to chat, Esc cancel)`}
+        placeholder={`Leave a comment on these lines... (${modLabel}+Enter save, ${modLabel}+Shift+Enter pin to chat, Esc cancel)`}
         style={{
           width: "100%",
           boxSizing: "border-box",
@@ -205,7 +205,7 @@ export function DiffCommentDraft({
             opacity: body.trim() ? 1 : 0.5,
           }}
         >
-          Save comment {modLabel}↵
+          Save comment
         </button>
         {onPinToChat ? (
           <button
@@ -213,7 +213,7 @@ export function DiffCommentDraft({
             onClick={handlePinToChat}
             style={actionButtonStyle("ghost", dark)}
           >
-            Pin to chat {modLabel}⇧↵
+            Pin to chat
           </button>
         ) : null}
         <button
@@ -221,7 +221,7 @@ export function DiffCommentDraft({
           onClick={onCancel}
           style={actionButtonStyle("ghost", dark)}
         >
-          Cancel Esc
+          Cancel
         </button>
       </div>
     </div>
@@ -275,7 +275,7 @@ export function DiffCommentBubble({
               padding: 0,
             }}
           >
-            ×
+            x
           </button>
         ) : null}
       </div>

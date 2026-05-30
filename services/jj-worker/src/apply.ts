@@ -1,25 +1,18 @@
 import type { WorkerConfig } from "./config";
 import { loadBookmark, updateBookmarkAfterApply } from "./db";
+import { getRemoteBranchSha } from "./github";
 import { applyOps, formatJjError } from "./ops";
-import { resolveBookmarkHead } from "./jj";
-import type { ApplyRequest, ApplyResult, JjOp } from "./types";
-import { exportStackFromWorkspace } from "./stack-export";
-import type { ExportedPushBundle } from "./stack-types";
-import { withWorkspace } from "./workspace";
+import type { ApplyRequest, ApplyResult } from "./types";
+import { pushBookmark, withWorkspace } from "./workspace";
 
 export class ApplyError extends Error {
   readonly status: number;
 
   constructor(status: number, message: string) {
     super(message);
-    this.status = status;
     this.name = "ApplyError";
     this.status = status;
   }
-}
-
-function hasSplitOp(ops: JjOp[]): boolean {
-  return ops.some((op) => op.type === "split_to_change");
 }
 
 export async function applyBookmarkRevision(
@@ -50,18 +43,14 @@ export async function applyBookmarkRevision(
       "Bookmark has no remote_url on its latest event; publish with gx pr first",
     );
   }
-  const shouldExportStack = hasSplitOp(request.ops);
-  if (shouldExportStack && !bookmark.latest_payload) {
+  if (!config.githubToken) {
     throw new ApplyError(
-      409,
-      "Bookmark has no payload to refresh after split; publish with gx pr first",
+      503,
+      "GITHUB_TOKEN is not configured on jj-worker",
     );
   }
 
   let headCommitId: string;
-  let newJjChangeId: string | null = null;
-  let stackPayload: Record<string, unknown> | null = null;
-
   try {
     headCommitId = await withWorkspace(
       config.workspaceRoot,
@@ -71,25 +60,23 @@ export async function applyBookmarkRevision(
       config.githubToken,
       bookmark.branch_name,
       async (cwd) => {
-        newJjChangeId = await applyOps(cwd, bookmark.branch_name, request.ops);
-        const localHead = await resolveBookmarkHead(cwd, bookmark.branch_name);
-
-        if (shouldExportStack && bookmark.latest_payload) {
-          const exported = await exportStackFromWorkspace(
-            cwd,
-            bookmark.branch_name,
-            bookmark.latest_payload as ExportedPushBundle,
-            localHead,
-          );
-          stackPayload = exported.payload as Record<string, unknown>;
-          newJjChangeId = newJjChangeId ?? exported.newJjChangeId;
-        }
-
-        return localHead;
+        await applyOps(cwd, bookmark.branch_name, request.ops);
+        return pushBookmark(cwd, bookmark.branch_name);
       },
     );
   } catch (error) {
     throw new ApplyError(502, formatJjError(error));
+  }
+
+  let remoteHeadSha: string | null = null;
+  try {
+    remoteHeadSha = await getRemoteBranchSha(
+      config.githubToken,
+      bookmark.repo_full_name,
+      bookmark.branch_name,
+    );
+  } catch (error) {
+    console.warn("Failed to resolve remote branch SHA after push", error);
   }
 
   const updated = await updateBookmarkAfterApply(
@@ -97,7 +84,7 @@ export async function applyBookmarkRevision(
     request.bookmarkId,
     request.userId,
     headCommitId,
-    bookmark.remote_head_sha,
+    remoteHeadSha,
   );
 
   return {
@@ -105,7 +92,5 @@ export async function applyBookmarkRevision(
     revision: updated.revision,
     headCommitId: updated.headCommitId,
     remoteHeadSha: updated.remoteHeadSha,
-    newJjChangeId,
-    stackPayload,
   };
 }

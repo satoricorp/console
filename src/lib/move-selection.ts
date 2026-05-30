@@ -53,11 +53,6 @@ export function buildMoveSelection(
   };
 }
 
-export function isMoveSelectionEmpty(selection: MoveSelection | null): boolean {
-  if (!selection) return true;
-  return selection.filePaths.length === 0 && selection.lineRanges.length === 0;
-}
-
 export function moveSelectionLabel(selection: MoveSelection): string {
   const parts: string[] = [];
   if (selection.filePaths.length > 0) {
@@ -79,66 +74,4 @@ export function moveSelectionLabel(selection: MoveSelection): string {
     );
   }
   return parts.join(" · ");
-}
-
-export function normalizeMoveSelectionPaths(
-  selection: MoveSelection,
-  allowedFiles: Set<string>,
-): { filePaths: string[]; lineRanges: LineRangeSelection[] } {
-  const filePathSet = new Set(selection.filePaths.filter((path) => allowedFiles.has(path)));
-
-  for (const range of selection.lineRanges) {
-    if (filePathSet.has(range.filePath)) continue;
-    filePathSet.add(range.filePath);
-  }
-
-  const lineRanges = selection.lineRanges.filter((range) => {
-    if (!allowedFiles.has(range.filePath)) return false;
-    if (selection.filePaths.includes(range.filePath)) return false;
-    return true;
-  });
-
-  return {
-    filePaths: [...filePathSet].filter((path) =>
-      selection.filePaths.includes(path),
-    ),
-    lineRanges,
-  };
-}
-
-export type SplitToChangeRequest = {
-  jjChangeId: string;
-  description: string;
-  filePaths: string[];
-  lineRanges: Array<{
-    filePath: string;
-    side: "additions" | "deletions";
-    startLine: number;
-    endLine: number;
-  }>;
-};
-
-export function toSplitToChangeRequest(
-  selection: MoveSelection,
-  description: string,
-  allowedFiles: string[],
-): SplitToChangeRequest {
-  const allowed = new Set(allowedFiles);
-  const normalized = normalizeMoveSelectionPaths(selection, allowed);
-
-  if (normalized.filePaths.length === 0 && normalized.lineRanges.length === 0) {
-    throw new Error("Selection must include files or line ranges from this change.");
-  }
-
-  return {
-    jjChangeId: selection.jjChangeId,
-    description: description.trim() || "Split from review",
-    filePaths: normalized.filePaths,
-    lineRanges: normalized.lineRanges.map(({ filePath, side, startLine, endLine }) => ({
-      filePath,
-      side,
-      startLine,
-      endLine,
-    })),
-  };
 }

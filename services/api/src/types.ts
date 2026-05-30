@@ -137,5 +137,4 @@ export type BookmarkSyncPayload = {
   headCommitId: string | null;
   remoteHeadSha: string | null;
   updatedAt: number;
-  latestPayload?: PushBundle;
 };

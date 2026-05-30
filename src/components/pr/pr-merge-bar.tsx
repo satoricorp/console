@@ -68,41 +68,59 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
     message: string;
   } | null>(null);
 
-  const refreshStatus = useCallback(async () => {
-    if (!mergeTarget) return;
-    setIsLoadingStatus(true);
-    setStatusError(null);
-    try {
-      const nextStatus = (await getPublishStatus({
-        bookmarkId: bookmark.id,
-      })) as PublishStatus;
-      setPublishStatus(nextStatus);
-    } catch (error) {
-      setPublishStatus(null);
-      setStatusError(
-        error instanceof Error ? error.message : "Failed to load publish status.",
-      );
-    } finally {
-      setIsLoadingStatus(false);
-    }
-  }, [bookmark.id, getPublishStatus, mergeTarget]);
+  const [ciChecksLoaded, setCiChecksLoaded] = useState(false);
+
+  const refreshStatus = useCallback(
+    async (options?: { includeCiChecks?: boolean }) => {
+      if (!mergeTarget) return;
+      setIsLoadingStatus(true);
+      setStatusError(null);
+      try {
+        const includeCiChecks = options?.includeCiChecks ?? false;
+        const nextStatus = (await getPublishStatus({
+          bookmarkId: bookmark.id,
+          payload: bookmark.payload,
+          repoFullName: bookmark.repoFullName,
+          includeCiChecks,
+        })) as PublishStatus;
+        setPublishStatus(nextStatus);
+        if (includeCiChecks) {
+          setCiChecksLoaded(true);
+        }
+      } catch (error) {
+        setPublishStatus(null);
+        setStatusError(
+          error instanceof Error ? error.message : "Failed to load publish status.",
+        );
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    },
+    [
+      bookmark.id,
+      bookmark.payload,
+      bookmark.repoFullName,
+      getPublishStatus,
+      mergeTarget,
+    ],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      void refreshStatus();
+      void refreshStatus({ includeCiChecks: false });
     }, 0);
     return () => clearTimeout(timer);
   }, [refreshStatus]);
 
   useEffect(() => {
-    if (publishStatus?.checkStatus !== "pending") {
+    if (!ciChecksLoaded || publishStatus?.checkStatus !== "pending") {
       return;
     }
     const timer = setInterval(() => {
-      void refreshStatus();
+      void refreshStatus({ includeCiChecks: true });
     }, 15000);
     return () => clearInterval(timer);
-  }, [publishStatus?.checkStatus, refreshStatus]);
+  }, [ciChecksLoaded, publishStatus?.checkStatus, refreshStatus]);
 
   if (!mergeTarget) {
     return (
@@ -122,7 +140,9 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
         ? "CI pass"
         : checkStatus === "failure"
           ? "CI fail"
-          : "CI none";
+          : ciChecksLoaded
+            ? "No CI"
+            : "CI not checked";
   const driftLabel =
     driftStatus === "in_sync"
       ? "In sync"
@@ -137,13 +157,19 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
       ? "Branch on GitHub"
       : isLoadingStatus
         ? "Checking…"
-        : "Not published";
+        : "Not on GitHub";
+
+  const landBlockedReason =
+    publishStatus?.landBlockedReason ??
+    (publishStatus && !publishStatus.remoteBranchExists && !integratedOnBase
+      ? "Run gx pr from the repo to push this branch to GitHub before landing."
+      : null);
 
   const landDisabled =
-    !publishStatus?.canLand ||
     integratedOnBase ||
     isLanding ||
-    result?.kind === "success";
+    result?.kind === "success" ||
+    Boolean(landBlockedReason);
 
   async function handleLand() {
     if (!mergeTarget) return;
@@ -152,6 +178,8 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
     try {
       const response = (await landBookmark({
         bookmarkId: bookmark.id,
+        payload: bookmark.payload,
+        repoFullName: bookmark.repoFullName,
       })) as {
         baseBranch: string;
         headBranch: string;
@@ -161,14 +189,22 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
         kind: "success",
         message: `Landed ${response.headBranch} onto ${response.baseBranch} (${response.sha.slice(0, 7)}).`,
       });
-      await refreshStatus();
+      setPublishStatus((current) =>
+        current
+          ? {
+              ...current,
+              integratedOnBase: true,
+              canLand: false,
+              remoteHeadSha: response.sha,
+            }
+          : current,
+      );
     } catch (error) {
       setResult({
         kind: "error",
         message:
           error instanceof Error ? error.message : "Failed to land bookmark.",
       });
-      await refreshStatus();
     } finally {
       setIsLanding(false);
     }
@@ -243,9 +279,9 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
             type="button"
             variant="secondary"
             disabled={isLoadingStatus || isLanding}
-            onClick={() => void refreshStatus()}
+            onClick={() => void refreshStatus({ includeCiChecks: true })}
           >
-            {isLoadingStatus ? "Refreshing…" : "Refresh CI"}
+            {isLoadingStatus ? "Refreshing…" : "Check CI"}
           </Button>
           <Button type="button" disabled={landDisabled} onClick={() => void handleLand()}>
             {integratedOnBase || result?.kind === "success"
@@ -255,11 +291,9 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
                 : `Land on ${mergeTarget.baseBranch}`}
           </Button>
         </div>
-        {publishStatus?.landBlockedReason &&
-        !publishStatus.canLand &&
-        result?.kind !== "success" ? (
+        {landBlockedReason && result?.kind !== "success" ? (
           <p className="max-w-sm text-right text-xs text-zinc-500">
-            {publishStatus.landBlockedReason}
+            {landBlockedReason}
           </p>
         ) : null}
         {result ? (

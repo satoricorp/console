@@ -1,4 +1,4 @@
-/** Build PR-scoped context from a gx pr push bundle (Postgres / Convex payload). */
+/** Build PR-scoped context from a gx pr push bundle. */
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -18,7 +18,6 @@ export function extractChangedFiles(payload: unknown): string[] {
   if (!record) return [];
 
   const paths: string[] = [];
-
   const pathsValue = record.paths ?? record.files ?? record.treePaths;
   if (Array.isArray(pathsValue)) {
     for (const entry of pathsValue) {
@@ -77,7 +76,7 @@ export function extractPrBody(payload: unknown): string | undefined {
 
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength)}…`;
+  return `${text.slice(0, maxLength)}...`;
 }
 
 function textFromJsonBody(body: string | undefined): string | undefined {
@@ -194,9 +193,7 @@ function buildSessionSummaryFromPayload(
 
     const matchingRequests = requests.filter((request) => {
       const requestRecord = asRecord(request);
-      return (
-        requestRecord && requestMentionsFiles(requestRecord, filePaths)
-      );
+      return requestRecord && requestMentionsFiles(requestRecord, filePaths);
     });
     const selectedRequests =
       filePaths.length > 0 ? matchingRequests : requests;

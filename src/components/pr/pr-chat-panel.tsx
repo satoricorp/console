@@ -2,14 +2,11 @@
 
 import { useAction, useQuery } from "convex/react";
 import { ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
-import { chatPinToInput, formatChatPinLabel, type ChatPin } from "@/lib/chat-pin";
-import {
-  isMoveSelectionEmpty,
-  toSplitToChangeRequest,
-} from "@/lib/move-selection";
+import { chatPinToInput, type ChatPin } from "@/lib/chat-pin";
+import { moveSelectionLabel } from "@/lib/move-selection";
 import { usePrReviewWorkspace } from "./pr-review-workspace";
 
 type ChatMessage = {
@@ -47,7 +44,7 @@ function PinBadge({
           className="rounded px-1 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
           aria-label={`Remove ${pin.label}`}
         >
-          ×
+          x
         </button>
       ) : null}
     </span>
@@ -63,10 +60,8 @@ export function PrChatPanel() {
     bookmark,
     chatPins,
     moveSelection,
-    allowedMoveFiles,
     removeChatPin,
     clearChatPins,
-    completeMoveToOwnChange,
     collapseChat,
     chatDraft,
     updateChatDraft,
@@ -75,81 +70,13 @@ export function PrChatPanel() {
   const connectedRepos = useQuery(api.repos.getMyConnectedRepos);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [moveError, setMoveError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [isMoving, setIsMoving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastRevisionRef = useRef(bookmark.revision);
 
   const indexStatus =
     connectedRepos?.find((repo) => repo.fullName === bookmark.repoFullName)
       ?.indexStatus ?? null;
-
-  const canMove =
-    moveSelection != null &&
-    !isMoveSelectionEmpty(moveSelection) &&
-    allowedMoveFiles.length > 0;
-
-  const handleMoveToOwnChange = useCallback(async () => {
-    if (!moveSelection || !canMove || isMoving) return;
-
-    setMoveError(null);
-    setIsMoving(true);
-    try {
-      const request = toSplitToChangeRequest(
-        moveSelection,
-        chatDraft.trim() || "Split from review",
-        allowedMoveFiles,
-      );
-      const response = await fetch(
-        `/api/bookmarks/${encodeURIComponent(bookmark.id)}/split-to-change`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jjChangeId: request.jjChangeId,
-            description: request.description,
-            filePaths: request.filePaths,
-            lineRanges: request.lineRanges,
-          }),
-        },
-      );
-
-      type SplitResponse = {
-        newJjChangeId?: string | null;
-        error?: string;
-      };
-
-      let result: SplitResponse;
-      try {
-        result = (await response.json()) as SplitResponse;
-      } catch {
-        throw new Error(`Split request failed (${response.status})`);
-      }
-
-      if (!response.ok) {
-        throw new Error(result.error ?? `Split failed (${response.status})`);
-      }
-
-      completeMoveToOwnChange(result.newJjChangeId ?? undefined);
-    } catch (moveFailure) {
-      setMoveError(
-        moveFailure instanceof Error
-          ? moveFailure.message
-          : "Failed to move to own change.",
-      );
-    } finally {
-      setIsMoving(false);
-    }
-  }, [
-    allowedMoveFiles,
-    bookmark.id,
-    canMove,
-    chatDraft,
-    isMoving,
-    moveSelection,
-    completeMoveToOwnChange,
-  ]);
 
   useEffect(() => {
     if (lastRevisionRef.current !== bookmark.revision) {
@@ -290,7 +217,7 @@ export function PrChatPanel() {
           <p className="text-sm text-zinc-500">
             Ask about this PR, its diffs, or the agent sessions captured by{" "}
             <code className="text-xs">gx pr</code>. Select lines in the diff to
-            leave an inline comment, or use Pin to chat from the comment draft.
+            leave an inline comment, or pin the draft to chat.
           </p>
         ) : (
           messages.map((message) => (
@@ -324,7 +251,7 @@ export function PrChatPanel() {
           ))
         )}
         {isSending ? (
-          <p className="text-xs text-zinc-500">Searching repo and drafting reply…</p>
+          <p className="text-xs text-zinc-500">Searching repo and drafting reply...</p>
         ) : null}
       </div>
 
@@ -343,37 +270,10 @@ export function PrChatPanel() {
             ))}
           </div>
         ) : null}
-        {canMove && moveSelection ? (
-          <div className="mb-3 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
-              Move selection
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {moveSelection.filePaths.map((filePath) => (
-                <span
-                  key={`file-${filePath}`}
-                  className="inline-flex max-w-full items-center rounded-full border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
-                  title={filePath}
-                >
-                  <span className="truncate font-medium">{filePath}</span>
-                </span>
-              ))}
-              {moveSelection.lineRanges.map((range, index) => (
-                <span
-                  key={`range-${range.filePath}-${range.startLine}-${index}`}
-                  className="inline-flex max-w-full items-center rounded-full border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
-                  title={range.excerpt}
-                >
-                  <span className="truncate font-medium">
-                    {formatChatPinLabel(range.filePath, range.startLine, range.endLine)}
-                  </span>
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {moveError ? (
-          <p className="mb-2 text-xs text-red-600 dark:text-red-400">{moveError}</p>
+        {moveSelection ? (
+          <p className="mb-2 text-xs text-zinc-500">
+            Selection: {moveSelectionLabel(moveSelection)}
+          </p>
         ) : null}
         {error ? (
           <p className="mb-2 text-xs text-red-600 dark:text-red-400">{error}</p>
@@ -383,21 +283,13 @@ export function PrChatPanel() {
           onChange={(event) => updateChatDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
-          placeholder="Ask about this PR… (⌘↵ to send)"
+          placeholder="Ask about this PR... (Cmd/Ctrl+Enter to send)"
           className="w-full resize-none rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-          disabled={isSending || isMoving}
+          disabled={isSending}
         />
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={!canMove || isMoving || isSending}
-            onClick={() => void handleMoveToOwnChange()}
-          >
-            {isMoving ? "Moving…" : "Move to own change"}
-          </Button>
-          <Button type="submit" disabled={isSending || isMoving || !chatDraft.trim()}>
-            {isSending ? "Sending…" : "Send"}
+          <Button type="submit" disabled={isSending || !chatDraft.trim()}>
+            {isSending ? "Sending..." : "Send"}
           </Button>
         </div>
       </form>

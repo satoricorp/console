@@ -342,15 +342,14 @@ export async function landBranchToBase(
   repoFullName: string,
   headBranch: string,
   baseBranch: string,
+  knownHeadSha?: string,
 ): Promise<{ sha: string; baseBranch: string; headBranch: string }> {
-  const headSha = await getRemoteBranchSha(
-    accessToken,
-    repoFullName,
-    headBranch,
-  );
+  const headSha =
+    knownHeadSha ??
+    (await getRemoteBranchSha(accessToken, repoFullName, headBranch));
   if (!headSha) {
     throw new Error(
-      `Branch ${headBranch} is not on GitHub. Run gx pr --github to publish it first.`,
+      `Branch ${headBranch} is not on GitHub. Run gx pr to publish it first.`,
     );
   }
 
@@ -524,7 +523,7 @@ export async function resolvePullForPush(
     canonicalPull: null,
     message: branchOnRemote
       ? `No open PR for ${headBranch}, but the branch exists on GitHub. Create a PR or run gx pr from this body.`
-      : `No open PR for ${headBranch}. Run gx pr --github to publish this body to GitHub.`,
+      : `No open PR for ${headBranch}. Run gx pr to publish this body to GitHub.`,
   };
 }
 
@@ -687,29 +686,40 @@ function checkRunsToCheckStatus(
 ): CheckStatus {
   if (runs.length === 0) return "none";
 
+  let hasActive = false;
+  let hasFailure = false;
   let hasSuccess = false;
+
   for (const run of runs) {
-    if (run.status && run.status !== "completed") {
-      return "pending";
+    if (run.status === "queued" || run.status === "in_progress") {
+      hasActive = true;
+      continue;
     }
-    if (!run.conclusion) {
-      return "pending";
+    if (run.status !== "completed") {
+      continue;
     }
     if (
       run.conclusion === "failure" ||
       run.conclusion === "timed_out" ||
-      run.conclusion === "cancelled" ||
       run.conclusion === "action_required" ||
       run.conclusion === "startup_failure"
     ) {
-      return "failure";
+      hasFailure = true;
+      continue;
     }
-    if (run.conclusion === "success" || run.conclusion === "neutral") {
+    if (
+      run.conclusion === "success" ||
+      run.conclusion === "neutral" ||
+      run.conclusion === "skipped"
+    ) {
       hasSuccess = true;
     }
   }
 
-  return hasSuccess ? "success" : "none";
+  if (hasFailure) return "failure";
+  if (hasActive) return "pending";
+  if (hasSuccess) return "success";
+  return "none";
 }
 
 function mergeCheckStatuses(

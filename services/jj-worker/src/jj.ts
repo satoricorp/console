@@ -12,39 +12,6 @@ export class JjCommandError extends Error {
   }
 }
 
-const MUTATING_JJ_COMMANDS = new Set([
-  "edit",
-  "new",
-  "split",
-  "rebase",
-  "squash",
-  "describe",
-  "restore",
-  "bookmark",
-  "abandon",
-]);
-
-/** jj treats remote bookmark commits as immutable by default; worker must rewrite stacks. */
-export async function runJjMutate(
-  cwd: string,
-  args: string[],
-): Promise<{ stdout: string; stderr: string }> {
-  if (args.length > 0 && MUTATING_JJ_COMMANDS.has(args[0]!)) {
-    return runJj(cwd, [...args, "--ignore-immutable"]);
-  }
-  return runJj(cwd, args);
-}
-
-export async function ensureWorkerRepositoryConfig(cwd: string): Promise<void> {
-  await runJj(cwd, [
-    "config",
-    "set",
-    "--repo",
-    'revset-aliases."immutable_heads()"',
-    "none()",
-  ]);
-}
-
 export async function runJj(
   cwd: string,
   args: string[],
@@ -85,76 +52,6 @@ export async function runJj(
   });
 }
 
-export async function diffRevisionGit(
-  cwd: string,
-  revision: string,
-): Promise<string> {
-  const { stdout } = await runJj(cwd, ["diff", "-r", revision, "--git"]);
-  return stdout;
-}
-
-export async function resolveChangeRevision(
-  cwd: string,
-  branchName: string,
-  changeId: string,
-  commitIdHint?: string | null,
-): Promise<string> {
-  const hint = commitIdHint?.trim();
-  if (hint) {
-    try {
-      const { stdout } = await runJj(cwd, [
-        "log",
-        "-r",
-        hint,
-        "-n",
-        "1",
-        "--no-graph",
-        "-T",
-        "commit_id",
-      ]);
-      const resolved = stdout.trim();
-      if (resolved) return resolved;
-    } catch {
-      // Fall through to revset resolution.
-    }
-  }
-
-  try {
-    const { stdout } = await runJj(cwd, [
-      "log",
-      "-r",
-      `change_id(${changeId}) & ${branchName}..`,
-      "-n",
-      "1",
-      "--no-graph",
-      "-T",
-      "commit_id",
-    ]);
-    const onStack = stdout.trim();
-    if (onStack) return onStack;
-  } catch {
-    // Fall through.
-  }
-
-  const { stdout } = await runJj(cwd, [
-    "log",
-    "-r",
-    `${changeId}/0`,
-    "-n",
-    "1",
-    "--no-graph",
-    "-T",
-    "commit_id",
-  ]);
-  const latest = stdout.trim();
-  if (!latest) {
-    throw new Error(
-      `Could not resolve change ${changeId} on bookmark ${branchName}`,
-    );
-  }
-  return latest;
-}
-
 export async function resolveBookmarkHead(
   cwd: string,
   bookmarkName: string,
@@ -165,11 +62,10 @@ export async function resolveBookmarkHead(
     bookmarkName,
     "-n",
     "1",
-    "--no-graph",
     "-T",
     "commit_id",
   ]);
-  const commitId = stdout.trim().split(/\s+/)[0];
+  const commitId = stdout.trim();
   if (!commitId) {
     throw new Error(`Could not resolve head commit for bookmark ${bookmarkName}`);
   }

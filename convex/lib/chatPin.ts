@@ -15,22 +15,3 @@ export const chatPinValidator = {
   endLine: v.number(),
   text: v.string(),
 };
-
-export function formatPinnedSelections(pins: ChatPinInput[]): string {
-  if (pins.length === 0) return "";
-
-  return pins
-    .map((pin) => {
-      const lineLabel =
-        pin.startLine === pin.endLine
-          ? `${pin.startLine}`
-          : `${pin.startLine}-${pin.endLine}`;
-      const sideLabel = pin.side === "additions" ? "new" : "old";
-      return `[${pin.filePath}:${lineLabel} (${sideLabel})]\n${pin.text}`;
-    })
-    .join("\n\n---\n\n");
-}
-
-export function pinnedFilePaths(pins: ChatPinInput[]): string[] {
-  return [...new Set(pins.map((pin) => pin.filePath))];
-}

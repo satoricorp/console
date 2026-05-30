@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import type { AppEnv } from "./middleware/auth";
 import { bookmarksRoutes } from "./routes/bookmarks";
-import { changeReviewsRoutes } from "./routes/change-reviews";
 import { eventsRoutes } from "./routes/events";
 import { gxPrRoutes } from "./routes/gx-pr";
 import { healthRoutes } from "./routes/health";
@@ -15,7 +14,6 @@ app.route("/", healthRoutes);
 app.route("/gx", gxPrRoutes);
 app.route("/events", eventsRoutes);
 app.route("/bookmarks", bookmarksRoutes);
-app.route("/", changeReviewsRoutes);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 

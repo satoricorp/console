@@ -2,15 +2,9 @@ import { Hono } from "hono";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
-import type { PushBundle, BookmarkSyncPayload } from "../types";
+import type { PushBundle } from "../types";
+import { bookmarkRowToSyncPayload } from "../sync-bookmark";
 import { syncPushToConvex } from "../sync-convex-push";
-import { deleteDevBookmark } from "../convex-client";
-import { isEffectivelyEmptyBookmark } from "../bookmark-empty";
-import {
-  inferBookmarkTitle,
-  parseGithubPrNumber,
-  repoFullNameFromRemoteUrl,
-} from "../bookmark-utils";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -27,6 +21,49 @@ function reviewUrl(eventId: string): string | undefined {
     return undefined;
   }
   return `${siteUrl}/reviews/${eventId}`;
+}
+
+function parseGithubPrNumber(githubPrUrl: string | null): number | null {
+  if (!githubPrUrl) return null;
+  const match = githubPrUrl.match(/\/pull\/(\d+)(?:\/|$)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function repoFullNameFromRemoteUrl(remoteUrl: string | null): string | null {
+  if (!remoteUrl) return null;
+  const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/.]+)/i);
+  if (!match) return null;
+  return `${match[1]}/${match[2]}`;
+}
+
+function branchSlugTitle(branchName: string): string {
+  const slug = branchName.split("/").at(-1) ?? branchName;
+  const words = slug
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return branchName;
+  return words.map((word) => word[0]!.toUpperCase() + word.slice(1)).join(" ");
+}
+
+function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
+  const stack = payload.stack;
+  if (Array.isArray(stack)) {
+    for (const item of stack) {
+      const change = item?.change;
+      if (!change) continue;
+      const firstLine = change.description?.split("\n")[0]?.trim();
+      if (firstLine) return firstLine;
+    }
+  }
+
+  const firstChangeLine = payload.change?.description?.split("\n")[0]?.trim();
+  if (firstChangeLine) return firstChangeLine;
+
+  return branchSlugTitle(branchName);
 }
 
 gxPrRoutes.post("/pr", async (c) => {
@@ -61,11 +98,6 @@ gxPrRoutes.post("/pr", async (c) => {
       "unknown";
     const inferredTitle = inferBookmarkTitle(payload, branchName);
     const githubPrNumber = parseGithubPrNumber(indexFields.github_pr_url);
-    const bookmarkIsEmpty = isEffectivelyEmptyBookmark(payload, {
-      headCommitId: indexFields.head_commit_id,
-      updatedAtMs: payload.created_at,
-      branchName,
-    });
 
     const ingestResult = await db.begin(async (tx) => {
       const [eventRow] = await tx<
@@ -106,16 +138,6 @@ gxPrRoutes.post("/pr", async (c) => {
         )
         RETURNING id
       `;
-
-      if (bookmarkIsEmpty) {
-        await tx`
-          DELETE FROM gx_bookmarks
-          WHERE user_id = ${auth.userId}
-            AND repo_full_name = ${repoFullName}
-            AND branch_name = ${branchName}
-        `;
-        return { eventId: eventRow.id, bookmark: null };
-      }
 
       const [bookmarkRow] = await tx<
         {
@@ -162,7 +184,7 @@ gxPrRoutes.post("/pr", async (c) => {
           github_pr_url = EXCLUDED.github_pr_url,
           github_pr_number = EXCLUDED.github_pr_number,
           updated_at_ms = EXCLUDED.updated_at_ms,
-          title = EXCLUDED.title
+          title = COALESCE(gx_bookmarks.title, EXCLUDED.title)
         RETURNING
           id,
           latest_event_id,
@@ -198,48 +220,27 @@ gxPrRoutes.post("/pr", async (c) => {
         }
       }
 
-      const bookmark: BookmarkSyncPayload = {
-        postgresBookmarkId: bookmarkRow.id,
-        latestEventId: bookmarkRow.latest_event_id,
-        repoFullName,
-        branchName,
-        title: bookmarkRow.title,
-        revision: bookmarkRow.revision,
-        mergeStatus: bookmarkRow.merge_status,
-        githubPrUrl: bookmarkRow.github_pr_url,
-        githubPrNumber: bookmarkRow.github_pr_number,
-        headCommitId: bookmarkRow.head_commit_id,
+      return {
+        eventId: eventRow.id,
+        bookmarkRow,
         remoteHeadSha,
-        updatedAt: Number(bookmarkRow.updated_at_ms),
-        latestPayload: payload,
       };
-
-      return { eventId: eventRow.id, bookmark };
     });
 
-    if (ingestResult.bookmark) {
-      try {
-        await syncPushToConvex(cliToken, ingestResult.bookmark, auth);
-      } catch (syncError) {
-        console.error("Failed to sync gx.pr event to Convex", syncError);
-        return c.json({ error: "Failed to sync event to console" }, 500);
-      }
-    } else {
-      const devKey = process.env.GX_CLOUD_API_KEY?.trim();
-      const webhookSecret = process.env.GX_WEBHOOK_SECRET?.trim();
-      try {
-        if (devKey && cliToken === devKey && webhookSecret) {
-          await deleteDevBookmark(webhookSecret, auth.userId, {
-            repoFullName,
-            branchName,
-          });
-        } else {
-          const { deleteCliBookmark } = await import("../convex-client");
-          await deleteCliBookmark(cliToken, repoFullName, branchName);
-        }
-      } catch (syncError) {
-        console.warn("Failed to delete empty bookmark from Convex", syncError);
-      }
+    try {
+      await syncPushToConvex(
+        cliToken,
+        bookmarkRowToSyncPayload({
+          ...ingestResult.bookmarkRow,
+          repo_full_name: repoFullName,
+          branch_name: branchName,
+          remote_head_sha: ingestResult.remoteHeadSha,
+        }),
+        auth,
+      );
+    } catch (syncError) {
+      console.error("Failed to sync gx.pr event to Convex", syncError);
+      return c.json({ error: "Failed to sync event to console" }, 500);
     }
 
     const url = reviewUrl(ingestResult.eventId);

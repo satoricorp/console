@@ -188,23 +188,52 @@ bookmarksRoutes.post("/:id/apply", async (c) => {
     return c.json({ error: "ops[] is required" }, 400);
   }
 
+  const existing = await db<BookmarkRow[]>`
+    SELECT *
+    FROM gx_bookmarks
+    WHERE id = ${id}
+      AND user_id = ${auth.userId}
+    LIMIT 1
+  `;
+  if (!existing[0]) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const { applyBookmarkOps, WorkerRequestError } = await import(
+    "../jj-worker-client"
+  );
+  const { syncBookmarkToConvex } = await import("../sync-bookmark");
   const cliToken = c.req.header("Authorization")?.slice("Bearer ".length).trim();
-  const { applyBookmarkOpsWithIngest } = await import("../apply-bookmark");
-  const { WorkerRequestError } = await import("../jj-worker-client");
 
   try {
-    const { result, eventId, bookmarkRow } = await applyBookmarkOpsWithIngest({
-      db,
-      auth,
+    const result = await applyBookmarkOps({
       bookmarkId: id,
+      userId: auth.userId,
       ops: ops as import("../jj-worker-client").JjOp[],
-      cliToken,
     });
+
+    const updatedRows = await db<BookmarkRow[]>`
+      SELECT *
+      FROM gx_bookmarks
+      WHERE id = ${id}
+        AND user_id = ${auth.userId}
+      LIMIT 1
+    `;
+    const updated = updatedRows[0];
+    if (!updated) {
+      return c.json({ error: "Bookmark missing after apply" }, 500);
+    }
+
+    try {
+      await syncBookmarkToConvex(updated, auth, cliToken);
+    } catch (syncError) {
+      console.error("Failed to sync bookmark apply to Convex", syncError);
+      return c.json({ error: "Applied in Postgres but Convex sync failed" }, 500);
+    }
 
     return c.json({
       ...result,
-      eventId,
-      bookmark: serializeBookmark(bookmarkRow),
+      bookmark: serializeBookmark(updated),
     });
   } catch (error) {
     if (error instanceof WorkerRequestError) {
@@ -219,138 +248,5 @@ bookmarksRoutes.post("/:id/apply", async (c) => {
     }
     console.error("Failed to apply bookmark ops", error);
     return c.json({ error: "Failed to apply bookmark ops" }, 500);
-  }
-});
-
-bookmarksRoutes.post("/:id/split-to-change", async (c) => {
-  const id = c.req.param("id");
-  const auth = c.get("auth");
-  const db = getSql();
-
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
-
-  if (!body || typeof body !== "object") {
-    return c.json({ error: "Invalid JSON body" }, 400);
-  }
-
-  const record = body as Record<string, unknown>;
-  const sourceChangeId =
-    typeof record.jjChangeId === "string" ? record.jjChangeId.trim() : "";
-  const description =
-    typeof record.description === "string" && record.description.trim()
-      ? record.description.trim()
-      : "Split from review";
-  const filePaths = Array.isArray(record.filePaths)
-    ? record.filePaths.filter((path): path is string => typeof path === "string")
-    : [];
-  const lineRanges = Array.isArray(record.lineRanges)
-    ? record.lineRanges.filter((entry): entry is {
-        filePath: string;
-        side: "additions" | "deletions";
-        startLine: number;
-        endLine: number;
-      } => {
-        if (!entry || typeof entry !== "object") return false;
-        const row = entry as Record<string, unknown>;
-        return (
-          typeof row.filePath === "string" &&
-          (row.side === "additions" || row.side === "deletions") &&
-          typeof row.startLine === "number" &&
-          typeof row.endLine === "number"
-        );
-      })
-    : [];
-
-  if (!sourceChangeId) {
-    return c.json({ error: "jjChangeId is required" }, 400);
-  }
-  if (filePaths.length === 0 && lineRanges.length === 0) {
-    return c.json({ error: "filePaths or lineRanges is required" }, 400);
-  }
-
-  const bookmarkRows = await db<
-    { latest_event_id: string | null; latest_payload: unknown }[]
-  >`
-    SELECT b.latest_event_id, e.payload AS latest_payload
-    FROM gx_bookmarks b
-    LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
-    WHERE b.id = ${id}
-      AND b.user_id = ${auth.userId}
-    LIMIT 1
-  `;
-  const bookmarkRow = bookmarkRows[0];
-  if (!bookmarkRow) {
-    return c.json({ error: "Not found" }, 404);
-  }
-
-  const { validateSplitSelection, stackChangeCommitFromPayload } = await import(
-    "../validate-split-selection"
-  );
-  let validatedSelection: {
-    filePaths: string[];
-    lineRanges: typeof lineRanges;
-  };
-  try {
-    validatedSelection = validateSplitSelection(bookmarkRow.latest_payload, {
-      jjChangeId: sourceChangeId,
-      filePaths,
-      lineRanges,
-    });
-  } catch (error) {
-    return c.json(
-      { error: error instanceof Error ? error.message : "Invalid selection" },
-      400,
-    );
-  }
-
-  const sourceCommitId =
-    stackChangeCommitFromPayload(bookmarkRow.latest_payload, sourceChangeId) ??
-    undefined;
-
-  const cliToken = c.req.header("Authorization")?.slice("Bearer ".length).trim();
-  const { applyBookmarkOpsWithIngest } = await import("../apply-bookmark");
-  const { WorkerRequestError } = await import("../jj-worker-client");
-
-  try {
-    const { result, eventId, bookmarkRow } = await applyBookmarkOpsWithIngest({
-      db,
-      auth,
-      bookmarkId: id,
-      ops: [
-        {
-          type: "split_to_change",
-          sourceChangeId,
-          sourceCommitId,
-          description,
-          filePaths: validatedSelection.filePaths,
-          lineRanges: validatedSelection.lineRanges,
-        },
-      ],
-      cliToken,
-    });
-
-    return c.json({
-      ...result,
-      eventId,
-      bookmark: serializeBookmark(bookmarkRow),
-    });
-  } catch (error) {
-    if (error instanceof WorkerRequestError) {
-      const status =
-        error.status >= 400 && error.status < 600
-          ? (error.status as 400 | 404 | 409 | 502 | 503)
-          : 502;
-      return c.json({ error: error.message }, status);
-    }
-    if (error instanceof Error && error.message.includes("JJ_WORKER_URL")) {
-      return c.json({ error: error.message }, 503);
-    }
-    console.error("Failed to split bookmark change", error);
-    return c.json({ error: "Failed to split bookmark change" }, 500);
   }
 });

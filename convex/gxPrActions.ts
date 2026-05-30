@@ -34,6 +34,42 @@ function getSql() {
   return postgres(url, { max: 1, idle_timeout: 5, connect_timeout: 10 });
 }
 
+async function loadBookmarkPayloadFromPostgres(
+  userId: string,
+  bookmarkId: string,
+): Promise<{ repoFullName: string; payload: unknown } | null> {
+  const sql = getSql();
+  try {
+    const rows = await sql<
+      {
+        repo_full_name: string;
+        payload: unknown;
+      }[]
+    >`
+      SELECT
+        b.repo_full_name,
+        e.payload
+      FROM gx_bookmarks b
+      LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
+      WHERE b.id = ${bookmarkId}
+        AND b.user_id = ${userId}
+      LIMIT 1
+    `;
+
+    const row = rows[0];
+    if (!row?.payload) {
+      return null;
+    }
+
+    return {
+      repoFullName: row.repo_full_name,
+      payload: row.payload,
+    };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
 type MergeContext = {
   userId: string;
   payload: unknown;
@@ -99,104 +135,45 @@ async function loadAuthorizedBookmarkContext(
     throw new Error("Sign in with GitHub to manage pull requests.");
   }
 
-  const fromConvex = await ctx.runQuery(internal.gxPr.getBookmarkWithPayload, {
+  const fromPostgres = await loadBookmarkPayloadFromPostgres(user._id, bookmarkId);
+  if (!fromPostgres) {
+    throw new Error("Bookmark payload not found.");
+  }
+
+  const target = mergeTargetFromPayload(
+    fromPostgres.payload,
+    fromPostgres.repoFullName,
+  );
+  if (!target) {
+    throw new Error(
+      "This bookmark is missing repo or branch metadata required for GitHub.",
+    );
+  }
+
+  const accessToken = await getGithubAccessToken(ctx, user._id);
+  const access = await verifyGithubRepoAccessWithToken(
+    accessToken,
+    target.repoFullName,
+  );
+  if (!access.ok) {
+    throw new Error(access.message);
+  }
+
+  const resolution = await resolvePullForPush(
+    accessToken,
+    target.repoFullName,
+    target.pullRequestNumber,
+    target.headBranch,
+    target.baseBranch,
+  );
+
+  return {
     userId: user._id,
-    postgresBookmarkId: bookmarkId,
-  });
-  if (fromConvex?.payload) {
-    const target = mergeTargetFromPayload(fromConvex.payload, fromConvex.repoFullName);
-    if (!target) {
-      throw new Error(
-        "This bookmark is missing repo or branch metadata required for GitHub.",
-      );
-    }
-
-    const accessToken = await getGithubAccessToken(ctx, user._id);
-    const access = await verifyGithubRepoAccessWithToken(
-      accessToken,
-      target.repoFullName,
-    );
-    if (!access.ok) {
-      throw new Error(access.message);
-    }
-
-    const resolution = await resolvePullForPush(
-      accessToken,
-      target.repoFullName,
-      target.pullRequestNumber,
-      target.headBranch,
-      target.baseBranch,
-    );
-
-    return {
-      userId: user._id,
-      payload: fromConvex.payload,
-      accessToken,
-      target,
-      resolution,
-    };
-  }
-
-  const sql = getSql();
-  try {
-    const rows = await sql<
-      {
-        repo_full_name: string;
-        payload: unknown;
-      }[]
-    >`
-      SELECT
-        b.repo_full_name,
-        e.payload
-      FROM gx_bookmarks b
-      LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
-      WHERE b.id = ${bookmarkId}
-        AND b.user_id = ${user._id}
-      LIMIT 1
-    `;
-
-    const row = rows[0];
-    if (!row) {
-      throw new Error("Bookmark not found.");
-    }
-    if (!row.payload) {
-      throw new Error("Bookmark payload not found.");
-    }
-
-    const target = mergeTargetFromPayload(row.payload, row.repo_full_name);
-    if (!target) {
-      throw new Error(
-        "This bookmark is missing repo or branch metadata required for GitHub.",
-      );
-    }
-
-    const accessToken = await getGithubAccessToken(ctx, user._id);
-    const access = await verifyGithubRepoAccessWithToken(
-      accessToken,
-      target.repoFullName,
-    );
-    if (!access.ok) {
-      throw new Error(access.message);
-    }
-
-    const resolution = await resolvePullForPush(
-      accessToken,
-      target.repoFullName,
-      target.pullRequestNumber,
-      target.headBranch,
-      target.baseBranch,
-    );
-
-    return {
-      userId: user._id,
-      payload: row.payload,
-      accessToken,
-      target,
-      resolution,
-    };
-  } finally {
-    await sql.end({ timeout: 5 });
-  }
+    payload: fromPostgres.payload,
+    accessToken,
+    target,
+    resolution,
+  };
 }
 
 const updateBookmarkMergeStatusRef = makeFunctionReference<
@@ -385,7 +362,7 @@ export const createPullRequestForPush = action({
 
     if (!resolution.remoteBranchExists) {
       throw new Error(
-        `Branch ${target.headBranch} is not on GitHub yet. Run gx pr --github first.`,
+        `Branch ${target.headBranch} is not on GitHub yet. Run gx pr first.`,
       );
     }
 
@@ -517,46 +494,50 @@ const branchPublishStatusValidator = v.object({
   actionsUrl: v.string(),
 });
 
+async function resolveBookmarkPayload(
+  userId: string,
+  bookmarkId: string,
+  provided?: {
+    payload?: unknown;
+    repoFullName?: string;
+  },
+): Promise<{ repoFullName: string; payload: unknown } | null> {
+  if (provided?.payload !== undefined && provided.repoFullName) {
+    return {
+      payload: provided.payload,
+      repoFullName: provided.repoFullName,
+    };
+  }
+  return loadBookmarkPayloadFromPostgres(userId, bookmarkId);
+}
+
 async function loadAuthorizedPublishContext(
   ctx: ActionCtx,
   bookmarkId: string,
+  provided?: {
+    payload?: unknown;
+    repoFullName?: string;
+  },
 ): Promise<{
   userId: string;
   accessToken: string;
   target: NonNullable<ReturnType<typeof mergeTargetFromPayload>>;
   localHeadSha: string | null;
-  payload: unknown;
 }> {
   const user = await authComponent.safeGetAuthUser(ctx);
   if (!user) {
     throw new Error("Sign in with GitHub to publish and land GX bodies.");
   }
 
-  const fromConvex = await ctx.runQuery(internal.gxPr.getBookmarkWithPayload, {
-    userId: user._id,
-    postgresBookmarkId: bookmarkId,
-  });
-
-  if (!fromConvex) {
-    throw new Error("Bookmark not found. Run gx pr to sync this body.");
-  }
-
-  let payload: unknown = fromConvex.payload ?? null;
-  if (!payload) {
-    payload = await ctx.runAction(
-      internal.gxBookmarkActions.loadBookmarkPayloadInternal,
-      {
-        userId: user._id,
-        bookmarkId,
-      },
-    );
-  }
-
-  if (!payload) {
+  const fromPostgres = await resolveBookmarkPayload(user._id, bookmarkId, provided);
+  if (!fromPostgres) {
     throw new Error("Bookmark payload not found. Run gx pr to sync this body.");
   }
 
-  const target = mergeTargetFromPayload(payload, fromConvex.repoFullName);
+  const target = mergeTargetFromPayload(
+    fromPostgres.payload,
+    fromPostgres.repoFullName,
+  );
   if (!target) {
     throw new Error(
       "This bookmark is missing repo or branch metadata required for GitHub.",
@@ -576,8 +557,7 @@ async function loadAuthorizedPublishContext(
     userId: user._id,
     accessToken,
     target,
-    localHeadSha: headCommitIdFromPayload(payload),
-    payload,
+    localHeadSha: headCommitIdFromPayload(fromPostgres.payload),
   };
 }
 
@@ -585,31 +565,27 @@ async function loadAuthorizedPublishContext(
 export const getPublishStatus = action({
   args: {
     bookmarkId: v.string(),
+    payload: v.optional(v.any()),
+    repoFullName: v.optional(v.string()),
+    includeCiChecks: v.optional(v.boolean()),
   },
   returns: branchPublishStatusValidator,
-  handler: async (ctx, { bookmarkId }) => {
-    const { userId, accessToken, target, localHeadSha, payload } =
-      await loadAuthorizedPublishContext(ctx, bookmarkId);
-    const status = await githubAdapter.fetchStatus({
-      accessToken,
-      repoFullName: target.repoFullName,
-      headBranch: target.headBranch,
-      baseBranch: target.baseBranch,
-      localHeadSha,
-    });
-    const approvalBlockedReason = await ctx.runAction(
-      internal.gxChangeReviewActions.loadStackApprovalBlockReason,
-      {
-        userId,
-        bookmarkId,
+  handler: async (ctx, { bookmarkId, payload, repoFullName, includeCiChecks }) => {
+    const { userId, accessToken, target, localHeadSha } =
+      await loadAuthorizedPublishContext(ctx, bookmarkId, {
         payload,
+        repoFullName,
+      });
+    const status = await githubAdapter.fetchStatus(
+      {
+        accessToken,
+        repoFullName: target.repoFullName,
+        headBranch: target.headBranch,
+        baseBranch: target.baseBranch,
+        localHeadSha,
       },
+      { includeCiChecks: includeCiChecks ?? false },
     );
-    if (approvalBlockedReason) {
-      status.canLand = false;
-      status.landBlockedReason = approvalBlockedReason;
-      status.message = approvalBlockedReason;
-    }
     if (status.integratedOnBase) {
       await maybeMarkBookmarkMerged(
         ctx,
@@ -627,6 +603,8 @@ export const getPublishStatus = action({
 export const landBookmark = action({
   args: {
     bookmarkId: v.string(),
+    payload: v.optional(v.any()),
+    repoFullName: v.optional(v.string()),
   },
   returns: v.object({
     landed: v.boolean(),
@@ -635,30 +613,21 @@ export const landBookmark = action({
     headBranch: v.string(),
     repoFullName: v.string(),
   }),
-  handler: async (ctx, { bookmarkId }) => {
-    const { userId, accessToken, target, localHeadSha, payload } =
-      await loadAuthorizedPublishContext(ctx, bookmarkId);
-    const approvalBlockedReason = await ctx.runAction(
-      internal.gxChangeReviewActions.loadStackApprovalBlockReason,
-      {
-        userId,
-        bookmarkId,
+  handler: async (ctx, { bookmarkId, payload, repoFullName }) => {
+    const { userId, accessToken, target, localHeadSha } =
+      await loadAuthorizedPublishContext(ctx, bookmarkId, {
         payload,
-      },
-    );
-    if (approvalBlockedReason) {
-      throw new Error(approvalBlockedReason);
-    }
-
-    const status = await githubAdapter.fetchStatus({
+        repoFullName,
+      });
+    const preflight = await githubAdapter.preflightLand({
       accessToken,
       repoFullName: target.repoFullName,
       headBranch: target.headBranch,
       baseBranch: target.baseBranch,
       localHeadSha,
     });
-    if (status.integratedOnBase) {
-      if (!status.remoteHeadSha) {
+    if (preflight.integratedOnBase) {
+      if (!preflight.remoteHeadSha) {
         throw new Error("Branch is integrated on base but remote SHA is unknown.");
       }
       await maybeMarkBookmarkMerged(
@@ -666,18 +635,21 @@ export const landBookmark = action({
         userId,
         target.repoFullName,
         target.headBranch,
-        status.remoteHeadSha,
+        preflight.remoteHeadSha,
       );
       return {
         landed: true,
-        sha: status.remoteHeadSha,
+        sha: preflight.remoteHeadSha,
         baseBranch: target.baseBranch,
         headBranch: target.headBranch,
         repoFullName: target.repoFullName,
       };
     }
-    if (!status.canLand) {
-      throw new Error(status.landBlockedReason ?? "Cannot land this bookmark yet.");
+    if (preflight.landBlockedReason) {
+      throw new Error(preflight.landBlockedReason);
+    }
+    if (!preflight.remoteHeadSha) {
+      throw new Error("Branch is not on GitHub. Run gx pr to publish it first.");
     }
 
     const result = await githubAdapter.integrateMerge({
@@ -685,6 +657,7 @@ export const landBookmark = action({
       repoFullName: target.repoFullName,
       headBranch: target.headBranch,
       baseBranch: target.baseBranch,
+      knownHeadSha: preflight.remoteHeadSha,
     });
     await maybeMarkBookmarkMerged(
       ctx,

@@ -7,7 +7,8 @@
     "dev": "bun --watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "bun run src/migrate.ts",    "typecheck": "tsc --noEmit"
+    "migrate": "bun run src/migrate.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.1",

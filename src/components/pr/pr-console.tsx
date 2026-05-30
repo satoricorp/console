@@ -1,33 +1,22 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useState } from "react";
+import { useConvexAuth } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
+import { PrBookmarkTitleHeader } from "./pr-bookmark-title-header";
 import { PrChatPanel } from "./pr-chat-panel";
 import { PrDebugTray } from "./pr-debug-tray";
 import { PrMergeBar } from "./pr-merge-bar";
 import { PrReviewWorkspaceProvider, usePrReviewWorkspace } from "./pr-review-workspace";
 import { PrStackReview } from "./pr-stack-review";
-import { extractStackChanges } from "@/lib/gx-stack";
-
-type BookmarkListItem = {
-  id: string;
-  repoFullName: string;
-  branchName: string;
-  title?: string;
-  revision: number;
-  latestEventId: string;
-  mergeStatus: "open" | "merged" | "closed";
-  updatedAtMs: number;
-};
-
-type BookmarkDetail = BookmarkListItem & {
-  payload?: unknown;
-};
+import {
+  type BookmarkDetail,
+  formatRelativeUpdated,
+  titleForBookmark,
+  usePrConsoleBookmarks,
+} from "./use-pr-console-bookmarks";
 
 function CollapsedChatButton() {
   const { expandChat } = usePrReviewWorkspace();
@@ -51,224 +40,62 @@ function CollapsedChatButton() {
 function PrReviewWorkspaceContent({
   selectedDetail,
   stackBookmarks,
+  detailError,
 }: {
   selectedDetail: BookmarkDetail;
   stackBookmarks: Array<{ id: string; branchName: string; title?: string }>;
+  detailError: string | null;
 }) {
   const { chatCollapsed } = usePrReviewWorkspace();
 
   return (
     <>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        {detailError ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {detailError}
+          </div>
+        ) : null}
+        {selectedDetail.payloadSourceBookmarkId ? (
+          <div className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+            Showing stack review data from the latest bookmark in this repo.
+          </div>
+        ) : null}
         <PrMergeBar bookmark={selectedDetail} />
         <PrStackReview stackBookmarks={stackBookmarks} />
       </div>
 
-      <div className="w-full shrink-0 lg:w-auto lg:sticky lg:top-6 lg:self-start">
+      <div className="w-full shrink-0 lg:sticky lg:top-6 lg:w-auto lg:self-start">
         {chatCollapsed ? <CollapsedChatButton /> : <PrChatPanel />}
       </div>
     </>
   );
 }
 
-function titleForBookmark(bookmark: { title?: string; branchName: string }) {
-  return bookmark.title?.trim() || bookmark.branchName;
-}
-
-function formatRelativeUpdated(timestampMs: number): string {
-  const seconds = Math.max(1, Math.floor((Date.now() - timestampMs) / 1000));
-  if (seconds < 60) return "Updated just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Updated ${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `Updated ${days}d ago`;
-  return `Updated ${new Date(timestampMs).toLocaleDateString()}`;
-}
-
-function BookmarkTitleHeader({ bookmark }: { bookmark: BookmarkDetail | null }) {
-  const updateBookmarkTitle = useMutation(api.gxPr.updateConsoleBookmarkTitle);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(
-    bookmark ? titleForBookmark(bookmark) : "",
-  );
-  const [isSavingTitle, setIsSavingTitle] = useState(false);
-  const [titleError, setTitleError] = useState<string | null>(null);
-
-  async function handleSaveTitle() {
-    if (!bookmark) return;
-    const trimmed = titleDraft.trim();
-    if (!trimmed) {
-      setTitleError("Title is required.");
-      return;
-    }
-    setIsSavingTitle(true);
-    setTitleError(null);
-    try {
-      await updateBookmarkTitle({
-        bookmarkId: bookmark.id,
-        title: trimmed,
-      });
-      setIsEditingTitle(false);
-    } catch (error) {
-      setTitleError(
-        error instanceof Error ? error.message : "Failed to update bookmark title.",
-      );
-    } finally {
-      setIsSavingTitle(false);
-    }
-  }
-
-  return (
-    <div className="space-y-1">
-      {bookmark && isEditingTitle ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={titleDraft}
-            onChange={(event) => setTitleDraft(event.target.value)}
-            className="w-full min-w-64 rounded-md border border-zinc-300 bg-white px-3 py-2 text-xl font-semibold tracking-tight text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-            maxLength={280}
-            aria-label="Bookmark title"
-          />
-          <Button onClick={() => void handleSaveTitle()} disabled={isSavingTitle}>
-            {isSavingTitle ? "Saving…" : "Save"}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setIsEditingTitle(false);
-              setTitleDraft(bookmark ? titleForBookmark(bookmark) : "");
-              setTitleError(null);
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {bookmark ? titleForBookmark(bookmark) : "Bookmarks"}
-          </h1>
-          {bookmark ? (
-            <Button variant="secondary" onClick={() => setIsEditingTitle(true)}>
-              Edit title
-            </Button>
-          ) : null}
-        </div>
-      )}
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Bookmarks from <code className="text-xs">gx pr</code>. Select one to
-        preview trees, diffs, and merge status.
-      </p>
-      {titleError ? (
-        <p className="text-xs text-red-600 dark:text-red-400">{titleError}</p>
-      ) : null}
-    </div>
-  );
-}
-
 export function PrConsole() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const authReady =
     !sessionPending &&
     !convexAuthLoading &&
     Boolean(session?.user) &&
     isAuthenticated;
 
-  const [selectedId, setSelectedId] = useState<string | null>(
-    searchParams.get("bookmark"),
-  );
   const [trayOpen, setTrayOpen] = useState(false);
   const [showMerged, setShowMerged] = useState(false);
   const [groupByRepo, setGroupByRepo] = useState(false);
   const [bookmarksCollapsed, setBookmarksCollapsed] = useState(true);
-
-  const bookmarks = useQuery(
-    api.gxPr.listConsoleBookmarks,
-    authReady ? { mergeStatus: showMerged ? undefined : "open" } : "skip",
-  ) as BookmarkListItem[] | undefined;
-
-  const urlBookmarkId = searchParams.get("bookmark");
-  const selectedIdInList =
-    selectedId && bookmarks?.some((item) => item.id === selectedId)
-      ? selectedId
-      : null;
-  const effectiveSelectedId =
-    urlBookmarkId ?? selectedIdInList ?? bookmarks?.[0]?.id ?? null;
-
-  const selectedDetail = useQuery(
-    api.gxPr.getConsoleBookmarkDetail,
-    authReady && effectiveSelectedId
-      ? { bookmarkId: effectiveSelectedId, includePayload: true }
-      : "skip",
-  ) as BookmarkDetail | null | undefined;
-
-  const selected = useMemo(() => {
-    if (!bookmarks?.length) return null;
-    const id = effectiveSelectedId;
-    if (!id) return bookmarks[0];
-    return bookmarks.find((bookmark) => bookmark.id === id) ?? null;
-  }, [bookmarks, effectiveSelectedId]);
-
-  function setBookmarkQueryParam(bookmarkId: string | null) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (bookmarkId) {
-      params.set("bookmark", bookmarkId);
-    } else {
-      params.delete("bookmark");
-    }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function handleSelectBookmark(bookmarkId: string) {
-    setSelectedId(bookmarkId);
-    setBookmarkQueryParam(bookmarkId);
-  }
-
-  const stackBookmarks = useMemo(() => {
-    if (!selectedDetail?.payload || !bookmarks?.length) {
-      return bookmarks?.map((bookmark) => ({
-        id: bookmark.id,
-        branchName: bookmark.branchName,
-        title: bookmark.title,
-      })) ?? [];
-    }
-
-    const stackBranches = new Set(
-      extractStackChanges(selectedDetail.payload).map((change) => change.branchName),
-    );
-
-    return bookmarks
-      .filter((bookmark) => stackBranches.has(bookmark.branchName))
-      .map((bookmark) => ({
-        id: bookmark.id,
-        branchName: bookmark.branchName,
-        title: bookmark.title,
-      }));
-  }, [bookmarks, selectedDetail]);
-
-  const groupedBookmarks = useMemo(() => {
-    const grouped = new Map<string, BookmarkListItem[]>();
-    for (const bookmark of bookmarks ?? []) {
-      const list = grouped.get(bookmark.repoFullName);
-      if (list) {
-        list.push(bookmark);
-      } else {
-        grouped.set(bookmark.repoFullName, [bookmark]);
-      }
-    }
-    return grouped;
-  }, [bookmarks]);
-
-  const listLoading = authReady && bookmarks === undefined;
-  const detailLoading =
-    authReady && Boolean(effectiveSelectedId) && selectedDetail === undefined;
+  const {
+    bookmarks,
+    selected,
+    selectedDetail,
+    groupedBookmarks,
+    stackBookmarks,
+    listLoading,
+    detailLoading,
+    detailError,
+    selectBookmark,
+  } = usePrConsoleBookmarks({ authReady, showMerged });
 
   if (!authReady || listLoading) {
     return (
@@ -282,13 +109,10 @@ export function PrConsole() {
     );
   }
 
-  const detailError =
-    effectiveSelectedId && selectedDetail === null ? "Bookmark not found." : null;
-
   return (
     <div className="flex min-h-0 w-full max-w-[96rem] flex-1 flex-col gap-4 px-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <BookmarkTitleHeader
+        <PrBookmarkTitleHeader
           key={
             selectedDetail
               ? `${selectedDetail.id}:${titleForBookmark(selectedDetail)}`
@@ -364,7 +188,7 @@ export function PrConsole() {
                         <li key={bookmark.id}>
                           <button
                             type="button"
-                            onClick={() => handleSelectBookmark(bookmark.id)}
+                            onClick={() => selectBookmark(bookmark.id)}
                             className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                               active
                                 ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900"
@@ -396,7 +220,7 @@ export function PrConsole() {
                   <li key={bookmark.id}>
                     <button
                       type="button"
-                      onClick={() => handleSelectBookmark(bookmark.id)}
+                      onClick={() => selectBookmark(bookmark.id)}
                       className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                         active
                           ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900"
@@ -440,6 +264,7 @@ export function PrConsole() {
             <PrReviewWorkspaceContent
               selectedDetail={selectedDetail}
               stackBookmarks={stackBookmarks}
+              detailError={detailError}
             />
           </PrReviewWorkspaceProvider>
         ) : (

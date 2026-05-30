@@ -7,13 +7,6 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
-import {
-  DEFAULT_APPROVAL_THRESHOLD_PERCENT,
-  extractStackChanges,
-  reviewMapFromRecords,
-  stackApprovalSummary,
-  type ChangeReviewRecord,
-} from "./lib/gxStack";
 
 const changeReviewShape = v.object({
   jjChangeId: v.string(),
@@ -125,100 +118,6 @@ export const listChangeReviews = query({
   },
 });
 
-export const getStackReviewStatus = query({
-  args: {
-    bookmarkId: v.string(),
-    approvalThresholdPercent: v.optional(v.number()),
-  },
-  returns: v.object({
-    changes: v.array(
-      v.object({
-        stackIndex: v.number(),
-        jjChangeId: v.string(),
-        changeId: v.number(),
-        description: v.string(),
-        branchName: v.string(),
-        baseBranchName: v.string(),
-        githubPullRequestUrl: v.optional(v.string()),
-        files: v.array(v.string()),
-      }),
-    ),
-    reviews: v.array(changeReviewShape),
-    summary: v.object({
-      totalChanges: v.number(),
-      reviewedChanges: v.number(),
-      approvedChanges: v.number(),
-      allApproved: v.boolean(),
-      nextUnreviewedIndex: v.union(v.null(), v.number()),
-      blockedReason: v.union(v.null(), v.string()),
-    }),
-    approvalThresholdPercent: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in required");
-    }
-
-    const threshold =
-      args.approvalThresholdPercent ?? DEFAULT_APPROVAL_THRESHOLD_PERCENT;
-
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q.eq("userId", user._id).eq("postgresBookmarkId", args.bookmarkId),
-      )
-      .first();
-
-    const stackChanges = extractStackChanges(bookmark?.latestPayload);
-    const changes = stackChanges.map((change) => ({
-      stackIndex: change.stackIndex,
-      jjChangeId: change.jjChangeId,
-      changeId: change.changeId,
-      description: change.description,
-      branchName: change.branchName,
-      baseBranchName: change.baseBranchName,
-      githubPullRequestUrl: change.githubPullRequestUrl,
-      files: change.files,
-    }));
-
-    const reviews = await ctx.db
-      .query("gxChangeReviews")
-      .withIndex("by_userId_bookmarkId", (q) =>
-        q.eq("userId", user._id).eq("bookmarkId", args.bookmarkId),
-      )
-      .collect();
-
-    const reviewRecords: ChangeReviewRecord[] = reviews.map((review) => ({
-      jjChangeId: review.jjChangeId,
-      stackIndex: review.stackIndex,
-      approvalPercent: review.approvalPercent,
-      notes: review.notes,
-    }));
-
-    const summary = stackApprovalSummary(
-      stackChanges,
-      reviewMapFromRecords(reviewRecords),
-      threshold,
-    );
-
-    return {
-      changes,
-      reviews: reviews
-        .sort((a, b) => a.stackIndex - b.stackIndex)
-        .map((review) => ({
-          jjChangeId: review.jjChangeId,
-          stackIndex: review.stackIndex,
-          approvalPercent: review.approvalPercent,
-          notes: review.notes,
-          updatedAtMs: review.updatedAtMs,
-        })),
-      summary,
-      approvalThresholdPercent: threshold,
-    };
-  },
-});
-
 export const upsertChangeReview = mutation({
   args: {
     bookmarkId: v.string(),
@@ -260,14 +159,6 @@ export const upsertChangeReview = mutation({
 
     if (!bookmark) {
       throw new Error("Bookmark not found");
-    }
-
-    const changes = extractStackChanges(bookmark.latestPayload);
-    const targetChange = changes.find(
-      (change) => change.jjChangeId === args.jjChangeId,
-    );
-    if (!targetChange) {
-      throw new Error("Change not found in bookmark stack");
     }
 
     const updatedAtMs = Date.now();

@@ -28,7 +28,6 @@ const bookmarkInputValidator = {
   githubPrNumber: v.optional(v.number()),
   headCommitId: v.optional(v.string()),
   remoteHeadSha: v.optional(v.string()),
-  latestPayload: v.optional(v.any()),
   updatedAt: v.number(),
 };
 
@@ -47,7 +46,6 @@ async function upsertBookmark(
     githubPrNumber?: number;
     headCommitId?: string;
     remoteHeadSha?: string;
-    latestPayload?: unknown;
     updatedAt: number;
   },
 ) {
@@ -71,7 +69,6 @@ async function upsertBookmark(
     githubPrNumber: bookmark.githubPrNumber,
     headCommitId: bookmark.headCommitId,
     remoteHeadSha: bookmark.remoteHeadSha,
-    latestPayload: bookmark.latestPayload,
     updatedAt: bookmark.updatedAt,
   };
 
@@ -82,18 +79,6 @@ async function upsertBookmark(
 
   await ctx.db.insert("gxBookmarks", nextFields);
 }
-
-export const upsertServerBookmark = internalMutation({
-  args: {
-    userId: v.string(),
-    bookmark: v.object(bookmarkInputValidator),
-  },
-  returns: v.null(),
-  handler: async (ctx, { userId, bookmark }) => {
-    await upsertBookmark(ctx, userId, bookmark);
-    return null;
-  },
-});
 
 export const ingestPush = internalMutation({
   args: {
@@ -202,93 +187,6 @@ export const ingestDevBookmark = mutation({
 
     await upsertBookmark(ctx, userId, bookmark);
     return null;
-  },
-});
-
-/** Remove a bookmark row from Convex when gx-cloud deletes an empty publish. */
-export const deleteDevBookmark = mutation({
-  args: {
-    devSecret: v.string(),
-    userId: v.string(),
-    postgresBookmarkId: v.optional(v.string()),
-    repoFullName: v.optional(v.string()),
-    branchName: v.optional(v.string()),
-  },
-  returns: v.object({ deleted: v.boolean() }),
-  handler: async (ctx, args) => {
-    const expected = process.env.GX_WEBHOOK_SECRET;
-    if (!expected || args.devSecret !== expected) {
-      throw new Error("Unauthorized");
-    }
-
-    let bookmark = null;
-    if (args.postgresBookmarkId) {
-      bookmark = await ctx.db
-        .query("gxBookmarks")
-        .withIndex("by_userId_postgresBookmarkId", (q) =>
-          q
-            .eq("userId", args.userId)
-            .eq("postgresBookmarkId", args.postgresBookmarkId!),
-        )
-        .first();
-    } else if (args.repoFullName && args.branchName) {
-      bookmark = await ctx.db
-        .query("gxBookmarks")
-        .withIndex("by_userId_repo_branch", (q) =>
-          q
-            .eq("userId", args.userId)
-            .eq("repoFullName", args.repoFullName!)
-            .eq("branchName", args.branchName!),
-        )
-        .first();
-    } else {
-      throw new Error("postgresBookmarkId or repoFullName+branchName required");
-    }
-
-    if (!bookmark) {
-      return { deleted: false };
-    }
-
-    await ctx.db.delete(bookmark._id);
-    return { deleted: true };
-  },
-});
-
-/** Called by gx-cloud when an empty publish removes a bookmark for a CLI session. */
-export const deleteCliBookmark = mutation({
-  args: {
-    token: v.string(),
-    repoFullName: v.string(),
-    branchName: v.string(),
-  },
-  returns: v.object({ deleted: v.boolean() }),
-  handler: async (ctx, { token, repoFullName, branchName }) => {
-    const tokenHash = await hashToken(token);
-    const session = await ctx.db
-      .query("gxCliSessions")
-      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-      .first();
-
-    if (!session || session.revokedAt) {
-      throw new Error("Unauthorized");
-    }
-
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_repo_branch", (q) =>
-        q
-          .eq("userId", session.userId)
-          .eq("repoFullName", repoFullName)
-          .eq("branchName", branchName),
-      )
-      .first();
-
-    if (!bookmark) {
-      return { deleted: false };
-    }
-
-    await ctx.db.delete(bookmark._id);
-    return { deleted: true };
   },
 });
 
@@ -450,15 +348,8 @@ export const listConsoleBookmarks = query({
 export const getConsoleBookmarkDetail = query({
   args: {
     bookmarkId: v.string(),
-    includePayload: v.optional(v.boolean()),
   },
-  returns: v.union(
-    v.null(),
-    v.object({
-      ...consoleBookmarkShape,
-      payload: v.optional(v.any()),
-    }),
-  ),
+  returns: v.union(v.null(), v.object(consoleBookmarkShape)),
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
@@ -489,7 +380,6 @@ export const getConsoleBookmarkDetail = query({
       remoteHeadSha: bookmark.remoteHeadSha,
       mergeStatus: bookmark.mergeStatus,
       updatedAtMs: bookmark.updatedAt,
-      payload: args.includePayload ? bookmark.latestPayload : undefined,
     };
   },
 });
@@ -543,6 +433,41 @@ export const updateConsoleBookmarkTitle = mutation({
   },
 });
 
+export const purgeConsoleBookmark = internalMutation({
+  args: {
+    userId: v.string(),
+    postgresBookmarkId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const bookmark = await ctx.db
+      .query("gxBookmarks")
+      .withIndex("by_userId_postgresBookmarkId", (q) =>
+        q
+          .eq("userId", args.userId)
+          .eq("postgresBookmarkId", args.postgresBookmarkId),
+      )
+      .first();
+
+    if (bookmark) {
+      await ctx.db.delete(bookmark._id);
+    }
+
+    const reviews = await ctx.db
+      .query("gxChangeReviews")
+      .withIndex("by_userId_bookmarkId", (q) =>
+        q.eq("userId", args.userId).eq("bookmarkId", args.postgresBookmarkId),
+      )
+      .collect();
+
+    for (const review of reviews) {
+      await ctx.db.delete(review._id);
+    }
+
+    return Boolean(bookmark);
+  },
+});
+
 export const getBookmarkWithPayload = internalQuery({
   args: {
     userId: v.string(),
@@ -552,30 +477,12 @@ export const getBookmarkWithPayload = internalQuery({
     v.null(),
     v.object({
       repoFullName: v.string(),
-      branchName: v.string(),
-      title: v.optional(v.string()),
       payload: v.any(),
     }),
   ),
-  handler: async (ctx, { userId, postgresBookmarkId }) => {
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q.eq("userId", userId).eq("postgresBookmarkId", postgresBookmarkId),
-      )
-      .first();
-
-    if (!bookmark?.latestPayload) {
-      return null;
-    }
-
-    return {
-      repoFullName: bookmark.repoFullName,
-      branchName: bookmark.branchName,
-      title: bookmark.title,
-      // Stack/change metadata for console UI. Full payload (sessions) is in Postgres.
-      payload: bookmark.latestPayload,
-    };
+  handler: async () => {
+    // Full gx.pr payloads (including sessions) live in Postgres only.
+    return null;
   },
 });
 

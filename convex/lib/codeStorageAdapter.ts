@@ -1,6 +1,6 @@
 /**
  * Narrow GitHub integration — temporary storage + CI, not review/merge UX.
- * GX Cloud owns review; this adapter pushes nothing (use gx pr --github from CLI),
+ * GX Cloud owns review; this adapter pushes nothing (gx/jj-worker push branches),
  * reads SHA/drift/checks, and propagates GX-initiated land to the default branch.
  *
  * Swap `GitHubAdapter` for another `CodeStorageAdapter` when storage_backend changes.
@@ -11,7 +11,6 @@ import {
   getRemoteBranchSha,
   isHeadIntegratedOnBase,
   landBranchToBase,
-  remoteBranchExists,
   type BranchDriftStatus,
   type CheckStatus,
 } from "./gxPrGithub";
@@ -35,8 +34,20 @@ export type PublishStatus = {
   actionsUrl: string;
 };
 
+export type FetchStatusOptions = {
+  /** Skip GitHub Actions / commit status API calls (faster initial load). */
+  includeCiChecks?: boolean;
+};
+
+export type LandPreflight = {
+  remoteHeadSha: string | null;
+  integratedOnBase: boolean;
+  driftStatus: BranchDriftStatus;
+  landBlockedReason: string | null;
+};
+
 export interface CodeStorageAdapter {
-  /** Verify branch exists on remote after gx pr --github (does not push). */
+  /** Verify branch exists on remote after gx pr / jj-worker push (does not push). */
   publish(input: {
     accessToken: string;
     repoFullName: string;
@@ -49,16 +60,29 @@ export interface CodeStorageAdapter {
     repoFullName: string;
     headBranch: string;
     baseBranch: string;
+    knownHeadSha?: string;
   }): Promise<{ sha: string; baseBranch: string; headBranch: string }>;
 
-  /** Branch SHA, drift vs last gx publish, and GitHub Actions check status. */
-  fetchStatus(input: {
+  /** Branch SHA, drift vs last gx publish, and optional GitHub Actions check status. */
+  fetchStatus(
+    input: {
+      accessToken: string;
+      repoFullName: string;
+      headBranch: string;
+      baseBranch: string;
+      localHeadSha: string | null;
+    },
+    options?: FetchStatusOptions,
+  ): Promise<PublishStatus>;
+
+  /** Minimal GitHub checks before landing — no CI API calls. */
+  preflightLand(input: {
     accessToken: string;
     repoFullName: string;
     headBranch: string;
     baseBranch: string;
     localHeadSha: string | null;
-  }): Promise<PublishStatus>;
+  }): Promise<LandPreflight>;
 }
 
 function githubBranchTreeUrl(repoFullName: string, branch: string): string {
@@ -67,6 +91,21 @@ function githubBranchTreeUrl(repoFullName: string, branch: string): string {
     .map((segment) => encodeURIComponent(segment))
     .join("/");
   return `https://github.com/${repoFullName}/tree/${encoded}`;
+}
+
+function landBlockersFromDrift(
+  driftStatus: BranchDriftStatus,
+): string | null {
+  if (driftStatus === "gx_ahead") {
+    return "GX is ahead of GitHub. Run gx pr to publish the latest revision.";
+  }
+  if (driftStatus === "github_ahead") {
+    return "GitHub branch moved since the last gx pr. Republish from GX before landing.";
+  }
+  if (driftStatus !== "in_sync" && driftStatus !== "unknown") {
+    return "Branch drift must be resolved before landing.";
+  }
+  return null;
 }
 
 export class GitHubAdapter implements CodeStorageAdapter {
@@ -82,7 +121,7 @@ export class GitHubAdapter implements CodeStorageAdapter {
     );
     if (!remoteSha) {
       throw new Error(
-        `Branch ${input.headBranch} does not exist on GitHub for ${input.repoFullName}. Run gx pr --github to publish it.`,
+        `Branch ${input.headBranch} does not exist on GitHub for ${input.repoFullName}. Run gx pr to publish it.`,
       );
     }
     return { remoteSha };
@@ -93,56 +132,114 @@ export class GitHubAdapter implements CodeStorageAdapter {
     repoFullName: string;
     headBranch: string;
     baseBranch: string;
+    knownHeadSha?: string;
   }): Promise<{ sha: string; baseBranch: string; headBranch: string }> {
     return landBranchToBase(
       input.accessToken,
       input.repoFullName,
       input.headBranch,
       input.baseBranch,
+      input.knownHeadSha,
     );
   }
 
-  async fetchStatus(input: {
+  async preflightLand(input: {
     accessToken: string;
     repoFullName: string;
     headBranch: string;
     baseBranch: string;
     localHeadSha: string | null;
-  }): Promise<PublishStatus> {
-    const onRemote = await remoteBranchExists(
+  }): Promise<LandPreflight> {
+    const remoteHeadSha = await getRemoteBranchSha(
       input.accessToken,
       input.repoFullName,
       input.headBranch,
     );
-    const remoteHeadSha = onRemote
-      ? await getRemoteBranchSha(
-          input.accessToken,
-          input.repoFullName,
-          input.headBranch,
-        )
-      : null;
-    const driftStatus = await getBranchDriftStatus(
+    if (!remoteHeadSha) {
+      return {
+        remoteHeadSha: null,
+        integratedOnBase: false,
+        driftStatus: "unknown",
+        landBlockedReason:
+          "Push this body with gx pr to publish the branch to GitHub.",
+      };
+    }
+
+    const [driftStatus, integratedOnBase] = await Promise.all([
+      getBranchDriftStatus(
+        input.accessToken,
+        input.repoFullName,
+        input.localHeadSha,
+        remoteHeadSha,
+      ),
+      isHeadIntegratedOnBase(
+        input.accessToken,
+        input.repoFullName,
+        input.baseBranch,
+        remoteHeadSha,
+      ),
+    ]);
+
+    if (integratedOnBase) {
+      return {
+        remoteHeadSha,
+        integratedOnBase: true,
+        driftStatus,
+        landBlockedReason: `Already integrated on ${input.baseBranch}.`,
+      };
+    }
+
+    return {
+      remoteHeadSha,
+      integratedOnBase: false,
+      driftStatus,
+      landBlockedReason: landBlockersFromDrift(driftStatus),
+    };
+  }
+
+  async fetchStatus(
+    input: {
+      accessToken: string;
+      repoFullName: string;
+      headBranch: string;
+      baseBranch: string;
+      localHeadSha: string | null;
+    },
+    options?: FetchStatusOptions,
+  ): Promise<PublishStatus> {
+    const includeCiChecks = options?.includeCiChecks ?? false;
+    const remoteHeadSha = await getRemoteBranchSha(
       input.accessToken,
       input.repoFullName,
-      input.localHeadSha,
-      remoteHeadSha,
+      input.headBranch,
     );
-    const checkStatus = remoteHeadSha
-      ? await getCheckStatusForRef(
-          input.accessToken,
-          input.repoFullName,
-          remoteHeadSha,
-        )
-      : "none";
-    const integratedOnBase =
-      remoteHeadSha != null
-        ? await isHeadIntegratedOnBase(
+    const onRemote = remoteHeadSha != null;
+
+    const [driftStatus, checkStatus, integratedOnBase] = await Promise.all([
+      onRemote
+        ? getBranchDriftStatus(
+            input.accessToken,
+            input.repoFullName,
+            input.localHeadSha,
+            remoteHeadSha,
+          )
+        : Promise.resolve("unknown" as BranchDriftStatus),
+      includeCiChecks && remoteHeadSha
+        ? getCheckStatusForRef(
+            input.accessToken,
+            input.repoFullName,
+            remoteHeadSha,
+          )
+        : Promise.resolve("none" as CheckStatus),
+      remoteHeadSha
+        ? isHeadIntegratedOnBase(
             input.accessToken,
             input.repoFullName,
             input.baseBranch,
             remoteHeadSha,
           )
-        : false;
+        : Promise.resolve(false),
+    ]);
 
     let landBlockedReason: string | null = null;
     let message: string | null = null;
@@ -152,26 +249,20 @@ export class GitHubAdapter implements CodeStorageAdapter {
       landBlockedReason = message;
     } else if (!onRemote) {
       landBlockedReason =
-        "Push this body with gx pr --github to publish the branch to GitHub.";
+        "Push this body with gx pr to publish the branch to GitHub.";
       message = landBlockedReason;
-    } else if (driftStatus === "gx_ahead") {
-      landBlockedReason =
-        "GX is ahead of GitHub. Run gx pr --github to publish the latest revision.";
+    } else {
+      landBlockedReason = landBlockersFromDrift(driftStatus);
       message = landBlockedReason;
-    } else if (driftStatus === "github_ahead") {
-      landBlockedReason =
-        "GitHub branch moved since the last gx pr --github. Republish from GX before landing.";
-      message = landBlockedReason;
-    } else if (checkStatus === "pending") {
-      landBlockedReason =
-        "GitHub Actions are still running on the published branch.";
-      message = "Waiting for GitHub Actions…";
-    } else if (checkStatus === "failure") {
-      landBlockedReason = "GitHub Actions failed on the published branch.";
-      message = landBlockedReason;
-    } else if (driftStatus !== "in_sync" && driftStatus !== "unknown") {
-      landBlockedReason = "Branch drift must be resolved before landing.";
-      message = landBlockedReason;
+      if (!landBlockedReason && includeCiChecks) {
+        if (checkStatus === "pending") {
+          message = "GitHub Actions are still running on the published branch.";
+        } else if (checkStatus === "failure") {
+          landBlockedReason =
+            "GitHub Actions failed on the published branch.";
+          message = landBlockedReason;
+        }
+      }
     }
 
     const canLand =

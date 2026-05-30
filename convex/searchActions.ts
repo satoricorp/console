@@ -11,7 +11,6 @@ export const queryReviewContext = action({
   args: {
     fullName: v.string(),
     changedFiles: v.array(v.string()),
-    query: v.optional(v.string()),
     symbols: v.optional(v.array(v.string())),
     prTitle: v.optional(v.string()),
     prBody: v.optional(v.string()),
@@ -54,7 +53,6 @@ export const queryReviewContext = action({
     return searchTurboPuffer({
       fullName: args.fullName,
       changedFiles: args.changedFiles,
-      query: args.query,
       symbols: args.symbols,
       prTitle: args.prTitle,
       prBody: args.prBody,

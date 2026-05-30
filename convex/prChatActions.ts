@@ -1,6 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
+import postgres from "postgres";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
@@ -24,6 +25,61 @@ const sourceValidator = v.object({
 
 const pinValidator = v.object(chatPinValidator);
 
+function getSql() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is not set");
+  }
+  return postgres(url, { max: 1, idle_timeout: 5, connect_timeout: 10 });
+}
+
+async function loadBookmarkPayloadFromPostgres(
+  userId: string,
+  bookmarkId: string,
+): Promise<{
+  repoFullName: string;
+  branchName: string;
+  title?: string;
+  payload: unknown;
+} | null> {
+  const sql = getSql();
+  try {
+    const rows = await sql<
+      {
+        repo_full_name: string;
+        branch_name: string;
+        title: string | null;
+        payload: unknown | null;
+      }[]
+    >`
+      SELECT
+        b.repo_full_name,
+        b.branch_name,
+        b.title,
+        e.payload
+      FROM gx_bookmarks b
+      LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
+      WHERE b.id = ${bookmarkId}
+        AND b.user_id = ${userId}
+      LIMIT 1
+    `;
+
+    const row = rows[0];
+    if (!row?.payload) {
+      return null;
+    }
+
+    return {
+      repoFullName: row.repo_full_name,
+      branchName: row.branch_name,
+      title: row.title ?? undefined,
+      payload: row.payload,
+    };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
 export const sendMessage = action({
   args: {
     bookmarkId: v.string(),
@@ -42,27 +98,11 @@ export const sendMessage = action({
       throw new Error("Message is required.");
     }
 
-    const bookmark = await ctx.runQuery(internal.gxPr.getBookmarkWithPayload, {
-      userId: user._id,
-      postgresBookmarkId: args.bookmarkId,
-    });
-
-    let payload: unknown = bookmark?.payload ?? null;
-    if (!payload) {
-      try {
-        payload = await ctx.runAction(
-          internal.gxBookmarkActions.loadBookmarkPayloadInternal,
-          {
-            userId: user._id,
-            bookmarkId: args.bookmarkId,
-          },
-        );
-      } catch {
-        // DATABASE_URL often points at localhost, which Convex cloud cannot reach.
-      }
-    }
-
-    if (!bookmark || !payload) {
+    const bookmark = await loadBookmarkPayloadFromPostgres(
+      user._id,
+      args.bookmarkId,
+    );
+    if (!bookmark) {
       throw new Error("Bookmark not found or missing payload. Run gx pr to sync.");
     }
 
@@ -98,11 +138,11 @@ export const sendMessage = action({
       defaultBranch: verification.defaultBranch,
     });
 
-    const prContext = buildPrChatContext(payload);
+    const prContext = buildPrChatContext(bookmark.payload);
     const pins = args.pins ?? [];
     const pinnedFiles = [...new Set(pins.map((pin) => pin.filePath))];
     const sessionSummary =
-      buildSessionSummaryForPins(payload, pinnedFiles) ??
+      buildSessionSummaryForPins(bookmark.payload, pinnedFiles) ??
       prContext.sessionSummary;
     const prTitle =
       bookmark.title?.trim() || bookmark.branchName || "Untitled PR";

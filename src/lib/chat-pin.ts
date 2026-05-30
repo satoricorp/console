@@ -100,7 +100,7 @@ export function formatChatPinLabel(
   endLine: number,
 ): string {
   const lineLabel =
-    startLine === endLine ? `${startLine}` : `${startLine}–${endLine}`;
+    startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
   return `${filePath}:${lineLabel}`;
 }
 

@@ -2,14 +2,7 @@
 
 import { v } from "convex/values";
 import postgres from "postgres";
-import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import {
-  DEFAULT_APPROVAL_THRESHOLD_PERCENT,
-  extractStackChanges,
-  reviewMapFromRecords,
-  stackApprovalSummary,
-} from "./lib/gxStack";
 
 function getSql() {
   const url = process.env.DATABASE_URL;
@@ -75,38 +68,5 @@ export const syncReviewToPostgres = internalAction({
       await sql.end({ timeout: 5 });
     }
     return null;
-  },
-});
-
-export const loadStackApprovalBlockReason = internalAction({
-  args: {
-    userId: v.string(),
-    bookmarkId: v.string(),
-    payload: v.any(),
-    approvalThresholdPercent: v.optional(v.number()),
-  },
-  returns: v.union(v.null(), v.string()),
-  handler: async (ctx, args) => {
-    const threshold =
-      args.approvalThresholdPercent ?? DEFAULT_APPROVAL_THRESHOLD_PERCENT;
-    const changes = extractStackChanges(args.payload);
-    if (changes.length === 0) {
-      return null;
-    }
-
-    const reviews = await ctx.runQuery(
-      internal.gxChangeReviews.listChangeReviewsForUser,
-      {
-        userId: args.userId,
-        bookmarkId: args.bookmarkId,
-      },
-    );
-
-    const summary = stackApprovalSummary(
-      changes,
-      reviewMapFromRecords(reviews),
-      threshold,
-    );
-    return summary.blockedReason;
   },
 });

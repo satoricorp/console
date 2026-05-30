@@ -8,9 +8,10 @@ import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
 import {
   DEFAULT_APPROVAL_THRESHOLD_PERCENT,
+  extractStackChanges,
   payloadForStackChange,
   reviewMapFromRecords,
-  stackChangeFromPayload,
+  stackApprovalSummary,
 } from "@/lib/gx-stack";
 import { PrPushPreview } from "./pr-push-preview";
 import { usePrReviewWorkspace } from "./pr-review-workspace";
@@ -109,7 +110,7 @@ function ChangeReviewEditor({
             onChange={(event) => setNotes(event.target.value)}
             rows={4}
             className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-            placeholder="Review notes (saved to Postgres)"
+            placeholder="Review notes"
           />
         </label>
 
@@ -122,32 +123,36 @@ function ChangeReviewEditor({
           disabled={isSaving}
           onClick={() => void handleSaveReview()}
         >
-          {isSaving ? "Saving…" : "Save review"}
+          {isSaving ? "Saving..." : "Save review"}
         </Button>
       </div>
     </section>
   );
 }
 
-export function PrStackReview({
-  stackBookmarks,
-}: PrStackReviewProps) {
+export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const { bookmark, selectChange } = usePrReviewWorkspace();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const stackReview = useQuery(api.gxChangeReviews.getStackReviewStatus, {
+  const savedReviews = useQuery(api.gxChangeReviews.listChangeReviews, {
     bookmarkId: bookmark.id,
   });
   const upsertReview = useMutation(api.gxChangeReviews.upsertChangeReview);
 
-  const changes = useMemo(() => stackReview?.changes ?? [], [stackReview?.changes]);
-  const reviews = useMemo(
-    () => reviewMapFromRecords(stackReview?.reviews ?? []),
-    [stackReview?.reviews],
+  const changes = useMemo(
+    () => extractStackChanges(bookmark.payload),
+    [bookmark.payload],
   );
-  const threshold =
-    stackReview?.approvalThresholdPercent ?? DEFAULT_APPROVAL_THRESHOLD_PERCENT;
+  const reviews = useMemo(
+    () => reviewMapFromRecords(savedReviews ?? []),
+    [savedReviews],
+  );
+  const threshold = DEFAULT_APPROVAL_THRESHOLD_PERCENT;
+  const summary = useMemo(
+    () => stackApprovalSummary(changes, reviews, threshold),
+    [changes, reviews, threshold],
+  );
 
   const selectedJjChangeId = useMemo(() => {
     const fromUrl = searchParams.get("change");
@@ -176,10 +181,10 @@ export function PrStackReview({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  if (stackReview === undefined) {
+  if (savedReviews === undefined) {
     return (
       <div className="rounded-lg border border-zinc-200 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800">
-        Loading stack review…
+        Loading stack review...
       </div>
     );
   }
@@ -187,26 +192,15 @@ export function PrStackReview({
   if (changes.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700">
-        No gx add changes found in this bookmark payload.
+        No gx add changes found in this bookmark payload. If this is an older
+        bookmark in a stack, open the latest bookmark for this repo or run{" "}
+        <code className="text-xs">gx pr</code> again to refresh it.
       </div>
     );
   }
 
   const previewPayload = selectedChange
-    ? payloadForStackChange(
-        stackChangeFromPayload(bookmark.payload, selectedChange.jjChangeId) ?? {
-          stackIndex: selectedChange.stackIndex,
-          jjChangeId: selectedChange.jjChangeId,
-          changeId: selectedChange.changeId,
-          description: selectedChange.description,
-          branchName: selectedChange.branchName,
-          baseBranchName: selectedChange.baseBranchName,
-          patch: null,
-          githubPullRequestUrl: selectedChange.githubPullRequestUrl,
-          files: selectedChange.files,
-          currentCommitId: null,
-        },
-      )
+    ? payloadForStackChange(selectedChange)
     : null;
 
   return (
@@ -218,17 +212,17 @@ export function PrStackReview({
               Stack review
             </p>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              {stackReview.summary.approvedChanges}/{stackReview.summary.totalChanges}{" "}
-              changes at {threshold}%+ · ordered oldest gx add first
+              {summary.approvedChanges}/{summary.totalChanges} changes at{" "}
+              {threshold}%+ · ordered oldest gx add first
             </p>
           </div>
-          {stackReview.summary.blockedReason ? (
+          {summary.blockedReason ? (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              {stackReview.summary.blockedReason}
+              {summary.blockedReason}
             </p>
           ) : (
             <p className="text-xs text-emerald-700 dark:text-emerald-300">
-              All stack changes approved — ready to merge.
+              All stack changes approved - ready to merge.
             </p>
           )}
         </div>
@@ -240,8 +234,12 @@ export function PrStackReview({
               review && review.approvalPercent >= threshold,
             );
             const active = change.jjChangeId === selectedJjChangeId;
+            const linkedChangeTitle = change.description.split("\n")[0]?.trim();
             const linkedBookmark = stackBookmarks.find(
-              (bookmark) => bookmark.branchName === change.branchName,
+              (entry) =>
+                entry.branchName === change.branchName ||
+                (linkedChangeTitle &&
+                  entry.title?.trim() === linkedChangeTitle),
             );
 
             return (
@@ -280,7 +278,7 @@ export function PrStackReview({
                       </span>
                     </div>
                     <p className="mt-0.5 font-mono text-xs text-zinc-500">
-                      gx add #{change.changeId} · {change.branchName} →{" "}
+                      gx add #{change.changeId} · {change.branchName} to{" "}
                       {change.baseBranchName}
                     </p>
                   </button>

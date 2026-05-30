@@ -4,25 +4,7 @@ export type JjOpType =
   | "amend"
   | "squash"
   | "describe"
-  | "rebase"
-  | "split_to_change";
-
-export type SplitLineRange = {
-  filePath: string;
-  side: "additions" | "deletions";
-  startLine: number;
-  endLine: number;
-};
-
-export type SplitToChangeOp = {
-  type: "split_to_change";
-  sourceChangeId: string;
-  /** Disambiguates divergent jj change IDs (multiple commits per change). */
-  sourceCommitId?: string;
-  description: string;
-  filePaths?: string[];
-  lineRanges?: SplitLineRange[];
-};
+  | "rebase";
 
 export type RelocateChangeOp = {
   type: "relocate_change";
@@ -65,8 +47,7 @@ export type JjOp =
   | AmendOp
   | SquashOp
   | DescribeOp
-  | RebaseOp
-  | SplitToChangeOp;
+  | RebaseOp;
 
 export type ApplyRequest = {
   bookmarkId: string;
@@ -79,6 +60,4 @@ export type ApplyResult = {
   revision: number;
   headCommitId: string;
   remoteHeadSha: string | null;
-  newJjChangeId?: string | null;
-  stackPayload?: Record<string, unknown> | null;
 };

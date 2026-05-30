@@ -1,6 +1,5 @@
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
-import { consolePayloadForConvex } from "./payload-storage";
 
 let client: ConvexHttpClient | null = null;
 
@@ -29,7 +28,6 @@ type ConvexBookmarkPayload = {
   githubPrNumber?: number;
   headCommitId?: string;
   remoteHeadSha?: string;
-  latestPayload?: unknown;
 };
 
 const ingestCliPushRef = makeFunctionReference<
@@ -51,28 +49,6 @@ const ingestDevPushRef = makeFunctionReference<
   },
   null
 >("gxPr:ingestDevBookmark");
-
-const deleteDevBookmarkRef = makeFunctionReference<
-  "mutation",
-  {
-    devSecret: string;
-    userId: string;
-    postgresBookmarkId?: string;
-    repoFullName?: string;
-    branchName?: string;
-  },
-  { deleted: boolean }
->("gxPr:deleteDevBookmark");
-
-const deleteCliBookmarkRef = makeFunctionReference<
-  "mutation",
-  {
-    token: string;
-    repoFullName: string;
-    branchName: string;
-  },
-  { deleted: boolean }
->("gxPr:deleteCliBookmark");
 
 function getConvexUrl(): string {
   const url = process.env.CONVEX_URL;
@@ -110,7 +86,6 @@ type BookmarkPayload = {
   headCommitId: string | null;
   remoteHeadSha: string | null;
   updatedAt: number;
-  latestPayload?: unknown;
 };
 
 function compactBookmark(bookmark: BookmarkPayload): ConvexBookmarkPayload {
@@ -129,9 +104,6 @@ function compactBookmark(bookmark: BookmarkPayload): ConvexBookmarkPayload {
       : {}),
     ...(bookmark.headCommitId ? { headCommitId: bookmark.headCommitId } : {}),
     ...(bookmark.remoteHeadSha ? { remoteHeadSha: bookmark.remoteHeadSha } : {}),
-    ...(bookmark.latestPayload
-      ? { latestPayload: consolePayloadForConvex(bookmark.latestPayload) }
-      : {}),
   };
 }
 
@@ -175,32 +147,4 @@ export async function ingestDevBookmark(
     sessionId,
     bookmark: compactBookmark(bookmark),
   });
-}
-
-export async function deleteDevBookmark(
-  devSecret: string,
-  userId: string,
-  target:
-    | { postgresBookmarkId: string }
-    | { repoFullName: string; branchName: string },
-): Promise<boolean> {
-  const result = await getClient().mutation(deleteDevBookmarkRef, {
-    devSecret,
-    userId,
-    ...target,
-  });
-  return result.deleted;
-}
-
-export async function deleteCliBookmark(
-  token: string,
-  repoFullName: string,
-  branchName: string,
-): Promise<boolean> {
-  const result = await getClient().mutation(deleteCliBookmarkRef, {
-    token,
-    repoFullName,
-    branchName,
-  });
-  return result.deleted;
 }

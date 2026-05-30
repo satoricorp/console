@@ -95,7 +95,6 @@ export default defineSchema({
     githubPrNumber: v.optional(v.number()),
     headCommitId: v.optional(v.string()),
     remoteHeadSha: v.optional(v.string()),
-    latestPayload: v.optional(v.any()),
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])

@@ -2,10 +2,7 @@
 
 import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
 import { embedQuery } from "./embedTextBatch";
-import {
-  ensureNamespaceSchema,
-  getNamespace,
-} from "./turbopufferClient";
+import { getNamespace } from "./turbopufferClient";
 
 export type PinnedSelection = {
   filePath: string;
@@ -67,7 +64,6 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     .join("\n");
 
   const ns = getNamespace(request.fullName);
-  await ensureNamespaceSchema(request.fullName);
   const embedding = queryText ? await embedQuery(queryText) : null;
 
   const queries: Query[] = [];
