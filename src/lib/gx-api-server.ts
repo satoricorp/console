@@ -3,7 +3,7 @@ import "server-only";
 const CONSOLE_QUERY = "format=console";
 
 export function getGxApiBaseUrl(): string {
-  return process.env.GX_API_URL?.replace(/\/$/, "") ?? "http://localhost:3200";
+  return process.env.GX_CLOUD_API_URL?.replace(/\/$/, "") ?? "http://localhost:3200";
 }
 
 export async function gxApiRequest(
