@@ -88,6 +88,10 @@ export const sendMessage = action({
     message: v.string(),
     history: v.array(historyMessage),
     pins: v.optional(v.array(pinValidator)),
+    payload: v.optional(v.any()),
+    repoFullName: v.optional(v.string()),
+    branchName: v.optional(v.string()),
+    title: v.optional(v.string()),
   },
   returns: v.object({
     reply: v.string(),
@@ -100,10 +104,17 @@ export const sendMessage = action({
       throw new Error("Message is required.");
     }
 
-    const bookmark = await loadBookmarkPayloadFromPostgres(
-      user._id,
-      args.bookmarkId,
-    );
+    const bookmark =
+      args.payload !== undefined &&
+      args.repoFullName &&
+      args.branchName
+        ? {
+            repoFullName: args.repoFullName,
+            branchName: args.branchName,
+            title: args.title,
+            payload: args.payload,
+          }
+        : await loadBookmarkPayloadFromPostgres(user._id, args.bookmarkId);
     if (!bookmark) {
       throw new Error("Bookmark not found or missing payload. Run gx pr to sync.");
     }
