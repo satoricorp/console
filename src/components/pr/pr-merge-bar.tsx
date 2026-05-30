@@ -51,6 +51,59 @@ const driftClass: Record<PublishStatus["driftStatus"], string> = {
   unknown: "border-zinc-300/40 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
 };
 
+function shouldUseLocalBookmarkApi(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+async function fetchPublishStatus(
+  bookmark: PrMergeBarProps["bookmark"],
+  includeCiChecks: boolean,
+): Promise<PublishStatus> {
+  if (shouldUseLocalBookmarkApi()) {
+    const params = new URLSearchParams();
+    if (includeCiChecks) {
+      params.set("include_ci_checks", "1");
+    }
+    const response = await fetch(
+      `/api/bookmarks/${encodeURIComponent(bookmark.id)}/publish-status?${params.toString()}`,
+      { credentials: "include" },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? "Failed to load publish status.");
+    }
+    return (await response.json()) as PublishStatus;
+  }
+
+  throw new Error("Remote publish status requires Convex action path.");
+}
+
+async function landBookmarkRequest(
+  bookmark: PrMergeBarProps["bookmark"],
+): Promise<{ baseBranch: string; headBranch: string; sha: string }> {
+  if (shouldUseLocalBookmarkApi()) {
+    const response = await fetch(
+      `/api/bookmarks/${encodeURIComponent(bookmark.id)}/land`,
+      { method: "POST", credentials: "include" },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? "Failed to land bookmark.");
+    }
+    return (await response.json()) as {
+      baseBranch: string;
+      headBranch: string;
+      sha: string;
+    };
+  }
+
+  throw new Error("Remote land requires Convex action path.");
+}
+
 export function PrMergeBar({ bookmark }: PrMergeBarProps) {
   const mergeTarget = useMemo(
     () => extractMergeTarget(bookmark.payload, bookmark.repoFullName),
@@ -77,12 +130,14 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
       setStatusError(null);
       try {
         const includeCiChecks = options?.includeCiChecks ?? false;
-        const nextStatus = (await getPublishStatus({
-          bookmarkId: bookmark.id,
-          payload: bookmark.payload,
-          repoFullName: bookmark.repoFullName,
-          includeCiChecks,
-        })) as PublishStatus;
+        const nextStatus = shouldUseLocalBookmarkApi()
+          ? await fetchPublishStatus(bookmark, includeCiChecks)
+          : ((await getPublishStatus({
+              bookmarkId: bookmark.id,
+              payload: bookmark.payload,
+              repoFullName: bookmark.repoFullName,
+              includeCiChecks,
+            })) as PublishStatus);
         setPublishStatus(nextStatus);
         if (includeCiChecks) {
           setCiChecksLoaded(true);
@@ -176,15 +231,17 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
     setIsLanding(true);
     setResult(null);
     try {
-      const response = (await landBookmark({
-        bookmarkId: bookmark.id,
-        payload: bookmark.payload,
-        repoFullName: bookmark.repoFullName,
-      })) as {
-        baseBranch: string;
-        headBranch: string;
-        sha: string;
-      };
+      const response = shouldUseLocalBookmarkApi()
+        ? await landBookmarkRequest(bookmark)
+        : ((await landBookmark({
+            bookmarkId: bookmark.id,
+            payload: bookmark.payload,
+            repoFullName: bookmark.repoFullName,
+          })) as {
+            baseBranch: string;
+            headBranch: string;
+            sha: string;
+          });
       setResult({
         kind: "success",
         message: `Landed ${response.headBranch} onto ${response.baseBranch} (${response.sha.slice(0, 7)}).`,

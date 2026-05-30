@@ -172,6 +172,27 @@ export async function resolveBookmarkIdForEvent(
   return rows[0]?.id ?? null;
 }
 
+export async function markBookmarkMergedForUser(
+  userId: string,
+  bookmarkId: string,
+  remoteHeadSha?: string,
+): Promise<void> {
+  const db = getLocalSql();
+  const now = Date.now();
+  await db`
+    UPDATE gx_bookmarks
+    SET
+      merge_status = 'merged',
+      merged_at_ms = ${now},
+      revision = revision + 1,
+      remote_head_sha = COALESCE(${remoteHeadSha ?? null}, remote_head_sha),
+      updated_at_ms = ${now}
+    WHERE id = ${bookmarkId}
+      AND user_id = ${userId}
+      AND merge_status = 'open'
+  `;
+}
+
 export async function closeBookmarkForUser(
   userId: string,
   bookmarkId: string,

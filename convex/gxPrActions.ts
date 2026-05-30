@@ -179,7 +179,11 @@ async function maybeMarkBookmarkMerged(
   userId: string,
   bookmarkId: string,
   remoteHeadSha?: string,
+  options?: { skip?: boolean },
 ) {
+  if (options?.skip) {
+    return;
+  }
   const sql = getSql();
   try {
     const now = Date.now();
@@ -564,9 +568,16 @@ export const getPublishStatus = action({
     payload: v.optional(v.any()),
     repoFullName: v.optional(v.string()),
     includeCiChecks: v.optional(v.boolean()),
+    skipBookmarkDbWrites: v.optional(v.boolean()),
   },
   returns: branchPublishStatusValidator,
-  handler: async (ctx, { bookmarkId, payload, repoFullName, includeCiChecks }) => {
+  handler: async (ctx, {
+    bookmarkId,
+    payload,
+    repoFullName,
+    includeCiChecks,
+    skipBookmarkDbWrites,
+  }) => {
     const { userId, accessToken, target, localHeadSha } =
       await loadAuthorizedPublishContext(ctx, bookmarkId, {
         payload,
@@ -587,6 +598,7 @@ export const getPublishStatus = action({
         userId,
         bookmarkId,
         status.remoteHeadSha ?? undefined,
+        { skip: skipBookmarkDbWrites ?? false },
       );
     }
     return status;
@@ -599,6 +611,7 @@ export const landBookmark = action({
     bookmarkId: v.string(),
     payload: v.optional(v.any()),
     repoFullName: v.optional(v.string()),
+    skipBookmarkDbWrites: v.optional(v.boolean()),
   },
   returns: v.object({
     landed: v.boolean(),
@@ -607,12 +620,13 @@ export const landBookmark = action({
     headBranch: v.string(),
     repoFullName: v.string(),
   }),
-  handler: async (ctx, { bookmarkId, payload, repoFullName }) => {
+  handler: async (ctx, { bookmarkId, payload, repoFullName, skipBookmarkDbWrites }) => {
     const { userId, accessToken, target, localHeadSha } =
       await loadAuthorizedPublishContext(ctx, bookmarkId, {
         payload,
         repoFullName,
       });
+    const skipDbWrites = skipBookmarkDbWrites ?? false;
     const preflight = await githubAdapter.preflightLand({
       accessToken,
       repoFullName: target.repoFullName,
@@ -628,6 +642,7 @@ export const landBookmark = action({
         userId,
         bookmarkId,
         preflight.remoteHeadSha,
+        { skip: skipDbWrites },
       );
       return {
         landed: true,
@@ -651,7 +666,9 @@ export const landBookmark = action({
       baseBranch: target.baseBranch,
       knownHeadSha: preflight.remoteHeadSha,
     });
-    await maybeMarkBookmarkMerged(userId, bookmarkId, result.sha);
+    await maybeMarkBookmarkMerged(userId, bookmarkId, result.sha, {
+      skip: skipDbWrites,
+    });
 
     return {
       landed: true,
