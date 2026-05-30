@@ -44,6 +44,12 @@ Until server jj is production-ready:
 
 Console structural saves will queue jj-worker jobs in Phase 4; until then Console remains read-only for stack edits.
 
+Implemented path (dev):
+
+- `POST /bookmarks/:id/apply` on gx-cloud API (authenticated)
+- Proxies to `jj-worker POST /apply` with service key
+- Worker runs jj ops, pushes bookmark, bumps Postgres `revision` and `remote_head_sha`
+
 ## Conflict policy
 
 Conflict resolution (divergent local jj vs server revision, concurrent edits) is **out of scope** for this document. See the separate conflict design doc when published. Phases 1–3 do not block on it.

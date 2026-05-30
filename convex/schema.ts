@@ -100,7 +100,24 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_updatedAt", ["userId", "updatedAt"])
     .index("by_userId_postgresBookmarkId", ["userId", "postgresBookmarkId"])
+    .index("by_userId_latestEventId", ["userId", "latestEventId"])
     .index("by_userId_repo_branch", ["userId", "repoFullName", "branchName"]),
+
+  gxChangeReviews: defineTable({
+    userId: v.string(),
+    bookmarkId: v.string(),
+    jjChangeId: v.string(),
+    stackIndex: v.number(),
+    approvalPercent: v.number(),
+    notes: v.optional(v.string()),
+    updatedAtMs: v.number(),
+  })
+    .index("by_userId_bookmarkId", ["userId", "bookmarkId"])
+    .index("by_userId_bookmarkId_jjChangeId", [
+      "userId",
+      "bookmarkId",
+      "jjChangeId",
+    ]),
 
   waitlistEmails: defineTable({
     email: v.string(),

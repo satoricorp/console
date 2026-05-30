@@ -1,12 +1,19 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { requireServiceAuth } from "./auth";
+import { ApplyError, applyBookmarkRevision } from "./apply";
+import { closeDatabase } from "./db";
+import { loadConfig } from "./config";
 import type { ApplyRequest } from "./types";
 
+const config = loadConfig();
 const app = new Hono();
 
 app.get("/health", (c) => {
   return c.json({ ok: true, service: "jj-worker" });
 });
+
+app.use("/apply", requireServiceAuth(config.serviceApiKey));
 
 app.post("/apply", async (c) => {
   let body: ApplyRequest;
@@ -23,21 +30,16 @@ app.post("/apply", async (c) => {
     );
   }
 
-  console.log("POST /apply stub", {
-    bookmarkId: body.bookmarkId,
-    userId: body.userId,
-    opCount: body.ops.length,
-    opTypes: body.ops.map((op) => op.type),
-  });
-
-  return c.json(
-    {
-      error: "Not implemented",
-      message:
-        "jj-worker apply is a stub; use gx pr to publish until server jj is wired",
-    },
-    501,
-  );
+  try {
+    const result = await applyBookmarkRevision(config, body);
+    return c.json(result);
+  } catch (error) {
+    if (error instanceof ApplyError) {
+      return c.json({ error: error.message }, error.status as 400);
+    }
+    console.error("POST /apply failed", error);
+    return c.json({ error: "Internal server error" }, 500);
+  }
 });
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
@@ -47,14 +49,21 @@ app.onError((error, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-const port = Number(process.env.PORT ?? 3210);
-
-serve(
+const server = serve(
   {
     fetch: app.fetch,
-    port,
+    port: config.port,
   },
   (info) => {
     console.log(`jj-worker listening on :${info.port}`);
   },
 );
+
+async function shutdown() {
+  await closeDatabase();
+  server.close();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

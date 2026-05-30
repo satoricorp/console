@@ -4,13 +4,22 @@ import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
 import { embedQuery } from "./embedTextBatch";
 import { getNamespace } from "./turbopufferClient";
 
+export type PinnedSelection = {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+};
+
 export type QueryReviewContextRequest = {
   fullName: string;
   changedFiles: string[];
+  query?: string;
   symbols?: string[];
   prTitle?: string;
   prBody?: string;
   sessionSummary?: string;
+  pinnedSelections?: PinnedSelection[];
   limit?: number;
 };
 
@@ -26,10 +35,29 @@ type RankedRow = {
 
 export async function queryReviewContext(request: QueryReviewContextRequest) {
   const limit = request.limit ?? 8;
+  const pinnedSelections = request.pinnedSelections ?? [];
+  const pinnedFiles = [
+    ...new Set([
+      ...request.changedFiles,
+      ...pinnedSelections.map((pin) => pin.filePath),
+    ]),
+  ];
+  const pinnedText = pinnedSelections
+    .map((pin) => {
+      const lineLabel =
+        pin.startLine === pin.endLine
+          ? `${pin.startLine}`
+          : `${pin.startLine}-${pin.endLine}`;
+      return `${pin.filePath}:${lineLabel}\n${pin.text}`;
+    })
+    .join("\n\n");
+
   const queryText = [
+    request.query,
     request.prTitle,
     request.prBody,
     request.sessionSummary,
+    pinnedText,
     ...(request.symbols ?? []),
   ]
     .filter(Boolean)
@@ -65,7 +93,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     });
   }
 
-  const pathFilters = request.changedFiles.map(
+  const pathFilters = pinnedFiles.map(
     (filePath) => ["file_path", "Eq", filePath] as ["file_path", "Eq", string],
   );
 
@@ -87,15 +115,37 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     return { results: [] };
   }
 
-  const response = await ns.multiQuery({ queries });
-  const resultLists: RankedRow[][] = response.results.map(
-    (result) => (result.rows ?? []) as RankedRow[],
-  );
+  let resultLists: RankedRow[][];
+  try {
+    const response = await ns.multiQuery({ queries });
+    resultLists = response.results.map(
+      (result) => (result.rows ?? []) as RankedRow[],
+    );
+  } catch (error) {
+    const pathFilterOnly =
+      queries.length === 1 && pathFilters.length > 0 && !embedding;
+    if (pathFilterOnly) {
+      return { results: [] };
+    }
 
-  const fused = reciprocalRankFusion(resultLists).slice(
-    0,
-    Math.max(limit * 2, 20),
-  );
+    const fallbackQueries = queries.filter((query) => !query.filters);
+    if (fallbackQueries.length === 0) {
+      throw error;
+    }
+
+    const response = await ns.multiQuery({ queries: fallbackQueries });
+    resultLists = response.results.map(
+      (result) => (result.rows ?? []) as RankedRow[],
+    );
+  }
+
+  const changedFileSet = new Set(pinnedFiles);
+  const pinnedFileSet = new Set(pinnedSelections.map((pin) => pin.filePath));
+  const fused = reciprocalRankFusion(
+    resultLists,
+    changedFileSet,
+    pinnedFileSet,
+  ).slice(0, Math.max(limit * 2, 20));
 
   return {
     results: fused.slice(0, limit).map((row) => ({
@@ -110,14 +160,26 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
   };
 }
 
-function reciprocalRankFusion(resultLists: RankedRow[][], k = 60): RankedRow[] {
+function reciprocalRankFusion(
+  resultLists: RankedRow[][],
+  changedFiles = new Set<string>(),
+  pinnedFiles = new Set<string>(),
+  k = 60,
+): RankedRow[] {
   const scores = new Map<string | number, number>();
   const rows = new Map<string | number, RankedRow>();
 
   for (const list of resultLists) {
     list.forEach((row, rank) => {
       const id = row.id;
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank + 1));
+      let score = (scores.get(id) ?? 0) + 1 / (k + rank + 1);
+      if (row.file_path && changedFiles.has(row.file_path)) {
+        score += 0.05;
+      }
+      if (row.file_path && pinnedFiles.has(row.file_path)) {
+        score += 0.15;
+      }
+      scores.set(id, score);
       rows.set(id, row);
     });
   }

@@ -1,233 +1,101 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAction, useConvexAuth } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { useConvexAuth } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
+import { PrBookmarkTitleHeader } from "./pr-bookmark-title-header";
+import { PrChatPanel } from "./pr-chat-panel";
 import { PrDebugTray } from "./pr-debug-tray";
 import { PrMergeBar } from "./pr-merge-bar";
-import { PrPushPreview } from "./pr-push-preview";
+import { PrReviewWorkspaceProvider, usePrReviewWorkspace } from "./pr-review-workspace";
+import { PrStackReview } from "./pr-stack-review";
+import {
+  type BookmarkDetail,
+  formatRelativeUpdated,
+  titleForBookmark,
+  usePrConsoleBookmarks,
+} from "./use-pr-console-bookmarks";
 
-type BookmarkListItem = {
-  id: string;
-  repoFullName: string;
-  branchName: string;
-  title?: string;
-  revision: number;
-  latestEventId: string;
-  mergeStatus: "open" | "merged" | "closed";
-  updatedAtMs: number;
-};
+function CollapsedChatButton() {
+  const { expandChat } = usePrReviewWorkspace();
 
-type BookmarkDetail = BookmarkListItem & {
-  payload?: unknown;
-};
-
-function titleForBookmark(bookmark: { title?: string; branchName: string }) {
-  return bookmark.title?.trim() || bookmark.branchName;
+  return (
+    <button
+      type="button"
+      onClick={expandChat}
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900/50 lg:h-[calc(100dvh-12rem)] lg:w-8 lg:flex-col lg:justify-start lg:gap-2 lg:py-3 lg:text-zinc-500 lg:hover:text-zinc-900 dark:lg:hover:text-zinc-50"
+      aria-label="Show chat"
+      title="Show chat"
+    >
+      <ChevronLeft className="size-4 shrink-0" />
+      <span className="lg:text-[10px] lg:font-medium lg:uppercase lg:tracking-wide lg:[writing-mode:vertical-rl]">
+        Chat
+      </span>
+    </button>
+  );
 }
 
-function formatRelativeUpdated(timestampMs: number): string {
-  const seconds = Math.max(1, Math.floor((Date.now() - timestampMs) / 1000));
-  if (seconds < 60) return "Updated just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Updated ${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Updated ${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `Updated ${days}d ago`;
-  return `Updated ${new Date(timestampMs).toLocaleDateString()}`;
+function PrReviewWorkspaceContent({
+  selectedDetail,
+  stackBookmarks,
+  detailError,
+}: {
+  selectedDetail: BookmarkDetail;
+  stackBookmarks: Array<{ id: string; branchName: string; title?: string }>;
+  detailError: string | null;
+}) {
+  const { chatCollapsed } = usePrReviewWorkspace();
+
+  return (
+    <>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        {detailError ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {detailError}
+          </div>
+        ) : null}
+        {selectedDetail.payloadSourceBookmarkId ? (
+          <div className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+            Showing stack review data from the latest bookmark in this repo.
+          </div>
+        ) : null}
+        <PrMergeBar bookmark={selectedDetail} />
+        <PrStackReview stackBookmarks={stackBookmarks} />
+      </div>
+
+      <div className="w-full shrink-0 lg:sticky lg:top-6 lg:w-auto lg:self-start">
+        {chatCollapsed ? <CollapsedChatButton /> : <PrChatPanel />}
+      </div>
+    </>
+  );
 }
 
 export function PrConsole() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const authReady =
     !sessionPending &&
     !convexAuthLoading &&
     Boolean(session?.user) &&
     isAuthenticated;
 
-  const listMyBookmarks = useAction(api.gxBookmarkActions.listMyBookmarks);
-  const getBookmarkDetail = useAction(api.gxBookmarkActions.getBookmarkDetail);
-  const updateBookmarkTitle = useAction(api.gxBookmarkActions.updateBookmarkTitle);
-
-  const [bookmarks, setBookmarks] = useState<BookmarkListItem[]>([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [listError, setListError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    searchParams.get("bookmark"),
-  );
-  const [selectedDetail, setSelectedDetail] = useState<BookmarkDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
   const [trayOpen, setTrayOpen] = useState(false);
   const [showMerged, setShowMerged] = useState(false);
   const [groupByRepo, setGroupByRepo] = useState(false);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
-  const [isSavingTitle, setIsSavingTitle] = useState(false);
-  const [titleError, setTitleError] = useState<string | null>(null);
-
-  const reloadBookmarks = useCallback(
-    async (preferredBookmarkId?: string | null) => {
-      setListLoading(true);
-      setListError(null);
-      try {
-        const next = (await listMyBookmarks({
-          mergeStatus: showMerged ? undefined : "open",
-        })) as BookmarkListItem[];
-        setBookmarks(next);
-
-        const candidateId = preferredBookmarkId;
-        const resolvedId =
-          (candidateId && next.some((item) => item.id === candidateId)
-            ? candidateId
-            : next[0]?.id) ?? null;
-        setSelectedId(resolvedId);
-      } catch (error) {
-        setBookmarks([]);
-        setSelectedId(null);
-        setListError(
-          error instanceof Error ? error.message : "Failed to load bookmarks.",
-        );
-      } finally {
-        setListLoading(false);
-      }
-    },
-    [listMyBookmarks, showMerged],
-  );
-
-  useEffect(() => {
-    if (!authReady) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- This effect intentionally triggers async state updates via bookmark reload.
-    void reloadBookmarks(selectedId ?? searchParams.get("bookmark"));
-  }, [authReady, reloadBookmarks, searchParams, selectedId]);
-
-  useEffect(() => {
-    const fromUrl = searchParams.get("bookmark");
-    if (!fromUrl) return;
-    if (bookmarks.some((bookmark) => bookmark.id === fromUrl)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- URL param changes should update selected bookmark.
-      setSelectedId(fromUrl);
-    }
-  }, [bookmarks, searchParams]);
-
-  const selected = useMemo(() => {
-    if (!bookmarks.length) return null;
-    if (!selectedId) return bookmarks[0];
-    return bookmarks.find((bookmark) => bookmark.id === selectedId) ?? bookmarks[0];
-  }, [bookmarks, selectedId]);
-
-  useEffect(() => {
-    if (!selected) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clearing detail state when selection disappears.
-      setSelectedDetail(null);
-      setDetailError(null);
-      return;
-    }
-    let cancelled = false;
-    setDetailLoading(true);
-    setDetailError(null);
-    void getBookmarkDetail({
-      bookmarkId: selected.id,
-      includePayload: true,
-    })
-      .then((detail) => {
-        if (cancelled) return;
-        if (!detail) {
-          setDetailError("Bookmark not found.");
-          setSelectedDetail(null);
-          return;
-        }
-        setSelectedDetail(detail as BookmarkDetail);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setDetailError(
-          error instanceof Error ? error.message : "Failed to load bookmark detail.",
-        );
-        setSelectedDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getBookmarkDetail, selected]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset inline title editor when active bookmark changes.
-    setIsEditingTitle(false);
-    setTitleDraft(selectedDetail ? titleForBookmark(selectedDetail) : "");
-    setTitleError(null);
-  }, [selectedDetail]);
-
-  function setBookmarkQueryParam(bookmarkId: string | null) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (bookmarkId) {
-      params.set("bookmark", bookmarkId);
-    } else {
-      params.delete("bookmark");
-    }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-  }
-
-  function handleSelectBookmark(bookmarkId: string) {
-    setSelectedId(bookmarkId);
-    setBookmarkQueryParam(bookmarkId);
-  }
-
-  async function handleSaveTitle() {
-    if (!selectedDetail) return;
-    const trimmed = titleDraft.trim();
-    if (!trimmed) {
-      setTitleError("Title is required.");
-      return;
-    }
-    setIsSavingTitle(true);
-    setTitleError(null);
-    try {
-      await updateBookmarkTitle({
-        bookmarkId: selectedDetail.id,
-        title: trimmed,
-      });
-      setSelectedDetail({
-        ...selectedDetail,
-        title: trimmed,
-      });
-      setIsEditingTitle(false);
-      await reloadBookmarks(selectedDetail.id);
-    } catch (error) {
-      setTitleError(
-        error instanceof Error ? error.message : "Failed to update bookmark title.",
-      );
-    } finally {
-      setIsSavingTitle(false);
-    }
-  }
-
-  const groupedBookmarks = useMemo(() => {
-    const grouped = new Map<string, BookmarkListItem[]>();
-    for (const bookmark of bookmarks) {
-      const list = grouped.get(bookmark.repoFullName);
-      if (list) {
-        list.push(bookmark);
-      } else {
-        grouped.set(bookmark.repoFullName, [bookmark]);
-      }
-    }
-    return grouped;
-  }, [bookmarks]);
+  const [bookmarksCollapsed, setBookmarksCollapsed] = useState(true);
+  const {
+    bookmarks,
+    selected,
+    selectedDetail,
+    groupedBookmarks,
+    stackBookmarks,
+    listLoading,
+    detailLoading,
+    detailError,
+    selectBookmark,
+  } = usePrConsoleBookmarks({ authReady, showMerged });
 
   if (!authReady || listLoading) {
     return (
@@ -242,52 +110,16 @@ export function PrConsole() {
   }
 
   return (
-    <div className="flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-6 py-8">
+    <div className="flex min-h-0 w-full max-w-[96rem] flex-1 flex-col gap-4 px-6 py-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          {selectedDetail && isEditingTitle ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={titleDraft}
-                onChange={(event) => setTitleDraft(event.target.value)}
-                className="w-full min-w-64 rounded-md border border-zinc-300 bg-white px-3 py-2 text-xl font-semibold tracking-tight text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
-                maxLength={280}
-                aria-label="Bookmark title"
-              />
-              <Button onClick={() => void handleSaveTitle()} disabled={isSavingTitle}>
-                {isSavingTitle ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setIsEditingTitle(false);
-                  setTitleDraft(selectedDetail ? titleForBookmark(selectedDetail) : "");
-                  setTitleError(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                {selectedDetail ? titleForBookmark(selectedDetail) : "Bookmarks"}
-              </h1>
-              {selectedDetail ? (
-                <Button variant="secondary" onClick={() => setIsEditingTitle(true)}>
-                  Edit title
-                </Button>
-              ) : null}
-            </div>
-          )}
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Bookmarks from <code className="text-xs">gx pr</code>. Select one to
-            preview trees, diffs, and merge status.
-          </p>
-          {titleError ? (
-            <p className="text-xs text-red-600 dark:text-red-400">{titleError}</p>
-          ) : null}
-        </div>
+        <PrBookmarkTitleHeader
+          key={
+            selectedDetail
+              ? `${selectedDetail.id}:${titleForBookmark(selectedDetail)}`
+              : "empty"
+          }
+          bookmark={selectedDetail ?? null}
+        />
         <div className="flex flex-wrap gap-2">
           <Button variant={showMerged ? "primary" : "secondary"} onClick={() => setShowMerged((current) => !current)}>
             {showMerged ? "Showing merged" : "Merged"}
@@ -309,14 +141,36 @@ export function PrConsole() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-72">
-          {listError ? (
-            <div className="rounded-lg border border-red-300 p-4 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
-              {listError}
-            </div>
-          ) : null}
-          {bookmarks.length === 0 ? (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start">
+        {bookmarksCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setBookmarksCollapsed(false)}
+            className="hidden shrink-0 items-center justify-center self-stretch rounded-md border border-zinc-200 px-1.5 text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:hover:bg-zinc-900/50 dark:hover:text-zinc-50 lg:flex"
+            aria-label="Show bookmarks"
+            title="Show bookmarks"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        ) : null}
+        <aside
+          className={`flex w-full shrink-0 flex-col gap-2 lg:w-72 ${bookmarksCollapsed ? "lg:hidden" : ""}`}
+        >
+          <div className="hidden items-center justify-between gap-2 px-1 lg:flex">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Bookmarks
+            </p>
+            <button
+              type="button"
+              onClick={() => setBookmarksCollapsed(true)}
+              className="rounded p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+              aria-label="Hide bookmarks"
+              title="Hide bookmarks"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+          </div>
+          {!bookmarks?.length ? (
             <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
               No bookmarks yet.
             </div>
@@ -334,7 +188,7 @@ export function PrConsole() {
                         <li key={bookmark.id}>
                           <button
                             type="button"
-                            onClick={() => handleSelectBookmark(bookmark.id)}
+                            onClick={() => selectBookmark(bookmark.id)}
                             className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                               active
                                 ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900"
@@ -366,7 +220,7 @@ export function PrConsole() {
                   <li key={bookmark.id}>
                     <button
                       type="button"
-                      onClick={() => handleSelectBookmark(bookmark.id)}
+                      onClick={() => selectBookmark(bookmark.id)}
                       className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                         active
                           ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-900"
@@ -390,26 +244,36 @@ export function PrConsole() {
           )}
         </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-          {detailLoading ? (
+        {detailLoading ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-300 p-8 text-sm text-zinc-500 dark:border-zinc-700">
               Loading bookmark detail…
             </div>
-          ) : detailError ? (
+          </div>
+        ) : detailError ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-1 items-center justify-center rounded-lg border border-red-300 p-8 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
               {detailError}
             </div>
-          ) : selectedDetail ? (
-            <>
-              <PrMergeBar bookmark={selectedDetail} />
-              <PrPushPreview payload={selectedDetail.payload} />
-            </>
-          ) : (
+          </div>
+        ) : selectedDetail ? (
+          <PrReviewWorkspaceProvider
+            key={selectedDetail.id}
+            bookmark={selectedDetail}
+          >
+            <PrReviewWorkspaceContent
+              selectedDetail={selectedDetail}
+              stackBookmarks={stackBookmarks}
+              detailError={detailError}
+            />
+          </PrReviewWorkspaceProvider>
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-zinc-300 p-8 text-sm text-zinc-500 dark:border-zinc-700">
               Select a bookmark to preview
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <PrDebugTray

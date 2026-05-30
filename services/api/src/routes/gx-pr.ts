@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
-import type { BookmarkSyncPayload, PushBundle } from "../types";
+import type { PushBundle } from "../types";
+import { bookmarkRowToSyncPayload } from "../sync-bookmark";
 import { syncPushToConvex } from "../sync-convex-push";
 import {
   extractIndexFields,
@@ -197,26 +198,46 @@ gxPrRoutes.post("/pr", async (c) => {
           updated_at_ms
       `;
 
-      const bookmark: BookmarkSyncPayload = {
-        postgresBookmarkId: bookmarkRow.id,
-        latestEventId: bookmarkRow.latest_event_id,
-        repoFullName,
-        branchName,
-        title: bookmarkRow.title,
-        revision: bookmarkRow.revision,
-        mergeStatus: bookmarkRow.merge_status,
-        githubPrUrl: bookmarkRow.github_pr_url,
-        githubPrNumber: bookmarkRow.github_pr_number,
-        headCommitId: bookmarkRow.head_commit_id,
-        remoteHeadSha: bookmarkRow.remote_head_sha,
-        updatedAt: Number(bookmarkRow.updated_at_ms),
-      };
+      let remoteHeadSha = bookmarkRow.remote_head_sha;
+      const githubToken = process.env.GITHUB_TOKEN?.trim();
+      if (githubToken) {
+        try {
+          const { getRemoteBranchSha } = await import("../github");
+          remoteHeadSha = await getRemoteBranchSha(
+            githubToken,
+            repoFullName,
+            branchName,
+          );
+          if (remoteHeadSha) {
+            await tx`
+              UPDATE gx_bookmarks
+              SET remote_head_sha = ${remoteHeadSha}
+              WHERE id = ${bookmarkRow.id}
+            `;
+          }
+        } catch (shaError) {
+          console.warn("Failed to resolve remote branch SHA during ingest", shaError);
+        }
+      }
 
-      return { eventId: eventRow.id, bookmark };
+      return {
+        eventId: eventRow.id,
+        bookmarkRow,
+        remoteHeadSha,
+      };
     });
 
     try {
-      await syncPushToConvex(cliToken, ingestResult.bookmark, auth);
+      await syncPushToConvex(
+        cliToken,
+        bookmarkRowToSyncPayload({
+          ...ingestResult.bookmarkRow,
+          repo_full_name: repoFullName,
+          branch_name: branchName,
+          remote_head_sha: ingestResult.remoteHeadSha,
+        }),
+        auth,
+      );
     } catch (syncError) {
       console.error("Failed to sync gx.pr event to Convex", syncError);
       return c.json({ error: "Failed to sync event to console" }, 500);
