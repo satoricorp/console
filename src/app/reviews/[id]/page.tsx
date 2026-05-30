@@ -6,14 +6,7 @@ import { useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
-
-function shouldUseLocalBookmarkApi(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
-}
+import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 
 async function fetchBookmarkIdByEvent(eventId: string): Promise<string | null> {
   const response = await fetch(
