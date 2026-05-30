@@ -4,7 +4,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "convex/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { resolveReviewPayload, isReviewablePayload } from "@/lib/bookmark-review";
 import { extractStackChanges } from "@/lib/gx-stack";
@@ -108,6 +108,32 @@ function loadBookmarkPayloadLocally(bookmarkId: string): Promise<unknown | undef
   });
 }
 
+function bookmarkListEqual(
+  left: BookmarkListItem[],
+  right: BookmarkListItem[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const previous = left[index];
+    const next = right[index];
+    if (
+      previous.id !== next.id ||
+      previous.revision !== next.revision ||
+      previous.updatedAtMs !== next.updatedAtMs ||
+      previous.mergeStatus !== next.mergeStatus ||
+      previous.latestEventId !== next.latestEventId ||
+      previous.branchName !== next.branchName ||
+      previous.title !== next.title ||
+      previous.repoFullName !== next.repoFullName
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function formatRelativeUpdated(timestampMs: number): string {
   const seconds = Math.max(1, Math.floor((Date.now() - timestampMs) / 1000));
   if (seconds < 60) return "Updated just now";
@@ -169,7 +195,9 @@ export function usePrConsoleBookmarks({
       try {
         const next = await loadBookmarks();
         if (!cancelled) {
-          setBookmarks(next);
+          setBookmarks((current) =>
+            current && bookmarkListEqual(current, next) ? current : next,
+          );
           setListError(null);
         }
       } catch (error) {
@@ -183,13 +211,26 @@ export function usePrConsoleBookmarks({
     };
 
     void refresh();
-    const interval = window.setInterval(() => {
+
+    const poll = () => {
+      if (document.hidden) {
+        return;
+      }
       void refresh();
-    }, 5000);
+    };
+
+    const interval = window.setInterval(poll, 5000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        void refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [authReady, loadBookmarks, reloadToken]);
 
@@ -224,13 +265,15 @@ export function usePrConsoleBookmarks({
     ready: false,
     error: null,
   });
+  const bookmarksRef = useRef(bookmarks);
+  bookmarksRef.current = bookmarks;
 
   useEffect(() => {
     if (!authReady || !selectedId) {
       setPayloadState({ bookmarkId: null, ready: false, error: null });
       return;
     }
-    if (selectedMeta === undefined || !bookmarks?.length) {
+    if (selectedMeta === undefined || !bookmarksRef.current?.length) {
       return;
     }
     if (selectedMeta === null) {
@@ -257,7 +300,7 @@ export function usePrConsoleBookmarks({
 
     void resolveReviewPayload({
       bookmark: selectedMeta,
-      bookmarks,
+      bookmarks: bookmarksRef.current ?? [],
       loadPayload: loadPayloadForId,
     })
       .then((resolved) => {
@@ -289,7 +332,17 @@ export function usePrConsoleBookmarks({
     return () => {
       cancelled = true;
     };
-  }, [authReady, bookmarks, selectedId, selectedMeta, getBookmarkDetail]);
+  }, [
+    authReady,
+    getBookmarkDetail,
+    selectedId,
+    selectedMeta?.branchName,
+    selectedMeta?.id,
+    selectedMeta?.repoFullName,
+    selectedMeta?.revision,
+    selectedMeta?.title,
+    selectedMeta?.updatedAtMs,
+  ]);
 
   useEffect(() => {
     if (
