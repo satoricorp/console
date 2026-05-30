@@ -1,10 +1,9 @@
 import { Hono } from "hono";
+import type postgres from "postgres";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
 import type { PushBundle } from "../types";
-import { bookmarkRowToSyncPayload } from "../sync-bookmark";
-import { syncPushToConvex } from "../sync-convex-push";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -15,12 +14,12 @@ export const gxPrRoutes = new Hono<AppEnv>();
 
 gxPrRoutes.use("*", requireAuth);
 
-function reviewUrl(eventId: string): string | undefined {
+function reviewUrl(prId: string): string | undefined {
   const siteUrl = process.env.CONSOLE_SITE_URL?.replace(/\/$/, "");
   if (!siteUrl) {
     return undefined;
   }
-  return `${siteUrl}/reviews/${eventId}`;
+  return `${siteUrl}/reviews/${prId}`;
 }
 
 function parseGithubPrNumber(githubPrUrl: string | null): number | null {
@@ -66,6 +65,164 @@ function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
   return branchSlugTitle(branchName);
 }
 
+type BookmarkRow = {
+  id: string;
+  latest_event_id: string;
+  title: string | null;
+  revision: number;
+  merge_status: "open" | "merged" | "closed";
+  github_pr_url: string | null;
+  github_pr_number: number | null;
+  head_commit_id: string | null;
+  remote_head_sha: string | null;
+  updated_at_ms: string;
+};
+
+type SqlExecutor = postgres.Sql | postgres.TransactionSql;
+
+async function upsertBookmark(
+  tx: SqlExecutor,
+  args: {
+    userId: string;
+    prId: string | null;
+    repoFullName: string;
+    branchName: string;
+    inferredTitle: string;
+    eventId: string;
+    headCommitId: string;
+    githubPrUrl: string | null;
+    githubPrNumber: number | null;
+    updatedAtMs: number;
+  },
+): Promise<BookmarkRow> {
+  if (args.prId) {
+    const [bookmarkRow] = await tx<BookmarkRow[]>`
+      INSERT INTO gx_bookmarks (
+        id,
+        user_id,
+        repo_full_name,
+        branch_name,
+        title,
+        latest_event_id,
+        head_commit_id,
+        github_pr_url,
+        github_pr_number,
+        updated_at_ms,
+        published_at_ms
+      ) VALUES (
+        ${args.prId},
+        ${args.userId},
+        ${args.repoFullName},
+        ${args.branchName},
+        ${args.inferredTitle},
+        ${args.eventId},
+        ${args.headCommitId},
+        ${args.githubPrUrl},
+        ${args.githubPrNumber},
+        ${args.updatedAtMs},
+        ${args.updatedAtMs}
+      )
+      ON CONFLICT (id)
+      DO UPDATE SET
+        branch_name = EXCLUDED.branch_name,
+        repo_full_name = EXCLUDED.repo_full_name,
+        revision = gx_bookmarks.revision + 1,
+        latest_event_id = EXCLUDED.latest_event_id,
+        head_commit_id = EXCLUDED.head_commit_id,
+        github_pr_url = COALESCE(EXCLUDED.github_pr_url, gx_bookmarks.github_pr_url),
+        github_pr_number = COALESCE(EXCLUDED.github_pr_number, gx_bookmarks.github_pr_number),
+        updated_at_ms = EXCLUDED.updated_at_ms,
+        title = COALESCE(gx_bookmarks.title, EXCLUDED.title)
+      RETURNING
+        id,
+        latest_event_id,
+        title,
+        revision,
+        merge_status,
+        github_pr_url,
+        github_pr_number,
+        head_commit_id,
+        remote_head_sha,
+        updated_at_ms
+    `;
+    return bookmarkRow;
+  }
+
+  const existing = await tx<{ id: string }[]>`
+    SELECT id
+    FROM gx_bookmarks
+    WHERE user_id = ${args.userId}
+      AND repo_full_name = ${args.repoFullName}
+      AND branch_name = ${args.branchName}
+    LIMIT 1
+  `;
+
+  if (existing[0]?.id) {
+    const [bookmarkRow] = await tx<BookmarkRow[]>`
+      UPDATE gx_bookmarks
+      SET
+        revision = revision + 1,
+        latest_event_id = ${args.eventId},
+        head_commit_id = ${args.headCommitId},
+        github_pr_url = COALESCE(${args.githubPrUrl}, github_pr_url),
+        github_pr_number = COALESCE(${args.githubPrNumber}, github_pr_number),
+        updated_at_ms = ${args.updatedAtMs},
+        title = COALESCE(title, ${args.inferredTitle})
+      WHERE id = ${existing[0].id}
+      RETURNING
+        id,
+        latest_event_id,
+        title,
+        revision,
+        merge_status,
+        github_pr_url,
+        github_pr_number,
+        head_commit_id,
+        remote_head_sha,
+        updated_at_ms
+    `;
+    return bookmarkRow;
+  }
+
+  const [bookmarkRow] = await tx<BookmarkRow[]>`
+    INSERT INTO gx_bookmarks (
+      user_id,
+      repo_full_name,
+      branch_name,
+      title,
+      latest_event_id,
+      head_commit_id,
+      github_pr_url,
+      github_pr_number,
+      updated_at_ms,
+      published_at_ms
+    ) VALUES (
+      ${args.userId},
+      ${args.repoFullName},
+      ${args.branchName},
+      ${args.inferredTitle},
+      ${args.eventId},
+      ${args.headCommitId},
+      ${args.githubPrUrl},
+      ${args.githubPrNumber},
+      ${args.updatedAtMs},
+      ${args.updatedAtMs}
+    )
+    RETURNING
+      id,
+      latest_event_id,
+      title,
+      revision,
+      merge_status,
+      github_pr_url,
+      github_pr_number,
+      head_commit_id,
+      remote_head_sha,
+      updated_at_ms
+  `;
+  return bookmarkRow;
+}
+
 gxPrRoutes.post("/pr", async (c) => {
   let payload: PushBundle;
   try {
@@ -79,8 +236,7 @@ gxPrRoutes.post("/pr", async (c) => {
   }
 
   const auth = c.get("auth");
-  const cliToken = bearerToken(c.req.header("Authorization"));
-  if (!cliToken) {
+  if (!bearerToken(c.req.header("Authorization"))) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
@@ -100,9 +256,7 @@ gxPrRoutes.post("/pr", async (c) => {
     const githubPrNumber = parseGithubPrNumber(indexFields.github_pr_url);
 
     const ingestResult = await db.begin(async (tx) => {
-      const [eventRow] = await tx<
-        { id: string }[]
-      >`
+      const [eventRow] = await tx<{ id: string }[]>`
         INSERT INTO gx_pr_events (
           event,
           created_at_ms,
@@ -139,64 +293,18 @@ gxPrRoutes.post("/pr", async (c) => {
         RETURNING id
       `;
 
-      const [bookmarkRow] = await tx<
-        {
-          id: string;
-          latest_event_id: string;
-          title: string | null;
-          revision: number;
-          merge_status: "open" | "merged" | "closed";
-          github_pr_url: string | null;
-          github_pr_number: number | null;
-          head_commit_id: string | null;
-          remote_head_sha: string | null;
-          updated_at_ms: string;
-        }[]
-      >`
-        INSERT INTO gx_bookmarks (
-          user_id,
-          repo_full_name,
-          branch_name,
-          title,
-          latest_event_id,
-          head_commit_id,
-          github_pr_url,
-          github_pr_number,
-          updated_at_ms,
-          published_at_ms
-        ) VALUES (
-          ${auth.userId},
-          ${repoFullName},
-          ${branchName},
-          ${inferredTitle},
-          ${eventRow.id},
-          ${indexFields.head_commit_id},
-          ${indexFields.github_pr_url},
-          ${githubPrNumber},
-          ${payload.created_at},
-          ${payload.created_at}
-        )
-        ON CONFLICT (user_id, repo_full_name, branch_name)
-        DO UPDATE SET
-          revision = gx_bookmarks.revision + 1,
-          latest_event_id = EXCLUDED.latest_event_id,
-          head_commit_id = EXCLUDED.head_commit_id,
-          github_pr_url = EXCLUDED.github_pr_url,
-          github_pr_number = EXCLUDED.github_pr_number,
-          updated_at_ms = EXCLUDED.updated_at_ms,
-          title = COALESCE(gx_bookmarks.title, EXCLUDED.title)
-        RETURNING
-          id,
-          latest_event_id,
-          title,
-          revision,
-          merge_status,
-          github_pr_url,
-          github_pr_number,
-          head_commit_id,
-          remote_head_sha,
-          updated_at_ms
-      `;
+      const bookmarkRow = await upsertBookmark(tx, {
+        userId: auth.userId,
+        prId: indexFields.pr_id,
+        repoFullName,
+        branchName,
+        inferredTitle,
+        eventId: eventRow.id,
+        headCommitId: indexFields.head_commit_id,
+        githubPrUrl: indexFields.github_pr_url,
+        githubPrNumber,
+        updatedAtMs: payload.created_at,
+      });
 
       let remoteHeadSha = bookmarkRow.remote_head_sha;
       const githubToken = process.env.GITHUB_TOKEN?.trim();
@@ -222,29 +330,20 @@ gxPrRoutes.post("/pr", async (c) => {
 
       return {
         eventId: eventRow.id,
-        bookmarkRow,
+        prId: bookmarkRow.id,
         remoteHeadSha,
       };
     });
 
-    try {
-      await syncPushToConvex(
-        cliToken,
-        bookmarkRowToSyncPayload({
-          ...ingestResult.bookmarkRow,
-          repo_full_name: repoFullName,
-          branch_name: branchName,
-          remote_head_sha: ingestResult.remoteHeadSha,
-        }),
-        auth,
-      );
-    } catch (syncError) {
-      console.error("Failed to sync gx.pr event to Convex", syncError);
-      return c.json({ error: "Failed to sync event to console" }, 500);
-    }
-
-    const url = reviewUrl(ingestResult.eventId);
-    return c.json({ id: ingestResult.eventId, ...(url ? { url } : {}) }, 201);
+    const url = reviewUrl(ingestResult.prId);
+    return c.json(
+      {
+        id: ingestResult.prId,
+        event_id: ingestResult.eventId,
+        ...(url ? { url } : {}),
+      },
+      201,
+    );
   } catch (error) {
     console.error("Failed to ingest gx.pr event", error);
     return c.json({ error: "Failed to store event" }, 500);

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { AuthButton } from "@/components/auth-button";
@@ -10,24 +10,32 @@ import { AuthButton } from "@/components/auth-button";
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const eventId = params.id ?? "";
+  const reviewId = params.id ?? "";
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const bookmarkId = useQuery(
-    api.gxPr.getBookmarkIdForEvent,
-    session?.user && eventId ? { eventId } : "skip",
-  );
-  const [error, setError] = useState<string | null>(null);
+  const resolveBookmarkId = useAction(api.gxBookmarkActions.getBookmarkIdForEvent);
 
   useEffect(() => {
-    if (bookmarkId === undefined) {
+    if (!session?.user || !reviewId) {
       return;
     }
-    if (bookmarkId === null) {
-      setError("Bookmark not found for this review. Run gx pr again to sync it.");
-      return;
-    }
-    router.replace(`/?bookmark=${encodeURIComponent(bookmarkId)}`);
-  }, [bookmarkId, router]);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const byEvent = await resolveBookmarkId({ eventId: reviewId });
+        if (cancelled) return;
+        router.replace(`/?bookmark=${encodeURIComponent(byEvent ?? reviewId)}`);
+      } catch {
+        if (!cancelled) {
+          router.replace(`/?bookmark=${encodeURIComponent(reviewId)}`);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewId, resolveBookmarkId, router, session?.user]);
 
   if (sessionPending) {
     return (
@@ -52,16 +60,7 @@ export default function ReviewPage() {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">GX Review</h1>
-      {bookmarkId === undefined ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Resolving bookmark…
-        </p>
-      ) : null}
-      {error ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          {error}
-        </p>
-      ) : null}
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">Opening review…</p>
     </main>
   );
 }

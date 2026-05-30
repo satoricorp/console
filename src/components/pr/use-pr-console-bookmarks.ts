@@ -3,8 +3,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useAction, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useAction } from "convex/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { resolveReviewPayload, isReviewablePayload } from "@/lib/bookmark-review";
 import { extractStackChanges } from "@/lib/gx-stack";
@@ -39,6 +39,54 @@ export function titleForBookmark(bookmark: { title?: string; branchName: string 
   return bookmark.title?.trim() || bookmark.branchName;
 }
 
+function shouldUseLocalBookmarkApi(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+async function fetchBookmarkList(
+  mergeStatus: "open" | "merged" | "closed" | undefined,
+): Promise<BookmarkListItem[]> {
+  if (shouldUseLocalBookmarkApi()) {
+    const params = new URLSearchParams();
+    if (mergeStatus) {
+      params.set("merge_status", mergeStatus);
+    }
+    const response = await fetch(`/api/bookmarks?${params.toString()}`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? "Failed to load bookmarks.");
+    }
+    const rows = (await response.json()) as Array<{
+      id: string;
+      repoFullName: string;
+      branchName: string;
+      title?: string | null;
+      revision: number;
+      latestEventId: string;
+      mergeStatus: "open" | "merged" | "closed";
+      updatedAtMs: number;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      repoFullName: row.repoFullName,
+      branchName: row.branchName,
+      title: row.title ?? undefined,
+      revision: row.revision,
+      latestEventId: row.latestEventId,
+      mergeStatus: row.mergeStatus,
+      updatedAtMs: row.updatedAtMs,
+    }));
+  }
+
+  throw new Error("Remote bookmark list requires Convex action path.");
+}
+
 function loadBookmarkPayloadLocally(bookmarkId: string): Promise<unknown | undefined> {
   return fetch(`/api/bookmarks/${encodeURIComponent(bookmarkId)}?include_payload=1`, {
     credentials: "include",
@@ -50,14 +98,6 @@ function loadBookmarkPayloadLocally(bookmarkId: string): Promise<unknown | undef
     const detail = (await response.json()) as BookmarkDetail;
     return detail.payload;
   });
-}
-
-function shouldLoadBookmarkPayloadLocally(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
 }
 
 export function formatRelativeUpdated(timestampMs: number): string {
@@ -83,10 +123,65 @@ export function usePrConsoleBookmarks({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const bookmarks = useQuery(
-    api.gxPr.listConsoleBookmarks,
-    authReady ? { mergeStatus: showMerged ? undefined : "open" } : "skip",
-  ) as BookmarkListItem[] | undefined;
+  const listMyBookmarks = useAction(api.gxBookmarkActions.listMyBookmarks);
+  const getBookmarkDetail = useAction(api.gxBookmarkActions.getBookmarkDetail);
+
+  const [bookmarks, setBookmarks] = useState<BookmarkListItem[] | undefined>(undefined);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const loadBookmarks = useCallback(async () => {
+    const mergeStatus = showMerged ? undefined : ("open" as const);
+    if (shouldUseLocalBookmarkApi()) {
+      return fetchBookmarkList(mergeStatus);
+    }
+    const rows = await listMyBookmarks({ mergeStatus });
+    return rows.map((row) => ({
+      id: row.id,
+      repoFullName: row.repoFullName,
+      branchName: row.branchName,
+      title: row.title,
+      revision: row.revision,
+      latestEventId: row.latestEventId,
+      mergeStatus: row.mergeStatus,
+      updatedAtMs: row.updatedAtMs,
+    }));
+  }, [listMyBookmarks, showMerged]);
+
+  useEffect(() => {
+    if (!authReady) {
+      setBookmarks(undefined);
+      setListError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const next = await loadBookmarks();
+        if (!cancelled) {
+          setBookmarks(next);
+          setListError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBookmarks([]);
+          setListError(
+            error instanceof Error ? error.message : "Failed to load bookmarks.",
+          );
+        }
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(() => {
+      void refresh();
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [authReady, loadBookmarks]);
 
   const urlBookmarkId = searchParams.get("bookmark");
   const selectedId =
@@ -94,12 +189,13 @@ export function usePrConsoleBookmarks({
       ? urlBookmarkId
       : bookmarks?.[0]?.id) ?? null;
 
-  const selectedMeta = useQuery(
-    api.gxPr.getConsoleBookmarkDetail,
-    authReady && selectedId ? { bookmarkId: selectedId } : "skip",
-  ) as BookmarkListItem | null | undefined;
+  const selectedMeta = useMemo(() => {
+    if (!selectedId || !bookmarks) {
+      return undefined;
+    }
+    return bookmarks.find((bookmark) => bookmark.id === selectedId) ?? null;
+  }, [bookmarks, selectedId]);
 
-  const getBookmarkDetail = useAction(api.gxBookmarkActions.getBookmarkDetail);
   const [payloadState, setPayloadState] = useState<PayloadState>({
     bookmarkId: null,
     ready: false,
@@ -127,7 +223,7 @@ export function usePrConsoleBookmarks({
     setPayloadState({ bookmarkId: selectedId, ready: false, error: null });
 
     const loadPayloadForId = (bookmarkId: string) =>
-      shouldLoadBookmarkPayloadLocally()
+      shouldUseLocalBookmarkApi()
         ? loadBookmarkPayloadLocally(bookmarkId)
         : getBookmarkDetail({ bookmarkId, includePayload: true }).then((detail) => {
             if (!detail) {
@@ -283,6 +379,7 @@ export function usePrConsoleBookmarks({
     listLoading: authReady && bookmarks === undefined,
     detailLoading: authReady && Boolean(selectedId) && selectedDetail === undefined,
     detailError:
+      listError ??
       payloadState.error ??
       (selectedId && selectedDetail === null ? "Bookmark not found." : null),
     selectBookmark,

@@ -150,17 +150,6 @@ export const upsertChangeReview = mutation({
       throw new Error("notes is too long");
     }
 
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q.eq("userId", user._id).eq("postgresBookmarkId", args.bookmarkId),
-      )
-      .first();
-
-    if (!bookmark) {
-      throw new Error("Bookmark not found");
-    }
-
     const updatedAtMs = Date.now();
     const saved = {
       jjChangeId: args.jjChangeId,

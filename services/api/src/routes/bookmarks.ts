@@ -202,8 +202,6 @@ bookmarksRoutes.post("/:id/apply", async (c) => {
   const { applyBookmarkOps, WorkerRequestError } = await import(
     "../jj-worker-client"
   );
-  const { syncBookmarkToConvex } = await import("../sync-bookmark");
-  const cliToken = c.req.header("Authorization")?.slice("Bearer ".length).trim();
 
   try {
     const result = await applyBookmarkOps({
@@ -222,13 +220,6 @@ bookmarksRoutes.post("/:id/apply", async (c) => {
     const updated = updatedRows[0];
     if (!updated) {
       return c.json({ error: "Bookmark missing after apply" }, 500);
-    }
-
-    try {
-      await syncBookmarkToConvex(updated, auth, cliToken);
-    } catch (syncError) {
-      console.error("Failed to sync bookmark apply to Convex", syncError);
-      return c.json({ error: "Applied in Postgres but Convex sync failed" }, 500);
     }
 
     return c.json({

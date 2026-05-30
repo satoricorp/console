@@ -65,8 +65,23 @@ export function validatePushBundle(body: unknown): PushBundle {
   };
 }
 
+const PR_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function extractPrId(payload: PushBundle): string | null {
+  const prId = payload.pr_id?.trim();
+  if (!prId) {
+    return null;
+  }
+  if (!PR_ID_RE.test(prId)) {
+    throw new PayloadValidationError("Invalid pr_id");
+  }
+  return prId;
+}
+
 export function extractIndexFields(payload: PushBundle) {
   return {
+    pr_id: extractPrId(payload),
     repo_root_path: payload.repo.root_path,
     repo_backend: payload.repo.backend,
     remote_url: payload.repo.remote_url ?? null,
