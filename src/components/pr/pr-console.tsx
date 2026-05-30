@@ -95,6 +95,7 @@ export function PrConsole() {
     detailLoading,
     detailError,
     selectBookmark,
+    reloadBookmarks,
   } = usePrConsoleBookmarks({ authReady, showMerged });
 
   if (!authReady || listLoading) {
@@ -119,6 +120,7 @@ export function PrConsole() {
               : "empty"
           }
           bookmark={selectedDetail ?? null}
+          onArchived={reloadBookmarks}
         />
         <div className="flex flex-wrap gap-2">
           <Button variant={showMerged ? "primary" : "secondary"} onClick={() => setShowMerged((current) => !current)}>

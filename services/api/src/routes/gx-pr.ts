@@ -132,7 +132,15 @@ async function upsertBookmark(
         github_pr_url = COALESCE(EXCLUDED.github_pr_url, gx_bookmarks.github_pr_url),
         github_pr_number = COALESCE(EXCLUDED.github_pr_number, gx_bookmarks.github_pr_number),
         updated_at_ms = EXCLUDED.updated_at_ms,
-        title = COALESCE(gx_bookmarks.title, EXCLUDED.title)
+        title = COALESCE(gx_bookmarks.title, EXCLUDED.title),
+        merge_status = CASE
+          WHEN gx_bookmarks.merge_status = 'closed' THEN 'open'
+          ELSE gx_bookmarks.merge_status
+        END,
+        merged_at_ms = CASE
+          WHEN gx_bookmarks.merge_status = 'closed' THEN NULL
+          ELSE gx_bookmarks.merged_at_ms
+        END
       RETURNING
         id,
         latest_event_id,
@@ -167,7 +175,15 @@ async function upsertBookmark(
         github_pr_url = COALESCE(${args.githubPrUrl}, github_pr_url),
         github_pr_number = COALESCE(${args.githubPrNumber}, github_pr_number),
         updated_at_ms = ${args.updatedAtMs},
-        title = COALESCE(title, ${args.inferredTitle})
+        title = COALESCE(title, ${args.inferredTitle}),
+        merge_status = CASE
+          WHEN merge_status = 'closed' THEN 'open'
+          ELSE merge_status
+        END,
+        merged_at_ms = CASE
+          WHEN merge_status = 'closed' THEN NULL
+          ELSE merged_at_ms
+        END
       WHERE id = ${existing[0].id}
       RETURNING
         id,

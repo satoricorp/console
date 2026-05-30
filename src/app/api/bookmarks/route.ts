@@ -1,5 +1,5 @@
 import { fetchAuthQuery } from "@/lib/auth-server";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 import { listBookmarksForUser } from "@/lib/local-postgres";
 
 export async function GET(request: Request) {

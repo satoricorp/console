@@ -47,6 +47,21 @@ function shouldUseLocalBookmarkApi(): boolean {
   return host === "localhost" || host === "127.0.0.1";
 }
 
+async function closeBookmarkRequest(bookmarkId: string): Promise<void> {
+  if (shouldUseLocalBookmarkApi()) {
+    const response = await fetch(
+      `/api/bookmarks/${encodeURIComponent(bookmarkId)}/close`,
+      { method: "POST", credentials: "include" },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? "Failed to archive bookmark.");
+    }
+    return;
+  }
+  throw new Error("Remote bookmark archive requires Convex action path.");
+}
+
 async function fetchBookmarkList(
   mergeStatus: "open" | "merged" | "closed" | undefined,
 ): Promise<BookmarkListItem[]> {
@@ -125,9 +140,11 @@ export function usePrConsoleBookmarks({
 
   const listMyBookmarks = useAction(api.gxBookmarkActions.listMyBookmarks);
   const getBookmarkDetail = useAction(api.gxBookmarkActions.getBookmarkDetail);
+  const closeBookmarkAction = useAction(api.gxBookmarkActions.closeBookmark);
 
   const [bookmarks, setBookmarks] = useState<BookmarkListItem[] | undefined>(undefined);
   const [listError, setListError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const loadBookmarks = useCallback(async () => {
     const mergeStatus = showMerged ? undefined : ("open" as const);
@@ -181,7 +198,20 @@ export function usePrConsoleBookmarks({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [authReady, loadBookmarks]);
+  }, [authReady, loadBookmarks, reloadToken]);
+
+  async function archiveBookmark(bookmarkId: string) {
+    if (shouldUseLocalBookmarkApi()) {
+      await closeBookmarkRequest(bookmarkId);
+    } else {
+      await closeBookmarkAction({ bookmarkId });
+    }
+    setReloadToken((current) => current + 1);
+  }
+
+  function reloadBookmarks() {
+    setReloadToken((current) => current + 1);
+  }
 
   const urlBookmarkId = searchParams.get("bookmark");
   const selectedId =
@@ -383,5 +413,7 @@ export function usePrConsoleBookmarks({
       payloadState.error ??
       (selectedId && selectedDetail === null ? "Bookmark not found." : null),
     selectBookmark,
+    archiveBookmark,
+    reloadBookmarks,
   };
 }

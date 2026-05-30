@@ -293,3 +293,65 @@ export const updateBookmarkTitle = action({
     }
   },
 });
+
+export const closeBookmark = action({
+  args: {
+    bookmarkId: v.string(),
+  },
+  returns: v.object({
+    id: v.string(),
+    mergeStatus: mergeStatusValidator,
+    updatedAtMs: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) {
+      throw new Error("Sign in required");
+    }
+
+    const now = Date.now();
+    const sql = getSql();
+    try {
+      const rows = await sql<
+        {
+          id: string;
+          merge_status: "open" | "merged" | "closed";
+          updated_at_ms: string;
+        }[]
+      >`
+        UPDATE gx_bookmarks
+        SET
+          merge_status = 'closed',
+          revision = revision + 1,
+          updated_at_ms = ${now}
+        WHERE id = ${args.bookmarkId}
+          AND user_id = ${user._id}
+          AND merge_status = 'open'
+        RETURNING id, merge_status, updated_at_ms
+      `;
+      const row = rows[0];
+      if (!row) {
+        const existing = await sql<{ merge_status: "open" | "merged" | "closed" }[]>`
+          SELECT merge_status
+          FROM gx_bookmarks
+          WHERE id = ${args.bookmarkId}
+            AND user_id = ${user._id}
+          LIMIT 1
+        `;
+        if (!existing[0]) {
+          throw new Error("Bookmark not found");
+        }
+        throw new Error(
+          `Bookmark is ${existing[0].merge_status}; only open bookmarks can be archived`,
+        );
+      }
+      return {
+        id: row.id,
+        mergeStatus: row.merge_status,
+        updatedAtMs: Number(row.updated_at_ms),
+      };
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  },
+});

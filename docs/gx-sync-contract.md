@@ -54,6 +54,20 @@ Implemented path (dev):
 
 Conflict resolution (divergent local jj vs server revision, concurrent edits) is **out of scope** for this document. See the separate conflict design doc when published. Phases 1–3 do not block on it.
 
+## Bookmark lifecycle (`merge_status`)
+
+| Status | Set by | Console default | `gx sync` catch-up |
+| ------ | ------ | --------------- | ------------------ |
+| `open` | default on publish | shown | yes, when revision advances |
+| `merged` | Console merge bar / GitHub merge detection | hidden (toggle **Merged**) | skipped |
+| `closed` | Console **Archive** or `POST /bookmarks/:id/close` | hidden (toggle **Merged**) | skipped |
+
+Rules:
+
+- Publish (`gx pr`) preserves `merged` status. A new publish on a `closed` bookmark reopens it (`open`).
+- Merge and archive bump `gx_bookmarks.revision` so clients can detect metadata changes without replaying payloads.
+- `gx sync` still lists merged/closed bookmarks to refresh local `merge_status`, but does not run jj catch-up for them.
+
 ## Exit criteria (Phase 4)
 
 - One server-side jj operation (e.g. restack) applied in dev

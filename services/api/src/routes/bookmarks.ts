@@ -164,6 +164,45 @@ bookmarksRoutes.patch("/:id", async (c) => {
   return c.json(serializeBookmark(row));
 });
 
+bookmarksRoutes.post("/:id/close", async (c) => {
+  const id = c.req.param("id");
+  const auth = c.get("auth");
+  const db = getSql();
+  const now = Date.now();
+
+  const rows = await db<BookmarkRow[]>`
+    UPDATE gx_bookmarks
+    SET
+      merge_status = 'closed',
+      revision = revision + 1,
+      updated_at_ms = ${now}
+    WHERE id = ${id}
+      AND user_id = ${auth.userId}
+      AND merge_status = 'open'
+    RETURNING *
+  `;
+
+  const row = rows[0];
+  if (!row) {
+    const existing = await db<BookmarkRow[]>`
+      SELECT *
+      FROM gx_bookmarks
+      WHERE id = ${id}
+        AND user_id = ${auth.userId}
+      LIMIT 1
+    `;
+    if (!existing[0]) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    return c.json(
+      { error: `Bookmark is ${existing[0].merge_status}; only open bookmarks can be archived` },
+      409,
+    );
+  }
+
+  return c.json(serializeBookmark(row));
+});
+
 bookmarksRoutes.post("/:id/apply", async (c) => {
   const id = c.req.param("id");
   const auth = c.get("auth");

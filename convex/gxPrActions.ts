@@ -188,10 +188,12 @@ async function maybeMarkBookmarkMerged(
       SET
         merge_status = 'merged',
         merged_at_ms = ${now},
+        revision = revision + 1,
         remote_head_sha = COALESCE(${remoteHeadSha ?? null}, remote_head_sha),
         updated_at_ms = ${now}
       WHERE id = ${bookmarkId}
         AND user_id = ${userId}
+        AND merge_status = 'open'
     `;
   } finally {
     await sql.end({ timeout: 5 });
