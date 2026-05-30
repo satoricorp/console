@@ -2,7 +2,7 @@
 
 import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
 import { embedQuery } from "./embedTextBatch";
-import { getNamespace } from "./turbopufferClient";
+import { ensureNamespaceSchema, getNamespace } from "./turbopufferClient";
 
 export type PinnedSelection = {
   filePath: string;
@@ -30,8 +30,20 @@ type RankedRow = {
   symbol?: string;
   content?: string;
   commit_id?: string;
+  start_line?: number;
+  end_line?: number;
   dist?: number;
 };
+
+const INCLUDE_ATTRIBUTES = [
+  "content",
+  "file_path",
+  "doc_type",
+  "symbol",
+  "commit_id",
+  "start_line",
+  "end_line",
+] as const;
 
 export async function queryReviewContext(request: QueryReviewContextRequest) {
   const limit = request.limit ?? 8;
@@ -58,12 +70,14 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     request.prBody,
     request.sessionSummary,
     pinnedText,
+    pathQueryTerms(pinnedFiles),
     ...(request.symbols ?? []),
   ]
     .filter(Boolean)
     .join("\n");
 
   const ns = getNamespace(request.fullName);
+  await ensureNamespaceSchema(request.fullName);
   const embedding = queryText ? await embedQuery(queryText) : null;
 
   const queries: Query[] = [];
@@ -72,24 +86,17 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     queries.push({
       rank_by: ["vector", "ANN", embedding],
       top_k: 30,
-      include_attributes: [
-        "content",
-        "file_path",
-        "doc_type",
-        "symbol",
-        "commit_id",
-      ],
+      include_attributes: [...INCLUDE_ATTRIBUTES],
     });
     queries.push({
       rank_by: ["content", "BM25", queryText],
       top_k: 30,
-      include_attributes: [
-        "content",
-        "file_path",
-        "doc_type",
-        "symbol",
-        "commit_id",
-      ],
+      include_attributes: [...INCLUDE_ATTRIBUTES],
+    });
+    queries.push({
+      rank_by: ["symbol", "BM25", queryText],
+      top_k: 20,
+      include_attributes: [...INCLUDE_ATTRIBUTES],
     });
   }
 
@@ -101,13 +108,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     queries.push({
       filters: ["Or", pathFilters],
       top_k: 20,
-      include_attributes: [
-        "content",
-        "file_path",
-        "doc_type",
-        "symbol",
-        "commit_id",
-      ],
+      include_attributes: [...INCLUDE_ATTRIBUTES],
     });
   }
 
@@ -155,9 +156,23 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
       symbol: row.symbol ?? undefined,
       content: row.content ?? "",
       commit_id: row.commit_id ?? "",
+      start_line: row.start_line,
+      end_line: row.end_line,
       score: row.dist ?? 0,
     })),
   };
+}
+
+function pathQueryTerms(filePaths: string[]): string {
+  const terms = new Set<string>();
+  for (const filePath of filePaths) {
+    terms.add(filePath);
+    const basename = filePath.split("/").pop();
+    if (basename) terms.add(basename);
+    const stem = basename?.replace(/\.[^.]+$/, "");
+    if (stem && stem !== basename) terms.add(stem);
+  }
+  return [...terms].join("\n");
 }
 
 function reciprocalRankFusion(

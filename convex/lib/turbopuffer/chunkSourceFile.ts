@@ -13,10 +13,29 @@ export type SourceChunk = {
   docType: DocType;
   language: string;
   symbol: string;
+  startLine: number;
+  endLine: number;
+  chunkHash: string;
 };
 
 const CHUNK_LINES = 100;
 const OVERLAP_LINES = 15;
+const MIN_SYMBOL_LINES = 6;
+
+type SymbolBoundary = {
+  lineIndex: number;
+  symbol: string;
+};
+
+const RESERVED_WORDS = new Set([
+  "catch",
+  "else",
+  "for",
+  "if",
+  "switch",
+  "while",
+  "with",
+]);
 
 export function chunkSourceFile(
   fullName: string,
@@ -31,34 +50,260 @@ export function chunkSourceFile(
 
   if (lines.length === 0) return chunks;
 
-  let start = 0;
+  const ranges = symbolRanges(lines, language);
   let chunkIndex = 0;
 
-  while (start < lines.length) {
-    const end = Math.min(start + CHUNK_LINES, lines.length);
-    const slice = lines.slice(start, end);
-    const body = slice.join("\n");
-    const header = [
-      `repo: ${fullName}`,
-      `file: ${filePath}`,
-      `language: ${language}`,
-      `doc_type: ${docType}`,
-    ].join("\n");
+  for (const range of ranges) {
+    const rangeLength = range.endLineIndex - range.startLineIndex + 1;
+    if (rangeLength <= CHUNK_LINES) {
+      chunks.push(
+        buildChunk({
+          fullName,
+          commitId,
+          filePath,
+          docType,
+          language,
+          chunkIndex,
+          startLineIndex: range.startLineIndex,
+          endLineIndex: range.endLineIndex,
+          symbol: range.symbol,
+          lines,
+        }),
+      );
+      chunkIndex += 1;
+      continue;
+    }
 
-    chunks.push({
-      id: documentId(fullName, commitId, filePath, chunkIndex),
-      chunkIndex,
-      filePath,
-      content: `${header}\n---\n${body}`,
-      docType,
-      language,
-      symbol: "",
-    });
-
-    if (end >= lines.length) break;
-    start = end - OVERLAP_LINES;
-    chunkIndex += 1;
+    let startLineIndex = range.startLineIndex;
+    while (startLineIndex <= range.endLineIndex) {
+      const endLineIndex = Math.min(
+        startLineIndex + CHUNK_LINES - 1,
+        range.endLineIndex,
+      );
+      chunks.push(
+        buildChunk({
+          fullName,
+          commitId,
+          filePath,
+          docType,
+          language,
+          chunkIndex,
+          startLineIndex,
+          endLineIndex,
+          symbol: range.symbol,
+          lines,
+        }),
+      );
+      chunkIndex += 1;
+      if (endLineIndex >= range.endLineIndex) break;
+      startLineIndex = endLineIndex - OVERLAP_LINES + 1;
+    }
   }
 
   return chunks;
+}
+
+function symbolRanges(lines: string[], language: string) {
+  const boundaries = detectSymbolBoundaries(lines, language);
+  if (boundaries.length === 0) {
+    return lineRanges(lines.length);
+  }
+
+  const ranges: Array<{
+    startLineIndex: number;
+    endLineIndex: number;
+    symbol: string;
+  }> = [];
+
+  if (boundaries[0].lineIndex > 0) {
+    ranges.push({
+      startLineIndex: 0,
+      endLineIndex: boundaries[0].lineIndex - 1,
+      symbol: "",
+    });
+  }
+
+  for (let i = 0; i < boundaries.length; i += 1) {
+    const boundary = boundaries[i];
+    const nextBoundary = boundaries[i + 1];
+    const endLineIndex = (nextBoundary?.lineIndex ?? lines.length) - 1;
+    if (endLineIndex < boundary.lineIndex) continue;
+
+    const previous = ranges[ranges.length - 1];
+    const rangeLength = endLineIndex - boundary.lineIndex + 1;
+    if (
+      previous &&
+      previous.symbol === "" &&
+      previous.endLineIndex + 1 === boundary.lineIndex &&
+      rangeLength < MIN_SYMBOL_LINES
+    ) {
+      previous.endLineIndex = endLineIndex;
+      previous.symbol = boundary.symbol;
+      continue;
+    }
+
+    ranges.push({
+      startLineIndex: boundary.lineIndex,
+      endLineIndex,
+      symbol: boundary.symbol,
+    });
+  }
+
+  return ranges.flatMap((range) => {
+    if (range.endLineIndex - range.startLineIndex + 1 <= CHUNK_LINES) {
+      return [range];
+    }
+    return lineRanges(
+      range.endLineIndex - range.startLineIndex + 1,
+      range.startLineIndex,
+      range.symbol,
+    );
+  });
+}
+
+function lineRanges(totalLines: number, offset = 0, symbol = "") {
+  const ranges: Array<{
+    startLineIndex: number;
+    endLineIndex: number;
+    symbol: string;
+  }> = [];
+  let start = 0;
+
+  while (start < totalLines) {
+    const end = Math.min(start + CHUNK_LINES, totalLines) - 1;
+    ranges.push({
+      startLineIndex: offset + start,
+      endLineIndex: offset + end,
+      symbol,
+    });
+
+    if (end + 1 >= totalLines) break;
+    start = end + 1 - OVERLAP_LINES;
+  }
+
+  return ranges;
+}
+
+function detectSymbolBoundaries(
+  lines: string[],
+  language: string,
+): SymbolBoundary[] {
+  const boundaries: SymbolBoundary[] = [];
+
+  lines.forEach((line, lineIndex) => {
+    const symbol = detectSymbol(line, language);
+    if (!symbol) return;
+    boundaries.push({ lineIndex, symbol });
+  });
+
+  return boundaries.filter(
+    (boundary, index) =>
+      index === 0 || boundary.lineIndex !== boundaries[index - 1].lineIndex,
+  );
+}
+
+function detectSymbol(line: string, language: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("#")) {
+    return null;
+  }
+  const isTopLevel = line === trimmed;
+
+  const languageMatchers =
+    language === "typescript" || language === "javascript"
+      ? [
+          /^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
+          /^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z_$][\w$]*)/,
+          /^(?:export\s+)?(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/,
+          /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/,
+          ...(isTopLevel
+            ? [
+                /^(?:public\s+|private\s+|protected\s+|static\s+|async\s+)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?::[^{]+)?\{/,
+              ]
+            : []),
+        ]
+      : language === "python"
+        ? isTopLevel
+          ? [/^(?:async\s+)?def\s+([A-Za-z_]\w*)/, /^class\s+([A-Za-z_]\w*)/]
+          : []
+        : language === "go"
+          ? [/^func\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)/]
+          : language === "rust"
+            ? [
+                /^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)/,
+                /^(?:pub(?:\([^)]*\))?\s+)?(?:struct|enum|trait|impl)\s+([A-Za-z_]\w*)/,
+              ]
+            : [
+                /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
+                /^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z_$][\w$]*)/,
+                /^(?:async\s+)?def\s+([A-Za-z_]\w*)/,
+                /^func\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)/,
+              ];
+
+  for (const matcher of languageMatchers) {
+    const match = trimmed.match(matcher);
+    const symbol = match?.[1];
+    if (symbol && !RESERVED_WORDS.has(symbol)) return symbol;
+  }
+
+  return null;
+}
+
+function buildChunk(args: {
+  fullName: string;
+  commitId: string;
+  filePath: string;
+  docType: DocType;
+  language: string;
+  chunkIndex: number;
+  startLineIndex: number;
+  endLineIndex: number;
+  symbol: string;
+  lines: string[];
+}): SourceChunk {
+  const startLine = args.startLineIndex + 1;
+  const endLine = args.endLineIndex + 1;
+  const body = args.lines
+    .slice(args.startLineIndex, args.endLineIndex + 1)
+    .join("\n");
+  const header = [
+    `repo: ${args.fullName}`,
+    `file: ${args.filePath}`,
+    `lines: ${startLine}-${endLine}`,
+    args.symbol ? `symbol: ${args.symbol}` : "",
+    `language: ${args.language}`,
+    `doc_type: ${args.docType}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const content = `${header}\n---\n${body}`;
+
+  return {
+    id: documentId(args.fullName, args.commitId, args.filePath, args.chunkIndex),
+    chunkIndex: args.chunkIndex,
+    filePath: args.filePath,
+    content,
+    docType: args.docType,
+    language: args.language,
+    symbol: args.symbol,
+    startLine,
+    endLine,
+    chunkHash: hashChunk(`${args.filePath}:${startLine}:${endLine}:${content}`),
+  };
+}
+
+function hashChunk(input: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < input.length; i += 1) {
+    const c = input.charCodeAt(i);
+    h1 ^= c;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= c + 1;
+    h2 = Math.imul(h2, 0x01000193);
+  }
+  return (
+    (h1 >>> 0).toString(16).padStart(8, "0") +
+    (h2 >>> 0).toString(16).padStart(8, "0")
+  );
 }

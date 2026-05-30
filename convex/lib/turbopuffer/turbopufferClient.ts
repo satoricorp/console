@@ -26,8 +26,11 @@ export function getNamespace(fullName: string) {
 export const TURBOPUFFER_SCHEMA = {
   vector: { type: "[1536]f32", ann: true },
   content: { type: "string", full_text_search: true },
-  file_path: { type: "string", glob: true },
+  file_path: { type: "string", glob: true, filterable: true },
   symbol: { type: "string", full_text_search: true },
+  start_line: { type: "int", filterable: true },
+  end_line: { type: "int", filterable: true },
+  chunk_hash: { type: "string", filterable: true },
   repo_id: { type: "string", filterable: true },
   commit_id: { type: "string", filterable: true },
   branch: { type: "string", filterable: true },
@@ -36,12 +39,22 @@ export const TURBOPUFFER_SCHEMA = {
   created_at: { type: "int", filterable: true },
 } as const;
 
+export async function ensureNamespaceSchema(fullName: string) {
+  const ns = getNamespace(fullName);
+  await ns.updateSchema({
+    schema: TURBOPUFFER_SCHEMA,
+  });
+}
+
 export type IndexedDocument = {
   id: string;
   vector: number[];
   content: string;
   file_path: string;
   symbol: string;
+  start_line: number;
+  end_line: number;
+  chunk_hash: string;
   repo_id: string;
   commit_id: string;
   branch: string;

@@ -17,6 +17,8 @@ type ChatMessage = {
   sources?: Array<{
     file_path: string;
     symbol?: string;
+    start_line?: number;
+    end_line?: number;
   }>;
 };
 
@@ -147,6 +149,8 @@ export function PrChatPanel() {
           sources: response.sources.map((source) => ({
             file_path: source.file_path,
             symbol: source.symbol,
+            start_line: source.start_line,
+            end_line: source.end_line,
           })),
         },
       ]);
@@ -242,6 +246,11 @@ export function PrChatPanel() {
                   {message.sources.slice(0, 4).map((source, index) => (
                     <li key={`${message.id}-source-${index}`}>
                       {source.file_path}
+                      {source.start_line && source.end_line
+                        ? source.start_line === source.end_line
+                          ? `:${source.start_line}`
+                          : `:${source.start_line}-${source.end_line}`
+                        : ""}
                       {source.symbol ? ` · ${source.symbol}` : ""}
                     </li>
                   ))}

@@ -19,6 +19,8 @@ const historyMessage = v.object({
 const sourceValidator = v.object({
   file_path: v.string(),
   symbol: v.optional(v.string()),
+  start_line: v.optional(v.number()),
+  end_line: v.optional(v.number()),
   content: v.string(),
   commit_id: v.string(),
 });
@@ -166,6 +168,8 @@ export const sendMessage = action({
     const retrievedChunks = search.results.map((result) => ({
       file_path: result.file_path,
       symbol: result.symbol,
+      start_line: result.start_line,
+      end_line: result.end_line,
       content: result.content,
       commit_id: result.commit_id,
     }));
@@ -188,6 +192,8 @@ export const sendMessage = action({
       sources: retrievedChunks.map((chunk) => ({
         file_path: chunk.file_path,
         symbol: chunk.symbol,
+        start_line: chunk.start_line,
+        end_line: chunk.end_line,
         content: chunk.content,
         commit_id: chunk.commit_id,
       })),

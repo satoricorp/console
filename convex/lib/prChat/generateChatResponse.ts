@@ -26,6 +26,8 @@ export type ChatHistoryMessage = {
 export type RetrievedChunk = {
   file_path: string;
   symbol?: string;
+  start_line?: number;
+  end_line?: number;
   content: string;
   commit_id: string;
 };
@@ -56,8 +58,14 @@ function formatRetrievedChunks(chunks: RetrievedChunk[]): string {
 
   return chunks
     .map((chunk, index) => {
+      const lineLabel =
+        chunk.start_line && chunk.end_line
+          ? chunk.start_line === chunk.end_line
+            ? `:${chunk.start_line}`
+            : `:${chunk.start_line}-${chunk.end_line}`
+          : "";
       const header = [
-        `[${index + 1}] ${chunk.file_path}`,
+        `[${index + 1}] ${chunk.file_path}${lineLabel}`,
         chunk.symbol ? ` (${chunk.symbol})` : "",
         chunk.commit_id ? ` @ ${chunk.commit_id.slice(0, 12)}` : "",
       ].join("");
