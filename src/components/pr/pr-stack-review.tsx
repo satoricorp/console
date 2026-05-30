@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
+import {
+  fetchChangeReviews,
+  upsertChangeReviewRequest,
+  type ChangeReviewRecord,
+} from "@/lib/bookmarks-client";
 import {
   DEFAULT_APPROVAL_THRESHOLD_PERCENT,
   extractStackChanges,
@@ -13,7 +16,6 @@ import {
   reviewMapFromRecords,
   stackApprovalSummary,
 } from "@/lib/gx-stack";
-import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 import { PrPushPreview } from "./pr-push-preview";
 import { usePrReviewWorkspace } from "./pr-review-workspace";
 
@@ -131,13 +133,7 @@ function ChangeReviewEditor({
   );
 }
 
-type SavedChangeReview = {
-  jjChangeId: string;
-  stackIndex: number;
-  approvalPercent: number;
-  notes?: string;
-  updatedAtMs: number;
-};
+type SavedChangeReview = ChangeReviewRecord;
 
 export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const { bookmark, selectChange } = usePrReviewWorkspace();
@@ -145,51 +141,28 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const reviewBookmarkId = bookmark.payloadSourceBookmarkId ?? bookmark.id;
-  const useLocalReviews = shouldUseLocalBookmarkApi();
-  const [localReviewState, setLocalReviewState] = useState<{
-    bookmarkId: string;
-    reviews: SavedChangeReview[];
-  } | null>(null);
-  const convexReviews = useQuery(
-    api.gxChangeReviews.listChangeReviews,
-    useLocalReviews ? "skip" : { bookmarkId: reviewBookmarkId },
+  const [savedReviews, setSavedReviews] = useState<SavedChangeReview[] | undefined>(
+    undefined,
   );
-  const upsertReview = useMutation(api.gxChangeReviews.upsertChangeReview);
 
-  const reloadLocalReviews = useCallback(async () => {
-    const response = await fetch(
-      `/api/bookmarks/${encodeURIComponent(reviewBookmarkId)}/change-reviews`,
-      { credentials: "include" },
-    );
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(body?.error ?? "Failed to load change reviews.");
-    }
-    const reviews = (await response.json()) as SavedChangeReview[];
-    setLocalReviewState({ bookmarkId: reviewBookmarkId, reviews });
+  const reloadReviews = useCallback(async () => {
+    const reviews = await fetchChangeReviews(reviewBookmarkId);
+    setSavedReviews(reviews);
     return reviews;
   }, [reviewBookmarkId]);
 
   useEffect(() => {
-    if (!useLocalReviews) {
-      return;
-    }
     let cancelled = false;
-    void reloadLocalReviews().catch(() => {
+    setSavedReviews(undefined);
+    void reloadReviews().catch(() => {
       if (!cancelled) {
-        setLocalReviewState({ bookmarkId: reviewBookmarkId, reviews: [] });
+        setSavedReviews([]);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [reloadLocalReviews, reviewBookmarkId, useLocalReviews]);
-
-  const savedReviews = useLocalReviews
-    ? localReviewState?.bookmarkId === reviewBookmarkId
-      ? localReviewState.reviews
-      : undefined
-    : convexReviews;
+  }, [reloadReviews, reviewBookmarkId]);
 
   const changes = useMemo(
     () => extractStackChanges(bookmark.payload),
@@ -368,37 +341,13 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
           }
           initialNotes={selectedReview?.notes ?? ""}
           onSave={async (review) => {
-            const reviewPayload = {
+            await upsertChangeReviewRequest(reviewBookmarkId, {
               jjChangeId: selectedChange.jjChangeId,
               stackIndex: selectedChange.stackIndex,
               approvalPercent: Math.round(review.approvalPercent),
               notes: review.notes,
-            };
-
-            if (useLocalReviews) {
-              const response = await fetch(
-                `/api/bookmarks/${encodeURIComponent(reviewBookmarkId)}/change-reviews`,
-                {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(reviewPayload),
-                },
-              );
-              if (!response.ok) {
-                const body = (await response.json().catch(() => null)) as {
-                  error?: string;
-                } | null;
-                throw new Error(body?.error ?? "Failed to save change review.");
-              }
-              await reloadLocalReviews();
-              return;
-            }
-
-            await upsertReview({
-              bookmarkId: reviewBookmarkId,
-              ...reviewPayload,
             });
+            await reloadReviews();
           }}
         />
       ) : null}

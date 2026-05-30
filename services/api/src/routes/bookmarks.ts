@@ -1,50 +1,30 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
-
-type BookmarkRow = {
-  id: string;
-  user_id: string;
-  repo_full_name: string;
-  branch_name: string;
-  title: string | null;
-  revision: number;
-  latest_event_id: string;
-  head_commit_id: string | null;
-  github_pr_url: string | null;
-  github_pr_number: number | null;
-  remote_head_sha: string | null;
-  merge_status: "open" | "merged" | "closed";
-  merged_at_ms: string | null;
-  published_at_ms: string;
-  updated_at_ms: string;
-  storage_backend: string;
-};
+import {
+  type BookmarkRow,
+  serializeBookmark,
+  serializeBookmarkForConsole,
+} from "../bookmark-types";
 
 export const bookmarksRoutes = new Hono<AppEnv>();
 
 bookmarksRoutes.use("*", requireAuth);
 
-function serializeBookmark(row: BookmarkRow) {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    repo_full_name: row.repo_full_name,
-    branch_name: row.branch_name,
-    title: row.title,
-    revision: row.revision,
-    latest_event_id: row.latest_event_id,
-    head_commit_id: row.head_commit_id,
-    github_pr_url: row.github_pr_url,
-    github_pr_number: row.github_pr_number,
-    remote_head_sha: row.remote_head_sha,
-    merge_status: row.merge_status,
-    merged_at_ms: row.merged_at_ms === null ? null : Number(row.merged_at_ms),
-    published_at_ms: Number(row.published_at_ms),
-    updated_at_ms: Number(row.updated_at_ms),
-    storage_backend: row.storage_backend,
-  };
+function consoleFormat(c: { req: { query: (key: string) => string | undefined } }) {
+  return c.req.query("format") === "console";
+}
+
+function respondBookmark(
+  c: Context<AppEnv>,
+  row: BookmarkRow,
+  extra?: Record<string, unknown>,
+) {
+  const payload = consoleFormat(c)
+    ? serializeBookmarkForConsole(row)
+    : serializeBookmark(row);
+  return c.json({ ...payload, ...extra });
 }
 
 bookmarksRoutes.get("/", async (c) => {
@@ -71,7 +51,212 @@ bookmarksRoutes.get("/", async (c) => {
     ORDER BY updated_at_ms DESC
   `;
 
-  return c.json(rows.map(serializeBookmark));
+  const serialized = consoleFormat(c)
+    ? rows.map(serializeBookmarkForConsole)
+    : rows.map(serializeBookmark);
+  return c.json(serialized);
+});
+
+bookmarksRoutes.get("/by-event/:eventId", async (c) => {
+  const auth = c.get("auth");
+  const eventId = c.req.param("eventId");
+  const db = getSql();
+
+  const rows = await db<{ id: string }[]>`
+    SELECT id
+    FROM gx_bookmarks
+    WHERE latest_event_id = ${eventId}
+      AND user_id = ${auth.userId}
+    LIMIT 1
+  `;
+
+  return c.json({ bookmarkId: rows[0]?.id ?? null });
+});
+
+bookmarksRoutes.get("/:id/change-reviews", async (c) => {
+  const auth = c.get("auth");
+  const bookmarkId = c.req.param("id");
+  const db = getSql();
+
+  const rows = await db<
+    {
+      jj_change_id: string;
+      stack_index: number;
+      approval_percent: number;
+      notes: string | null;
+      updated_at_ms: string;
+    }[]
+  >`
+    SELECT
+      jj_change_id,
+      stack_index,
+      approval_percent,
+      notes,
+      updated_at_ms
+    FROM gx_change_reviews
+    WHERE user_id = ${auth.userId}
+      AND bookmark_id = ${bookmarkId}
+    ORDER BY stack_index ASC
+  `;
+
+  return c.json(
+    rows.map((row) => ({
+      jjChangeId: row.jj_change_id,
+      stackIndex: row.stack_index,
+      approvalPercent: row.approval_percent,
+      notes: row.notes ?? undefined,
+      updatedAtMs: Number(row.updated_at_ms),
+    })),
+  );
+});
+
+bookmarksRoutes.post("/:id/change-reviews", async (c) => {
+  const auth = c.get("auth");
+  const bookmarkId = c.req.param("id");
+  const db = getSql();
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const jjChangeId =
+    typeof body === "object" &&
+    body !== null &&
+    "jjChangeId" in body &&
+    typeof body.jjChangeId === "string"
+      ? body.jjChangeId
+      : null;
+  const stackIndex =
+    typeof body === "object" &&
+    body !== null &&
+    "stackIndex" in body &&
+    typeof body.stackIndex === "number"
+      ? body.stackIndex
+      : null;
+  const approvalPercentRaw =
+    typeof body === "object" &&
+    body !== null &&
+    "approvalPercent" in body &&
+    typeof body.approvalPercent === "number"
+      ? Math.round(body.approvalPercent)
+      : null;
+  const notes =
+    typeof body === "object" &&
+    body !== null &&
+    "notes" in body &&
+    typeof body.notes === "string" &&
+    body.notes.trim()
+      ? body.notes.trim()
+      : undefined;
+
+  if (!jjChangeId) {
+    return c.json({ error: "jjChangeId is required" }, 400);
+  }
+  if (stackIndex === null || !Number.isInteger(stackIndex) || stackIndex < 0) {
+    return c.json({ error: "stackIndex must be a non-negative integer" }, 400);
+  }
+  if (
+    approvalPercentRaw === null ||
+    !Number.isInteger(approvalPercentRaw) ||
+    approvalPercentRaw < 0 ||
+    approvalPercentRaw > 100
+  ) {
+    return c.json(
+      { error: "approvalPercent must be an integer from 0 to 100" },
+      400,
+    );
+  }
+  if (notes && notes.length > 10000) {
+    return c.json({ error: "notes is too long" }, 400);
+  }
+
+  const bookmark = await db<BookmarkRow[]>`
+    SELECT *
+    FROM gx_bookmarks
+    WHERE id = ${bookmarkId}
+      AND user_id = ${auth.userId}
+    LIMIT 1
+  `;
+  if (!bookmark[0]) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  const updatedAtMs = Date.now();
+  await db`
+    INSERT INTO gx_change_reviews (
+      user_id,
+      bookmark_id,
+      jj_change_id,
+      stack_index,
+      approval_percent,
+      notes,
+      created_at_ms,
+      updated_at_ms
+    ) VALUES (
+      ${auth.userId},
+      ${bookmarkId},
+      ${jjChangeId},
+      ${stackIndex},
+      ${approvalPercentRaw},
+      ${notes ?? null},
+      ${updatedAtMs},
+      ${updatedAtMs}
+    )
+    ON CONFLICT (user_id, bookmark_id, jj_change_id)
+    DO UPDATE SET
+      stack_index = EXCLUDED.stack_index,
+      approval_percent = EXCLUDED.approval_percent,
+      notes = EXCLUDED.notes,
+      updated_at_ms = EXCLUDED.updated_at_ms
+  `;
+
+  return c.json({
+    jjChangeId,
+    stackIndex,
+    approvalPercent: approvalPercentRaw,
+    notes,
+    updatedAtMs,
+  });
+});
+
+bookmarksRoutes.post("/:id/mark-merged", async (c) => {
+  const auth = c.get("auth");
+  const bookmarkId = c.req.param("id");
+  const db = getSql();
+
+  let body: unknown = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+
+  const remoteHeadSha =
+    typeof body === "object" &&
+    body !== null &&
+    "remoteHeadSha" in body &&
+    typeof body.remoteHeadSha === "string"
+      ? body.remoteHeadSha
+      : undefined;
+
+  const now = Date.now();
+  await db`
+    UPDATE gx_bookmarks
+    SET
+      merge_status = 'merged',
+      merged_at_ms = ${now},
+      revision = revision + 1,
+      remote_head_sha = COALESCE(${remoteHeadSha ?? null}, remote_head_sha),
+      updated_at_ms = ${now}
+    WHERE id = ${bookmarkId}
+      AND user_id = ${auth.userId}
+      AND merge_status = 'open'
+  `;
+
+  return c.json({ ok: true });
 });
 
 bookmarksRoutes.get("/:id", async (c) => {
@@ -97,9 +282,8 @@ bookmarksRoutes.get("/:id", async (c) => {
     if (!row) {
       return c.json({ error: "Not found" }, 404);
     }
-    return c.json({
-      ...serializeBookmark(row),
-      payload: row.event_payload ?? null,
+    return respondBookmark(c, row, {
+      payload: row.event_payload ?? undefined,
     });
   }
 
@@ -115,7 +299,7 @@ bookmarksRoutes.get("/:id", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  return c.json(serializeBookmark(row));
+  return respondBookmark(c, row);
 });
 
 bookmarksRoutes.patch("/:id", async (c) => {
@@ -161,7 +345,7 @@ bookmarksRoutes.patch("/:id", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  return c.json(serializeBookmark(row));
+  return respondBookmark(c, row);
 });
 
 bookmarksRoutes.post("/:id/close", async (c) => {
@@ -195,12 +379,14 @@ bookmarksRoutes.post("/:id/close", async (c) => {
       return c.json({ error: "Not found" }, 404);
     }
     return c.json(
-      { error: `Bookmark is ${existing[0].merge_status}; only open bookmarks can be archived` },
+      {
+        error: `Bookmark is ${existing[0].merge_status}; only open bookmarks can be archived`,
+      },
       409,
     );
   }
 
-  return c.json(serializeBookmark(row));
+  return respondBookmark(c, row);
 });
 
 bookmarksRoutes.post("/:id/apply", async (c) => {
@@ -263,7 +449,9 @@ bookmarksRoutes.post("/:id/apply", async (c) => {
 
     return c.json({
       ...result,
-      bookmark: serializeBookmark(updated),
+      bookmark: consoleFormat(c)
+        ? serializeBookmarkForConsole(updated)
+        : serializeBookmark(updated),
     });
   } catch (error) {
     if (error instanceof WorkerRequestError) {

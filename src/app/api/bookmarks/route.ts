@@ -1,6 +1,7 @@
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../convex/_generated/api";
-import { listBookmarksForUser } from "@/lib/local-postgres";
+import { gxApiJson } from "@/lib/gx-api-server";
+import type { ConsoleBookmark } from "@/lib/bookmarks-client";
 
 export async function GET(request: Request) {
   const user = await fetchAuthQuery(api.auth.getAuthUser, {});
@@ -17,7 +18,10 @@ export async function GET(request: Request) {
       : undefined;
 
   try {
-    const bookmarks = await listBookmarksForUser(user._id, mergeStatus);
+    const path = mergeStatus
+      ? `/bookmarks?merge_status=${mergeStatus}`
+      : "/bookmarks";
+    const bookmarks = await gxApiJson<ConsoleBookmark[]>(user._id, path);
     return Response.json(bookmarks);
   } catch (error) {
     const message =

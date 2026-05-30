@@ -17,6 +17,25 @@ export function bearerToken(header: string | undefined): string | null {
   return token || null;
 }
 
+function consoleAuthContext(
+  token: string,
+  userIdHeader: string | undefined,
+): AuthContext | null {
+  const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
+  const userId = userIdHeader?.trim();
+  if (!apiKey || !userId || token !== apiKey) {
+    return null;
+  }
+
+  return {
+    userId,
+    githubUserId: 0,
+    githubUserLogin: "console",
+    sessionId: "console",
+    machineId: "console",
+  };
+}
+
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const token = bearerToken(c.req.header("Authorization"));
   if (!token) {
@@ -24,6 +43,13 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   try {
+    const consoleAuth = consoleAuthContext(token, c.req.header("X-User-Id"));
+    if (consoleAuth) {
+      c.set("auth", consoleAuth);
+      await next();
+      return;
+    }
+
     const devAuth = devAuthContext(token);
     if (devAuth) {
       c.set("auth", devAuth);

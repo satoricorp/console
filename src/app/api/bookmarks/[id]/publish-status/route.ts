@@ -1,10 +1,8 @@
 import { fetchAuthAction, fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../../convex/_generated/api";
-import {
-  getBookmarkMetaForUser,
-  loadBookmarkPayload,
-  markBookmarkMergedForUser,
-} from "@/lib/local-postgres";
+import { gxApiJson, gxApiRequest } from "@/lib/gx-api-server";
+import { publishContextFromBookmark } from "@/lib/bookmark-action-context";
+import type { ConsoleBookmark } from "@/lib/bookmarks-client";
 
 export async function GET(
   request: Request,
@@ -20,25 +18,34 @@ export async function GET(
     new URL(request.url).searchParams.get("include_ci_checks") === "1";
 
   try {
-    const meta = await getBookmarkMetaForUser(user._id, bookmarkId);
-    if (!meta) {
-      return Response.json({ error: "Not found" }, { status: 404 });
+    const bookmark = await gxApiJson<ConsoleBookmark>(
+      user._id,
+      `/bookmarks/${encodeURIComponent(bookmarkId)}?include_payload=1`,
+    );
+    if (!bookmark.payload) {
+      return Response.json(
+        { error: "Bookmark payload not found. Run gx pr to sync." },
+        { status: 404 },
+      );
     }
 
-    const payload = await loadBookmarkPayload(bookmarkId);
     const status = await fetchAuthAction(api.gxPrActions.getPublishStatus, {
       bookmarkId,
-      payload: payload ?? undefined,
-      repoFullName: meta.repoFullName,
+      publishContext: publishContextFromBookmark(bookmark, bookmark.payload),
       includeCiChecks,
-      skipBookmarkDbWrites: true,
     });
 
     if (status.integratedOnBase) {
-      await markBookmarkMergedForUser(
+      await gxApiRequest(
         user._id,
-        bookmarkId,
-        status.remoteHeadSha ?? undefined,
+        `/bookmarks/${encodeURIComponent(bookmarkId)}/mark-merged`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            remoteHeadSha: status.remoteHeadSha ?? undefined,
+          }),
+        },
       );
     }
 

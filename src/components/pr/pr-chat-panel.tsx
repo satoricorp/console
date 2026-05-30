@@ -1,13 +1,12 @@
 "use client";
 
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
 import { chatPinToInput, type ChatPin } from "@/lib/chat-pin";
 import { moveSelectionLabel } from "@/lib/move-selection";
-import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 import { usePrReviewWorkspace } from "./pr-review-workspace";
 
 type ChatMessage = {
@@ -69,7 +68,6 @@ export function PrChatPanel() {
     chatDraft,
     updateChatDraft,
   } = usePrReviewWorkspace();
-  const sendMessage = useAction(api.prChatActions.sendMessage);
   const connectedRepos = useQuery(api.repos.getMyConnectedRepos);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -134,42 +132,35 @@ export function PrChatPanel() {
           content: message.content,
         }));
 
-      const response = shouldUseLocalBookmarkApi()
-        ? await fetch(
-            `/api/bookmarks/${encodeURIComponent(bookmark.id)}/chat`,
-            {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                message: trimmed,
-                history: history.slice(0, -1),
-                pins: attachedPins?.map(chatPinToInput),
-              }),
-            },
-          ).then(async (fetchResponse) => {
-            if (!fetchResponse.ok) {
-              const body = (await fetchResponse.json().catch(() => null)) as {
-                error?: string;
-              } | null;
-              throw new Error(body?.error ?? "Failed to send message.");
-            }
-            return fetchResponse.json() as Promise<{
-              reply: string;
-              sources: Array<{
-                file_path: string;
-                symbol?: string;
-                start_line?: number;
-                end_line?: number;
-              }>;
-            }>;
-          })
-        : await sendMessage({
-            bookmarkId: bookmark.id,
+      const response = await fetch(
+        `/api/bookmarks/${encodeURIComponent(bookmark.id)}/chat`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             message: trimmed,
             history: history.slice(0, -1),
             pins: attachedPins?.map(chatPinToInput),
-          });
+          }),
+        },
+      ).then(async (fetchResponse) => {
+        if (!fetchResponse.ok) {
+          const body = (await fetchResponse.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(body?.error ?? "Failed to send message.");
+        }
+        return fetchResponse.json() as Promise<{
+          reply: string;
+          sources: Array<{
+            file_path: string;
+            symbol?: string;
+            start_line?: number;
+            end_line?: number;
+          }>;
+        }>;
+      });
 
       setMessages((current) => [
         ...current,

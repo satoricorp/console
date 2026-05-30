@@ -2,11 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAction } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
 import { extractMergeTarget } from "@/lib/gx-pr-payload";
-import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
 
 type PrMergeBarProps = {
   bookmark: {
@@ -56,45 +53,37 @@ async function fetchPublishStatus(
   bookmark: PrMergeBarProps["bookmark"],
   includeCiChecks: boolean,
 ): Promise<PublishStatus> {
-  if (shouldUseLocalBookmarkApi()) {
-    const params = new URLSearchParams();
-    if (includeCiChecks) {
-      params.set("include_ci_checks", "1");
-    }
-    const response = await fetch(
-      `/api/bookmarks/${encodeURIComponent(bookmark.id)}/publish-status?${params.toString()}`,
-      { credentials: "include" },
-    );
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(body?.error ?? "Failed to load publish status.");
-    }
-    return (await response.json()) as PublishStatus;
+  const params = new URLSearchParams();
+  if (includeCiChecks) {
+    params.set("include_ci_checks", "1");
   }
-
-  throw new Error("Remote publish status requires Convex action path.");
+  const response = await fetch(
+    `/api/bookmarks/${encodeURIComponent(bookmark.id)}/publish-status?${params.toString()}`,
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? "Failed to load publish status.");
+  }
+  return (await response.json()) as PublishStatus;
 }
 
 async function landBookmarkRequest(
   bookmark: PrMergeBarProps["bookmark"],
 ): Promise<{ baseBranch: string; headBranch: string; sha: string }> {
-  if (shouldUseLocalBookmarkApi()) {
-    const response = await fetch(
-      `/api/bookmarks/${encodeURIComponent(bookmark.id)}/land`,
-      { method: "POST", credentials: "include" },
-    );
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(body?.error ?? "Failed to land bookmark.");
-    }
-    return (await response.json()) as {
-      baseBranch: string;
-      headBranch: string;
-      sha: string;
-    };
+  const response = await fetch(
+    `/api/bookmarks/${encodeURIComponent(bookmark.id)}/land`,
+    { method: "POST", credentials: "include" },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? "Failed to land bookmark.");
   }
-
-  throw new Error("Remote land requires Convex action path.");
+  return (await response.json()) as {
+    baseBranch: string;
+    headBranch: string;
+    sha: string;
+  };
 }
 
 export function PrMergeBar({ bookmark }: PrMergeBarProps) {
@@ -102,8 +91,6 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
     () => extractMergeTarget(bookmark.payload, bookmark.repoFullName),
     [bookmark.payload, bookmark.repoFullName],
   );
-  const getPublishStatus = useAction(api.gxPrActions.getPublishStatus);
-  const landBookmark = useAction(api.gxPrActions.landBookmark);
 
   const [publishStatus, setPublishStatus] = useState<PublishStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -123,14 +110,7 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
       setStatusError(null);
       try {
         const includeCiChecks = options?.includeCiChecks ?? false;
-        const nextStatus = shouldUseLocalBookmarkApi()
-          ? await fetchPublishStatus(bookmark, includeCiChecks)
-          : ((await getPublishStatus({
-              bookmarkId: bookmark.id,
-              payload: bookmark.payload,
-              repoFullName: bookmark.repoFullName,
-              includeCiChecks,
-            })) as PublishStatus);
+        const nextStatus = await fetchPublishStatus(bookmark, includeCiChecks);
         setPublishStatus(nextStatus);
         if (includeCiChecks) {
           setCiChecksLoaded(true);
@@ -144,13 +124,7 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
         setIsLoadingStatus(false);
       }
     },
-    [
-      bookmark.id,
-      bookmark.payload,
-      bookmark.repoFullName,
-      getPublishStatus,
-      mergeTarget,
-    ],
+    [bookmark.id, mergeTarget],
   );
 
   useEffect(() => {
@@ -224,17 +198,7 @@ export function PrMergeBar({ bookmark }: PrMergeBarProps) {
     setIsLanding(true);
     setResult(null);
     try {
-      const response = shouldUseLocalBookmarkApi()
-        ? await landBookmarkRequest(bookmark)
-        : ((await landBookmark({
-            bookmarkId: bookmark.id,
-            payload: bookmark.payload,
-            repoFullName: bookmark.repoFullName,
-          })) as {
-            baseBranch: string;
-            headBranch: string;
-            sha: string;
-          });
+      const response = await landBookmarkRequest(bookmark);
       setResult({
         kind: "success",
         message: `Landed ${response.headBranch} onto ${response.baseBranch} (${response.sha.slice(0, 7)}).`,

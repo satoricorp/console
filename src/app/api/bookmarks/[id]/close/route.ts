@@ -1,6 +1,6 @@
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../../convex/_generated/api";
-import { closeBookmarkForUser } from "@/lib/local-postgres";
+import { gxApiJson } from "@/lib/gx-api-server";
 
 export async function POST(
   _request: Request,
@@ -14,7 +14,9 @@ export async function POST(
   const { id: bookmarkId } = await context.params;
 
   try {
-    const bookmark = await closeBookmarkForUser(user._id, bookmarkId);
+    const bookmark = await gxApiJson(user._id, `/bookmarks/${encodeURIComponent(bookmarkId)}/close`, {
+      method: "POST",
+    });
     return Response.json(bookmark);
   } catch (error) {
     const message =

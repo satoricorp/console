@@ -1,9 +1,6 @@
-import { fetchAuthMutation, fetchAuthQuery } from "@/lib/auth-server";
+import { fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../../convex/_generated/api";
-import {
-  listChangeReviewsForUser,
-  upsertChangeReviewForUser,
-} from "@/lib/local-postgres";
+import { gxApiJson } from "@/lib/gx-api-server";
 
 function parseReviewBody(body: {
   jjChangeId?: string;
@@ -54,7 +51,10 @@ export async function GET(
   const { id: bookmarkId } = await context.params;
 
   try {
-    const reviews = await listChangeReviewsForUser(user._id, bookmarkId);
+    const reviews = await gxApiJson(
+      user._id,
+      `/bookmarks/${encodeURIComponent(bookmarkId)}/change-reviews`,
+    );
     return Response.json(reviews);
   } catch (error) {
     const message =
@@ -86,20 +86,15 @@ export async function POST(
   }
 
   try {
-    const saved = await upsertChangeReviewForUser(
+    const saved = await gxApiJson(
       user._id,
-      bookmarkId,
-      parsed.review,
+      `/bookmarks/${encodeURIComponent(bookmarkId)}/change-reviews`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed.review),
+      },
     );
-
-    await fetchAuthMutation(api.gxChangeReviews.upsertChangeReview, {
-      bookmarkId,
-      jjChangeId: parsed.review.jjChangeId,
-      stackIndex: parsed.review.stackIndex,
-      approvalPercent: parsed.review.approvalPercent,
-      notes: parsed.review.notes,
-    });
-
     return Response.json(saved);
   } catch (error) {
     const message =

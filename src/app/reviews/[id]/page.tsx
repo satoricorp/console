@@ -2,31 +2,15 @@
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAction } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
+import { fetchBookmarkIdByEvent } from "@/lib/bookmarks-client";
 import { AuthButton } from "@/components/auth-button";
-import { shouldUseLocalBookmarkApi } from "@/lib/should-use-local-bookmark-api";
-
-async function fetchBookmarkIdByEvent(eventId: string): Promise<string | null> {
-  const response = await fetch(
-    `/api/bookmarks/by-event/${encodeURIComponent(eventId)}`,
-    { credentials: "include" },
-  );
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? "Failed to resolve bookmark.");
-  }
-  const body = (await response.json()) as { bookmarkId: string | null };
-  return body.bookmarkId;
-}
 
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const reviewId = params.id ?? "";
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const resolveBookmarkId = useAction(api.gxBookmarkActions.getBookmarkIdForEvent);
 
   useEffect(() => {
     if (!session?.user || !reviewId) {
@@ -36,9 +20,7 @@ export default function ReviewPage() {
     let cancelled = false;
     void (async () => {
       try {
-        const byEvent = shouldUseLocalBookmarkApi()
-          ? await fetchBookmarkIdByEvent(reviewId)
-          : await resolveBookmarkId({ eventId: reviewId });
+        const byEvent = await fetchBookmarkIdByEvent(reviewId);
         if (cancelled) return;
         router.replace(`/?bookmark=${encodeURIComponent(byEvent ?? reviewId)}`);
       } catch {
@@ -51,7 +33,7 @@ export default function ReviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [reviewId, resolveBookmarkId, router, session?.user]);
+  }, [reviewId, router, session?.user]);
 
   if (sessionPending) {
     return (

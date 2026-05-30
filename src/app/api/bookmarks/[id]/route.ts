@@ -1,10 +1,7 @@
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../convex/_generated/api";
-import {
-  getBookmarkMetaForUser,
-  loadBookmarkPayload,
-  updateBookmarkTitleForUser,
-} from "@/lib/local-postgres";
+import { gxApiJson } from "@/lib/gx-api-server";
+import type { ConsoleBookmark } from "@/lib/bookmarks-client";
 
 export async function GET(
   request: Request,
@@ -20,21 +17,16 @@ export async function GET(
     new URL(request.url).searchParams.get("include_payload") === "1";
 
   try {
-    const meta = await getBookmarkMetaForUser(user._id, bookmarkId);
-    if (!meta) {
-      return Response.json({ error: "Not found" }, { status: 404 });
-    }
-
-    if (!includePayload) {
-      return Response.json(meta);
-    }
-
-    const payload = await loadBookmarkPayload(bookmarkId);
-    return Response.json({ ...meta, payload: payload ?? undefined });
+    const path = includePayload
+      ? `/bookmarks/${encodeURIComponent(bookmarkId)}?include_payload=1`
+      : `/bookmarks/${encodeURIComponent(bookmarkId)}`;
+    const bookmark = await gxApiJson<ConsoleBookmark>(user._id, path);
+    return Response.json(bookmark);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to load bookmark";
-    return Response.json({ error: message }, { status: 503 });
+    const status = message === "Not found" ? 404 : 503;
+    return Response.json({ error: message }, { status });
   }
 }
 
@@ -54,10 +46,14 @@ export async function PATCH(
   }
 
   try {
-    const updated = await updateBookmarkTitleForUser(
+    const updated = await gxApiJson<{ id: string; title: string; updatedAtMs: number }>(
       user._id,
-      bookmarkId,
-      body.title,
+      `/bookmarks/${encodeURIComponent(bookmarkId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: body.title }),
+      },
     );
     return Response.json(updated);
   } catch (error) {

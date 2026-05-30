@@ -1,6 +1,8 @@
 import { fetchAuthAction, fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../../convex/_generated/api";
-import { loadBookmarkChatContext } from "@/lib/local-postgres";
+import { gxApiJson } from "@/lib/gx-api-server";
+import { prChatContextFromBookmark } from "@/lib/bookmark-action-context";
+import type { ConsoleBookmark } from "@/lib/bookmarks-client";
 import type { ChatPin } from "@/lib/chat-pin";
 
 type ChatHistoryMessage = {
@@ -29,23 +31,32 @@ export async function POST(
   }
 
   try {
-    const bookmark = await loadBookmarkChatContext(user._id, bookmarkId);
-    if (!bookmark) {
+    const bookmark = await gxApiJson<ConsoleBookmark>(
+      user._id,
+      `/bookmarks/${encodeURIComponent(bookmarkId)}?include_payload=1`,
+    );
+    if (!bookmark.payload) {
       return Response.json(
         { error: "Bookmark not found or missing payload. Run gx pr to sync." },
         { status: 404 },
       );
     }
 
+    const chatContext = prChatContextFromBookmark(
+      bookmark,
+      bookmark.payload,
+      body.pins ?? [],
+    );
+
     const response = await fetchAuthAction(api.prChatActions.sendMessage, {
       bookmarkId,
       message: body.message,
       history: body.history ?? [],
       pins: body.pins,
-      payload: bookmark.payload,
-      repoFullName: bookmark.repoFullName,
-      branchName: bookmark.branchName,
-      title: bookmark.title,
+      repoFullName: chatContext.repoFullName,
+      branchName: chatContext.branchName,
+      title: chatContext.title,
+      prChatContext: chatContext.prChatContext,
     });
 
     return Response.json(response);
