@@ -25,6 +25,7 @@ type ReviewWorkspaceBookmark = {
   title?: string;
   revision: number;
   payload?: unknown;
+  payloadSourceBookmarkId?: string | null;
 };
 
 type PrReviewWorkspaceValue = {

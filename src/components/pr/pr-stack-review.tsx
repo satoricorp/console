@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
@@ -55,7 +55,7 @@ function ChangeReviewEditor({
     setSaveError(null);
     try {
       await onSave({
-        approvalPercent,
+        approvalPercent: Math.round(approvalPercent),
         notes: notes.trim() ? notes.trim() : undefined,
       });
     } catch (error) {
@@ -131,15 +131,65 @@ function ChangeReviewEditor({
   );
 }
 
+type SavedChangeReview = {
+  jjChangeId: string;
+  stackIndex: number;
+  approvalPercent: number;
+  notes?: string;
+  updatedAtMs: number;
+};
+
 export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const { bookmark, selectChange } = usePrReviewWorkspace();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const savedReviews = useQuery(api.gxChangeReviews.listChangeReviews, {
-    bookmarkId: bookmark.id,
-  });
+  const reviewBookmarkId = bookmark.payloadSourceBookmarkId ?? bookmark.id;
+  const useLocalReviews = shouldUseLocalBookmarkApi();
+  const [localReviewState, setLocalReviewState] = useState<{
+    bookmarkId: string;
+    reviews: SavedChangeReview[];
+  } | null>(null);
+  const convexReviews = useQuery(
+    api.gxChangeReviews.listChangeReviews,
+    useLocalReviews ? "skip" : { bookmarkId: reviewBookmarkId },
+  );
   const upsertReview = useMutation(api.gxChangeReviews.upsertChangeReview);
+
+  const reloadLocalReviews = useCallback(async () => {
+    const response = await fetch(
+      `/api/bookmarks/${encodeURIComponent(reviewBookmarkId)}/change-reviews`,
+      { credentials: "include" },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? "Failed to load change reviews.");
+    }
+    const reviews = (await response.json()) as SavedChangeReview[];
+    setLocalReviewState({ bookmarkId: reviewBookmarkId, reviews });
+    return reviews;
+  }, [reviewBookmarkId]);
+
+  useEffect(() => {
+    if (!useLocalReviews) {
+      return;
+    }
+    let cancelled = false;
+    void reloadLocalReviews().catch(() => {
+      if (!cancelled) {
+        setLocalReviewState({ bookmarkId: reviewBookmarkId, reviews: [] });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadLocalReviews, reviewBookmarkId, useLocalReviews]);
+
+  const savedReviews = useLocalReviews
+    ? localReviewState?.bookmarkId === reviewBookmarkId
+      ? localReviewState.reviews
+      : undefined
+    : convexReviews;
 
   const changes = useMemo(
     () => extractStackChanges(bookmark.payload),
@@ -318,19 +368,21 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
           }
           initialNotes={selectedReview?.notes ?? ""}
           onSave={async (review) => {
-            if (shouldUseLocalBookmarkApi()) {
+            const reviewPayload = {
+              jjChangeId: selectedChange.jjChangeId,
+              stackIndex: selectedChange.stackIndex,
+              approvalPercent: Math.round(review.approvalPercent),
+              notes: review.notes,
+            };
+
+            if (useLocalReviews) {
               const response = await fetch(
-                `/api/bookmarks/${encodeURIComponent(bookmark.id)}/change-reviews`,
+                `/api/bookmarks/${encodeURIComponent(reviewBookmarkId)}/change-reviews`,
                 {
                   method: "POST",
                   credentials: "include",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    jjChangeId: selectedChange.jjChangeId,
-                    stackIndex: selectedChange.stackIndex,
-                    approvalPercent: review.approvalPercent,
-                    notes: review.notes,
-                  }),
+                  body: JSON.stringify(reviewPayload),
                 },
               );
               if (!response.ok) {
@@ -339,15 +391,13 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
                 } | null;
                 throw new Error(body?.error ?? "Failed to save change review.");
               }
+              await reloadLocalReviews();
               return;
             }
 
             await upsertReview({
-              bookmarkId: bookmark.id,
-              jjChangeId: selectedChange.jjChangeId,
-              stackIndex: selectedChange.stackIndex,
-              approvalPercent: review.approvalPercent,
-              notes: review.notes,
+              bookmarkId: reviewBookmarkId,
+              ...reviewPayload,
             });
           }}
         />

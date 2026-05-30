@@ -133,10 +133,11 @@ export const upsertChangeReview = mutation({
       throw new Error("Sign in required");
     }
 
+    const approvalPercent = Math.round(args.approvalPercent);
     if (
-      !Number.isInteger(args.approvalPercent) ||
-      args.approvalPercent < 0 ||
-      args.approvalPercent > 100
+      !Number.isInteger(approvalPercent) ||
+      approvalPercent < 0 ||
+      approvalPercent > 100
     ) {
       throw new Error("approvalPercent must be an integer from 0 to 100");
     }
@@ -154,7 +155,7 @@ export const upsertChangeReview = mutation({
     const saved = {
       jjChangeId: args.jjChangeId,
       stackIndex: args.stackIndex,
-      approvalPercent: args.approvalPercent,
+      approvalPercent,
       notes,
       updatedAtMs,
     };
@@ -169,7 +170,7 @@ export const upsertChangeReview = mutation({
         bookmarkId: args.bookmarkId,
         jjChangeId: args.jjChangeId,
         stackIndex: args.stackIndex,
-        approvalPercent: args.approvalPercent,
+        approvalPercent,
         notes: notes ?? null,
         updatedAtMs,
       },

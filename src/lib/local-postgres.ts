@@ -172,6 +172,49 @@ export async function resolveBookmarkIdForEvent(
   return rows[0]?.id ?? null;
 }
 
+export async function listChangeReviewsForUser(
+  userId: string,
+  bookmarkId: string,
+): Promise<
+  Array<{
+    jjChangeId: string;
+    stackIndex: number;
+    approvalPercent: number;
+    notes?: string;
+    updatedAtMs: number;
+  }>
+> {
+  const db = getLocalSql();
+  const rows = await db<
+    {
+      jj_change_id: string;
+      stack_index: number;
+      approval_percent: number;
+      notes: string | null;
+      updated_at_ms: string;
+    }[]
+  >`
+    SELECT
+      jj_change_id,
+      stack_index,
+      approval_percent,
+      notes,
+      updated_at_ms
+    FROM gx_change_reviews
+    WHERE user_id = ${userId}
+      AND bookmark_id = ${bookmarkId}
+    ORDER BY stack_index ASC
+  `;
+
+  return rows.map((row) => ({
+    jjChangeId: row.jj_change_id,
+    stackIndex: row.stack_index,
+    approvalPercent: row.approval_percent,
+    notes: row.notes ?? undefined,
+    updatedAtMs: Number(row.updated_at_ms),
+  }));
+}
+
 export async function upsertChangeReviewForUser(
   userId: string,
   bookmarkId: string,
