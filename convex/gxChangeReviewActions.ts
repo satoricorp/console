@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import postgres from "postgres";
 import { internalAction } from "./_generated/server";
+import { isLocalPostgresDatabaseUrl } from "./lib/postgresEnv";
 
 function getSql() {
   const url = process.env.DATABASE_URL;
@@ -24,6 +25,10 @@ export const syncReviewToPostgres = internalAction({
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
+    if (isLocalPostgresDatabaseUrl()) {
+      return null;
+    }
+
     const sql = getSql();
     try {
       const bookmark = await sql<{ id: string }[]>`

@@ -172,6 +172,149 @@ export async function resolveBookmarkIdForEvent(
   return rows[0]?.id ?? null;
 }
 
+export async function upsertChangeReviewForUser(
+  userId: string,
+  bookmarkId: string,
+  review: {
+    jjChangeId: string;
+    stackIndex: number;
+    approvalPercent: number;
+    notes?: string;
+  },
+): Promise<{
+  jjChangeId: string;
+  stackIndex: number;
+  approvalPercent: number;
+  notes?: string;
+  updatedAtMs: number;
+}> {
+  const db = getLocalSql();
+  const updatedAtMs = Date.now();
+  const notes = review.notes?.trim() ? review.notes.trim() : null;
+
+  await db`
+    INSERT INTO gx_change_reviews (
+      user_id,
+      bookmark_id,
+      jj_change_id,
+      stack_index,
+      approval_percent,
+      notes,
+      created_at_ms,
+      updated_at_ms
+    ) VALUES (
+      ${userId},
+      ${bookmarkId},
+      ${review.jjChangeId},
+      ${review.stackIndex},
+      ${review.approvalPercent},
+      ${notes},
+      ${updatedAtMs},
+      ${updatedAtMs}
+    )
+    ON CONFLICT (user_id, bookmark_id, jj_change_id)
+    DO UPDATE SET
+      stack_index = EXCLUDED.stack_index,
+      approval_percent = EXCLUDED.approval_percent,
+      notes = EXCLUDED.notes,
+      updated_at_ms = EXCLUDED.updated_at_ms
+  `;
+
+  return {
+    jjChangeId: review.jjChangeId,
+    stackIndex: review.stackIndex,
+    approvalPercent: review.approvalPercent,
+    notes: notes ?? undefined,
+    updatedAtMs,
+  };
+}
+
+export async function updateBookmarkTitleForUser(
+  userId: string,
+  bookmarkId: string,
+  title: string,
+): Promise<{ id: string; title: string; updatedAtMs: number }> {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    throw new Error("Title is required");
+  }
+  if (nextTitle.length > 280) {
+    throw new Error("Title is too long");
+  }
+
+  const db = getLocalSql();
+  const now = Date.now();
+  const rows = await db<
+    {
+      id: string;
+      title: string;
+      updated_at_ms: string;
+    }[]
+  >`
+    UPDATE gx_bookmarks
+    SET
+      title = ${nextTitle},
+      updated_at_ms = ${now}
+    WHERE id = ${bookmarkId}
+      AND user_id = ${userId}
+    RETURNING id, title, updated_at_ms
+  `;
+
+  const row = rows[0];
+  if (!row) {
+    throw new Error("Bookmark not found");
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    updatedAtMs: Number(row.updated_at_ms),
+  };
+}
+
+export async function loadBookmarkChatContext(
+  userId: string,
+  bookmarkId: string,
+): Promise<{
+  repoFullName: string;
+  branchName: string;
+  title?: string;
+  payload: unknown;
+} | null> {
+  const db = getLocalSql();
+  const rows = await db<
+    {
+      repo_full_name: string;
+      branch_name: string;
+      title: string | null;
+      payload: unknown | null;
+    }[]
+  >`
+    SELECT
+      b.repo_full_name,
+      b.branch_name,
+      b.title,
+      e.payload
+    FROM gx_bookmarks b
+    LEFT JOIN gx_pr_events e ON e.id = b.latest_event_id
+    WHERE b.id = ${bookmarkId}
+      AND b.user_id = ${userId}
+    LIMIT 1
+  `;
+
+  const row = rows[0];
+  if (!row?.payload) {
+    return null;
+  }
+
+  return {
+    repoFullName: row.repo_full_name,
+    branchName: row.branch_name,
+    title: row.title ?? undefined,
+    payload: row.payload,
+  };
+}
+
 export async function markBookmarkMergedForUser(
   userId: string,
   bookmarkId: string,

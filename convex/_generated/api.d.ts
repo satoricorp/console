@@ -29,6 +29,7 @@ import type * as lib_codeStorageAdapter from "../lib/codeStorageAdapter.js";
 import type * as lib_gxPrGithub from "../lib/gxPrGithub.js";
 import type * as lib_gxPrPayload from "../lib/gxPrPayload.js";
 import type * as lib_gxStack from "../lib/gxStack.js";
+import type * as lib_postgresEnv from "../lib/postgresEnv.js";
 import type * as lib_prChat_generateChatResponse from "../lib/prChat/generateChatResponse.js";
 import type * as lib_prChatContext from "../lib/prChatContext.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
@@ -81,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gxPrGithub": typeof lib_gxPrGithub;
   "lib/gxPrPayload": typeof lib_gxPrPayload;
   "lib/gxStack": typeof lib_gxStack;
+  "lib/postgresEnv": typeof lib_postgresEnv;
   "lib/prChat/generateChatResponse": typeof lib_prChat_generateChatResponse;
   "lib/prChatContext": typeof lib_prChatContext;
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
