@@ -4,81 +4,10 @@ import {
   internalQuery,
   mutation,
   query,
-  type MutationCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import { hashToken } from "./gxAuthUtils";
 import { repoFullNameFromPayload } from "./lib/gxPrPayload";
-
-const mergeStatusValidator = v.union(
-  v.literal("open"),
-  v.literal("merged"),
-  v.literal("closed"),
-);
-
-const bookmarkInputValidator = {
-  postgresBookmarkId: v.string(),
-  latestEventId: v.string(),
-  repoFullName: v.string(),
-  branchName: v.string(),
-  title: v.optional(v.string()),
-  revision: v.number(),
-  mergeStatus: mergeStatusValidator,
-  githubPrUrl: v.optional(v.string()),
-  githubPrNumber: v.optional(v.number()),
-  headCommitId: v.optional(v.string()),
-  remoteHeadSha: v.optional(v.string()),
-  updatedAt: v.number(),
-};
-
-async function upsertBookmark(
-  ctx: MutationCtx,
-  userId: string,
-  bookmark: {
-    postgresBookmarkId: string;
-    latestEventId: string;
-    repoFullName: string;
-    branchName: string;
-    title?: string;
-    revision: number;
-    mergeStatus: "open" | "merged" | "closed";
-    githubPrUrl?: string;
-    githubPrNumber?: number;
-    headCommitId?: string;
-    remoteHeadSha?: string;
-    updatedAt: number;
-  },
-) {
-  const existing = await ctx.db
-    .query("gxBookmarks")
-    .withIndex("by_userId_postgresBookmarkId", (q) =>
-      q.eq("userId", userId).eq("postgresBookmarkId", bookmark.postgresBookmarkId),
-    )
-    .first();
-
-  const nextFields = {
-    userId,
-    postgresBookmarkId: bookmark.postgresBookmarkId,
-    latestEventId: bookmark.latestEventId,
-    repoFullName: bookmark.repoFullName,
-    branchName: bookmark.branchName,
-    title: bookmark.title,
-    revision: bookmark.revision,
-    mergeStatus: bookmark.mergeStatus,
-    githubPrUrl: bookmark.githubPrUrl,
-    githubPrNumber: bookmark.githubPrNumber,
-    headCommitId: bookmark.headCommitId,
-    remoteHeadSha: bookmark.remoteHeadSha,
-    updatedAt: bookmark.updatedAt,
-  };
-
-  if (existing) {
-    await ctx.db.patch(existing._id, nextFields);
-    return;
-  }
-
-  await ctx.db.insert("gxBookmarks", nextFields);
-}
 
 export const ingestPush = internalMutation({
   args: {
@@ -97,7 +26,7 @@ export const ingestPush = internalMutation({
   },
 });
 
-/** Called by gx-cloud after Postgres ingest; auth = valid `gx pr` CLI bearer token. */
+/** Legacy webhook path; Postgres is the source of truth for PR bookmarks. */
 export const ingestCliPush = mutation({
   args: {
     token: v.string(),
@@ -147,49 +76,6 @@ export const ingestDevPush = mutation({
   },
 });
 
-/** Called by gx-cloud after Postgres bookmark upsert; auth = valid `gx pr` CLI bearer token. */
-export const ingestCliBookmark = mutation({
-  args: {
-    token: v.string(),
-    bookmark: v.object(bookmarkInputValidator),
-  },
-  returns: v.null(),
-  handler: async (ctx, { token, bookmark }) => {
-    const tokenHash = await hashToken(token);
-    const session = await ctx.db
-      .query("gxCliSessions")
-      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-      .first();
-
-    if (!session || session.revokedAt) {
-      throw new Error("Unauthorized");
-    }
-
-    await upsertBookmark(ctx, session.userId, bookmark);
-    return null;
-  },
-});
-
-/** Local gx-cloud dev bookmark index updates (GX_CLOUD_API_KEY + GX_WEBHOOK_SECRET). */
-export const ingestDevBookmark = mutation({
-  args: {
-    devSecret: v.string(),
-    userId: v.string(),
-    sessionId: v.optional(v.string()),
-    bookmark: v.object(bookmarkInputValidator),
-  },
-  returns: v.null(),
-  handler: async (ctx, { devSecret, userId, bookmark }) => {
-    const expected = process.env.GX_WEBHOOK_SECRET;
-    if (!expected || devSecret !== expected) {
-      throw new Error("Unauthorized");
-    }
-
-    await upsertBookmark(ctx, userId, bookmark);
-    return null;
-  },
-});
-
 export const listMyPushes = query({
   args: {},
   handler: async (ctx) => {
@@ -213,261 +99,6 @@ export const listMyPushes = query({
   },
 });
 
-export const listMyBookmarks = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      id: v.id("gxBookmarks"),
-      postgresBookmarkId: v.string(),
-      latestEventId: v.string(),
-      repoFullName: v.string(),
-      branchName: v.string(),
-      title: v.optional(v.string()),
-      revision: v.number(),
-      mergeStatus: mergeStatusValidator,
-      githubPrUrl: v.optional(v.string()),
-      githubPrNumber: v.optional(v.number()),
-      headCommitId: v.optional(v.string()),
-      remoteHeadSha: v.optional(v.string()),
-      updatedAt: v.number(),
-    }),
-  ),
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Not authenticated");
-    }
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) return [];
-
-    const bookmarks = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-
-    return bookmarks
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map((bookmark) => ({
-        id: bookmark._id,
-        postgresBookmarkId: bookmark.postgresBookmarkId,
-        latestEventId: bookmark.latestEventId,
-        repoFullName: bookmark.repoFullName,
-        branchName: bookmark.branchName,
-        title: bookmark.title,
-        revision: bookmark.revision,
-        mergeStatus: bookmark.mergeStatus,
-        githubPrUrl: bookmark.githubPrUrl,
-        githubPrNumber: bookmark.githubPrNumber,
-        headCommitId: bookmark.headCommitId,
-        remoteHeadSha: bookmark.remoteHeadSha,
-        updatedAt: bookmark.updatedAt,
-      }));
-  },
-});
-
-const consoleBookmarkShape = {
-  id: v.string(),
-  repoFullName: v.string(),
-  branchName: v.string(),
-  title: v.optional(v.string()),
-  revision: v.number(),
-  latestEventId: v.string(),
-  headCommitId: v.optional(v.string()),
-  githubPrUrl: v.optional(v.string()),
-  githubPrNumber: v.optional(v.number()),
-  remoteHeadSha: v.optional(v.string()),
-  mergeStatus: mergeStatusValidator,
-  updatedAtMs: v.number(),
-};
-
-/** Resolve Postgres bookmark id for a review event (no DATABASE_URL required). */
-export const getBookmarkIdForEvent = query({
-  args: {
-    eventId: v.string(),
-  },
-  returns: v.union(v.null(), v.string()),
-  handler: async (ctx, { eventId }) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in required");
-    }
-
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_latestEventId", (q) =>
-        q.eq("userId", user._id).eq("latestEventId", eventId),
-      )
-      .first();
-
-    return bookmark?.postgresBookmarkId ?? null;
-  },
-});
-
-/** Console sidebar list; id is the Postgres bookmark uuid. */
-export const listConsoleBookmarks = query({
-  args: {
-    mergeStatus: v.optional(mergeStatusValidator),
-  },
-  returns: v.array(v.object(consoleBookmarkShape)),
-  handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in required");
-    }
-
-    let bookmarks = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .collect();
-
-    if (args.mergeStatus) {
-      bookmarks = bookmarks.filter(
-        (bookmark) => bookmark.mergeStatus === args.mergeStatus,
-      );
-    }
-
-    return bookmarks
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map((bookmark) => ({
-        id: bookmark.postgresBookmarkId,
-        repoFullName: bookmark.repoFullName,
-        branchName: bookmark.branchName,
-        title: bookmark.title,
-        revision: bookmark.revision,
-        latestEventId: bookmark.latestEventId,
-        headCommitId: bookmark.headCommitId,
-        githubPrUrl: bookmark.githubPrUrl,
-        githubPrNumber: bookmark.githubPrNumber,
-        remoteHeadSha: bookmark.remoteHeadSha,
-        mergeStatus: bookmark.mergeStatus,
-        updatedAtMs: bookmark.updatedAt,
-      }));
-  },
-});
-
-export const getConsoleBookmarkDetail = query({
-  args: {
-    bookmarkId: v.string(),
-  },
-  returns: v.union(v.null(), v.object(consoleBookmarkShape)),
-  handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in required");
-    }
-
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q.eq("userId", user._id).eq("postgresBookmarkId", args.bookmarkId),
-      )
-      .first();
-
-    if (!bookmark) {
-      return null;
-    }
-
-    return {
-      id: bookmark.postgresBookmarkId,
-      repoFullName: bookmark.repoFullName,
-      branchName: bookmark.branchName,
-      title: bookmark.title,
-      revision: bookmark.revision,
-      latestEventId: bookmark.latestEventId,
-      headCommitId: bookmark.headCommitId,
-      githubPrUrl: bookmark.githubPrUrl,
-      githubPrNumber: bookmark.githubPrNumber,
-      remoteHeadSha: bookmark.remoteHeadSha,
-      mergeStatus: bookmark.mergeStatus,
-      updatedAtMs: bookmark.updatedAt,
-    };
-  },
-});
-
-export const updateConsoleBookmarkTitle = mutation({
-  args: {
-    bookmarkId: v.string(),
-    title: v.string(),
-  },
-  returns: v.object({
-    id: v.string(),
-    title: v.string(),
-    updatedAtMs: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      throw new Error("Sign in required");
-    }
-
-    const nextTitle = args.title.trim();
-    if (!nextTitle) {
-      throw new Error("Title is required");
-    }
-    if (nextTitle.length > 280) {
-      throw new Error("Title is too long");
-    }
-
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q.eq("userId", user._id).eq("postgresBookmarkId", args.bookmarkId),
-      )
-      .first();
-
-    if (!bookmark) {
-      throw new Error("Bookmark not found");
-    }
-
-    const updatedAt = Date.now();
-    await ctx.db.patch(bookmark._id, {
-      title: nextTitle,
-      updatedAt,
-    });
-
-    return {
-      id: bookmark.postgresBookmarkId,
-      title: nextTitle,
-      updatedAtMs: updatedAt,
-    };
-  },
-});
-
-export const purgeConsoleBookmark = internalMutation({
-  args: {
-    userId: v.string(),
-    postgresBookmarkId: v.string(),
-  },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_postgresBookmarkId", (q) =>
-        q
-          .eq("userId", args.userId)
-          .eq("postgresBookmarkId", args.postgresBookmarkId),
-      )
-      .first();
-
-    if (bookmark) {
-      await ctx.db.delete(bookmark._id);
-    }
-
-    const reviews = await ctx.db
-      .query("gxChangeReviews")
-      .withIndex("by_userId_bookmarkId", (q) =>
-        q.eq("userId", args.userId).eq("bookmarkId", args.postgresBookmarkId),
-      )
-      .collect();
-
-    for (const review of reviews) {
-      await ctx.db.delete(review._id);
-    }
-
-    return Boolean(bookmark);
-  },
-});
-
 export const getBookmarkWithPayload = internalQuery({
   args: {
     userId: v.string(),
@@ -481,7 +112,6 @@ export const getBookmarkWithPayload = internalQuery({
     }),
   ),
   handler: async () => {
-    // Full gx.pr payloads (including sessions) live in Postgres only.
     return null;
   },
 });
@@ -500,41 +130,6 @@ export const getPushForMerge = internalQuery({
       payload: push.payload,
       repoFullName: push.repoFullName,
     };
-  },
-});
-
-export const updateBookmarkMergeStatusByBranch = internalMutation({
-  args: {
-    userId: v.string(),
-    repoFullName: v.string(),
-    branchName: v.string(),
-    mergeStatus: mergeStatusValidator,
-    remoteHeadSha: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (
-    ctx,
-    { userId, repoFullName, branchName, mergeStatus, remoteHeadSha },
-  ) => {
-    const bookmark = await ctx.db
-      .query("gxBookmarks")
-      .withIndex("by_userId_repo_branch", (q) =>
-        q
-          .eq("userId", userId)
-          .eq("repoFullName", repoFullName)
-          .eq("branchName", branchName),
-      )
-      .first();
-    if (!bookmark) {
-      return null;
-    }
-
-    await ctx.db.patch(bookmark._id, {
-      mergeStatus,
-      remoteHeadSha,
-      updatedAt: Date.now(),
-    });
-    return null;
   },
 });
 

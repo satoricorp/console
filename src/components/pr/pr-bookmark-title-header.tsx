@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/button";
 import {
@@ -14,7 +14,7 @@ export function PrBookmarkTitleHeader({
 }: {
   bookmark: BookmarkDetail | null;
 }) {
-  const updateBookmarkTitle = useMutation(api.gxPr.updateConsoleBookmarkTitle);
+  const updateBookmarkTitle = useAction(api.gxBookmarkActions.updateBookmarkTitle);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(
     bookmark ? titleForBookmark(bookmark) : "",

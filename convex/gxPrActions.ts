@@ -1,7 +1,6 @@
 "use node";
 
 import { v } from "convex/values";
-import { makeFunctionReference } from "convex/server";
 import postgres from "postgres";
 import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
@@ -176,32 +175,27 @@ async function loadAuthorizedBookmarkContext(
   };
 }
 
-const updateBookmarkMergeStatusRef = makeFunctionReference<
-  "mutation",
-  {
-    userId: string;
-    repoFullName: string;
-    branchName: string;
-    mergeStatus: "open" | "merged" | "closed";
-    remoteHeadSha?: string;
-  },
-  null
->("gxPr:updateBookmarkMergeStatusByBranch");
-
 async function maybeMarkBookmarkMerged(
-  ctx: ActionCtx,
   userId: string,
-  repoFullName: string,
-  branchName: string,
+  bookmarkId: string,
   remoteHeadSha?: string,
 ) {
-  await ctx.runMutation(updateBookmarkMergeStatusRef, {
-    userId,
-    repoFullName,
-    branchName,
-    mergeStatus: "merged",
-    remoteHeadSha,
-  });
+  const sql = getSql();
+  try {
+    const now = Date.now();
+    await sql`
+      UPDATE gx_bookmarks
+      SET
+        merge_status = 'merged',
+        merged_at_ms = ${now},
+        remote_head_sha = COALESCE(${remoteHeadSha ?? null}, remote_head_sha),
+        updated_at_ms = ${now}
+      WHERE id = ${bookmarkId}
+        AND user_id = ${userId}
+    `;
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
 }
 
 function mergedSnapshotFromPull(
@@ -311,13 +305,13 @@ export const getPullRequestStatus = action({
             target.repoFullName,
             pull.head.sha,
           );
-          await maybeMarkBookmarkMerged(
-            ctx,
-            userId,
-            target.repoFullName,
-            target.headBranch,
-            pull.head.sha,
-          );
+          if (bookmarkId) {
+            await maybeMarkBookmarkMerged(
+              userId,
+              bookmarkId,
+              pull.head.sha,
+            );
+          }
           response = {
             ...response,
             message: `PR #${pull.number} was merged on GitHub.`,
@@ -444,13 +438,13 @@ export const mergePullRequest = action({
       resolution.repoFullName,
       pull,
     );
-    await maybeMarkBookmarkMerged(
-      ctx,
-      userId,
-      target.repoFullName,
-      target.headBranch,
-      result.pull.head.sha,
-    );
+    if (bookmarkId) {
+      await maybeMarkBookmarkMerged(
+        userId,
+        bookmarkId,
+        result.pull.head.sha,
+      );
+    }
 
     return {
       merged: true,
@@ -588,10 +582,8 @@ export const getPublishStatus = action({
     );
     if (status.integratedOnBase) {
       await maybeMarkBookmarkMerged(
-        ctx,
         userId,
-        target.repoFullName,
-        target.headBranch,
+        bookmarkId,
         status.remoteHeadSha ?? undefined,
       );
     }
@@ -631,10 +623,8 @@ export const landBookmark = action({
         throw new Error("Branch is integrated on base but remote SHA is unknown.");
       }
       await maybeMarkBookmarkMerged(
-        ctx,
         userId,
-        target.repoFullName,
-        target.headBranch,
+        bookmarkId,
         preflight.remoteHeadSha,
       );
       return {
@@ -659,13 +649,7 @@ export const landBookmark = action({
       baseBranch: target.baseBranch,
       knownHeadSha: preflight.remoteHeadSha,
     });
-    await maybeMarkBookmarkMerged(
-      ctx,
-      userId,
-      target.repoFullName,
-      target.headBranch,
-      result.sha,
-    );
+    await maybeMarkBookmarkMerged(userId, bookmarkId, result.sha);
 
     return {
       landed: true,

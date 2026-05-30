@@ -1,14 +1,16 @@
-import { ConvexHttpClient } from "convex/browser";
+import { fetchAuthQuery } from "@/lib/auth-server";
 import { api } from "../../../../../convex/_generated/api";
-import { getToken } from "@/lib/auth-server";
-import { loadBookmarkPayload } from "@/lib/local-postgres";
+import {
+  getBookmarkMetaForUser,
+  loadBookmarkPayload,
+} from "@/lib/local-postgres";
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const token = await getToken();
-  if (!token) {
+  const user = await fetchAuthQuery(api.auth.getAuthUser, {});
+  if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -16,25 +18,21 @@ export async function GET(
   const includePayload =
     new URL(request.url).searchParams.get("include_payload") === "1";
 
-  const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-  client.setAuth(token);
-
-  const meta = await client.query(api.gxPr.getConsoleBookmarkDetail, { bookmarkId });
-
-  if (!meta) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
-
-  if (!includePayload) {
-    return Response.json(meta);
-  }
-
   try {
+    const meta = await getBookmarkMetaForUser(user._id, bookmarkId);
+    if (!meta) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (!includePayload) {
+      return Response.json(meta);
+    }
+
     const payload = await loadBookmarkPayload(bookmarkId);
     return Response.json({ ...meta, payload: payload ?? undefined });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to load bookmark payload";
+      error instanceof Error ? error.message : "Failed to load bookmark";
     return Response.json({ error: message }, { status: 503 });
   }
 }
