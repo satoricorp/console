@@ -274,8 +274,7 @@ function BillingContent() {
             Subscriptions are not open yet
           </p>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Join the waitlist on the home page. We&apos;ll email you when billing
-            is available.
+            Billing signup is disabled. Contact support if you need access.
           </p>
         </div>
       ) : (

@@ -78,11 +78,6 @@ export default defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_sessionId", ["sessionId"]),
 
-  waitlistEmails: defineTable({
-    email: v.string(),
-    createdAt: v.number(),
-  }).index("by_email", ["email"]),
-
   repoIndexJobs: defineTable({
     fullName: v.string(),
     githubId: v.number(),
