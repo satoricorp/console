@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   closeBookmarkRequest,
   fetchBookmarkDetail,
@@ -201,15 +201,13 @@ export function usePrConsoleBookmarks({
     ready: false,
     error: null,
   });
-  const bookmarksRef = useRef(bookmarks);
-  bookmarksRef.current = bookmarks;
 
   useEffect(() => {
     if (!authReady || !selectedId) {
       setPayloadState({ bookmarkId: null, ready: false, error: null });
       return;
     }
-    if (selectedMeta === undefined || !bookmarksRef.current?.length) {
+    if (selectedMeta === undefined || !bookmarks?.length) {
       return;
     }
     if (selectedMeta === null) {
@@ -234,7 +232,7 @@ export function usePrConsoleBookmarks({
 
     void resolveReviewPayload({
       bookmark: selectedMeta,
-      bookmarks: bookmarksRef.current ?? [],
+      bookmarks,
       loadPayload: loadPayloadForId,
     })
       .then((resolved) => {
@@ -268,6 +266,7 @@ export function usePrConsoleBookmarks({
     };
   }, [
     authReady,
+    bookmarks,
     selectedId,
     selectedMeta?.branchName,
     selectedMeta?.id,

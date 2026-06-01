@@ -134,6 +134,10 @@ function ChangeReviewEditor({
 }
 
 type SavedChangeReview = ChangeReviewRecord;
+type SavedReviewState = {
+  bookmarkId: string;
+  reviews: SavedChangeReview[];
+};
 
 export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const { bookmark, selectChange } = usePrReviewWorkspace();
@@ -141,28 +145,33 @@ export function PrStackReview({ stackBookmarks }: PrStackReviewProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const reviewBookmarkId = bookmark.payloadSourceBookmarkId ?? bookmark.id;
-  const [savedReviews, setSavedReviews] = useState<SavedChangeReview[] | undefined>(
-    undefined,
-  );
+  const [savedReviewState, setSavedReviewState] = useState<
+    SavedReviewState | undefined
+  >(undefined);
 
   const reloadReviews = useCallback(async () => {
     const reviews = await fetchChangeReviews(reviewBookmarkId);
-    setSavedReviews(reviews);
+    setSavedReviewState({ bookmarkId: reviewBookmarkId, reviews });
     return reviews;
   }, [reviewBookmarkId]);
 
   useEffect(() => {
     let cancelled = false;
-    setSavedReviews(undefined);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reloadReviews().catch(() => {
       if (!cancelled) {
-        setSavedReviews([]);
+        setSavedReviewState({ bookmarkId: reviewBookmarkId, reviews: [] });
       }
     });
     return () => {
       cancelled = true;
     };
   }, [reloadReviews, reviewBookmarkId]);
+
+  const savedReviews =
+    savedReviewState?.bookmarkId === reviewBookmarkId
+      ? savedReviewState.reviews
+      : undefined;
 
   const changes = useMemo(
     () => extractStackChanges(bookmark.payload),
