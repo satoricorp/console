@@ -2,9 +2,7 @@
 
 This CDK app lives in the private Console repo. It deploys the Hono server in
 `server/` to ECS/Fargate with private RDS Postgres, an ALB, Route 53 records,
-and Bedrock access through the ECS task role. It also serves the macOS app ZIP
-from `https://download.<domain>/GX-macOS.zip` through CloudFront and a private
-S3 bucket.
+and Bedrock access through the ECS task role.
 
 ## Local Bedrock Setup
 
@@ -53,7 +51,7 @@ In ECS, the same SDK path picks up task-role credentials automatically.
 
 1. Create or choose a Route 53 public hosted zone for `<domain>`.
 2. In Spaceship, set the domain nameservers to the Route 53 hosted zone
-   nameservers. CDK then manages the `download`, `staging`, and `api` records.
+   nameservers. CDK then manages the `staging` and `api` records.
 3. Bootstrap CDK once per AWS account/region:
 
    ```bash
@@ -62,14 +60,7 @@ In ECS, the same SDK path picks up task-role credentials automatically.
    AWS_PROFILE=gx-local AWS_REGION=us-east-1 bun run cdk bootstrap -c domainName=<domain>
    ```
 
-4. Deploy the download host once if you want to create it before the first
-   GitHub Actions run:
-
-   ```bash
-   AWS_PROFILE=gx-local AWS_REGION=us-east-1 bun run cdk deploy gx-downloads -c domainName=<domain>
-   ```
-
-5. For the simple GitHub Actions path, use the same IAM user's access key as
+4. For the simple GitHub Actions path, use the same IAM user's access key as
    environment secrets. OIDC can replace this later without changing the app.
 
 ## GitHub Environments
@@ -82,35 +73,24 @@ Each environment needs:
 secrets.AWS_ACCESS_KEY_ID
 secrets.AWS_SECRET_ACCESS_KEY
 secrets.CONVEX_DEPLOY_KEY   # optional; workflow skips Convex deploy when absent
-secrets.GX_SOURCE_TOKEN      # optional; only needed while the GX source repo is private
 vars.AWS_REGION             # use us-east-1 for this app
 vars.DOMAIN_NAME            # bare domain, for example example.com
-vars.GX_SOURCE_REPOSITORY   # optional; defaults to satoricorp/gx
-vars.GX_SOURCE_REF          # optional; defaults to main for push deploys
-vars.GX_GITHUB_CLIENT_ID    # public GitHub OAuth client ID baked into release builds
-vars.GX_CONVEX_SITE_URL     # Convex HTTP site URL baked into release builds
-vars.GX_CLOUD_URL           # deployed server origin baked into release builds
 ```
 
 If you later create a GitHub OIDC role, set `secrets.AWS_ROLE_TO_ASSUME`; the
 workflow will prefer OIDC and ignore the access-key secrets.
 
-Use `us-east-1` for this CDK app. The download host uses CloudFront, and its
-ACM certificate must be issued in `us-east-1`.
+Use `us-east-1` for this CDK app.
 
 The workflow file is `.github/workflows/deploy.yaml`.
 
 ## First Deploy
 
 1. Run the `Deploy` workflow manually for `staging`.
-2. The workflow checks out the GX source repo into `gx-src`, builds
-   `apps/menubar/dist/GX-macOS.zip` on a macOS runner, creates
-   `gx-server-staging` in ECR if missing, pushes the Docker image as both the
-   commit SHA and `staging`, deploys `gx-downloads` and
-   `gx-server-staging` with CDK, uploads the macOS ZIP to
-   `https://download.<domain>/GX-macOS.zip`, runs migrations as a one-off
-   Fargate task, rolls the ECS service, and smoke-tests
-   `https://staging.<domain>/health`.
+2. The workflow creates `gx-server-staging` in ECR if missing, pushes the Docker
+   image as both the commit SHA and `staging`, deploys `gx-server-staging` with
+   CDK, runs migrations as a one-off Fargate task, rolls the ECS service, and
+   smoke-tests `https://staging.<domain>/health`.
 3. Update the generated app secret before using the API:
 
    ```bash
@@ -131,8 +111,7 @@ The workflow file is `.github/workflows/deploy.yaml`.
 
 - The ECS task role allows `bedrock:InvokeModel` and
   `bedrock:InvokeModelWithResponseStream` for the hardcoded Sonnet model.
-- `download.<domain>` serves the latest uploaded `GX-macOS.zip`; the API
-  remains on `staging.<domain>` and `api.<domain>`.
+- The API remains on `staging.<domain>` and `api.<domain>`.
 - RDS is private and only reachable from the ECS service security group.
 - Migrations run in GitHub Actions by starting a one-off Fargate task inside the
   VPC; GitHub-hosted runners never connect directly to RDS.

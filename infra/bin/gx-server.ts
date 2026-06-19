@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
-import { GxDownloadsStack } from "../lib/gx-downloads-stack.js";
 import { GxServerStack } from "../lib/gx-server-stack.js";
 
 const app = new cdk.App();
@@ -14,11 +13,6 @@ const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
 };
-
-new GxDownloadsStack(app, "gx-downloads", {
-  env,
-  domainName,
-});
 
 new GxServerStack(app, "gx-server-staging", {
   env,
