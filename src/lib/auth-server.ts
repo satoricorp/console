@@ -2,9 +2,9 @@ import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
 
 export const {
   handler,
-  getToken,
-  isAuthenticated,
   preloadAuthQuery,
+  isAuthenticated,
+  getToken,
   fetchAuthQuery,
   fetchAuthMutation,
   fetchAuthAction,

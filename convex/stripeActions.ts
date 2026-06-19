@@ -22,13 +22,7 @@ function requireEnv(name: string) {
   return value;
 }
 
-function getTrialDays() {
-  const raw = process.env.STRIPE_TRIAL_DAYS;
-  if (!raw) return 14;
-  const days = Number.parseInt(raw, 10);
-  if (!Number.isFinite(days) || days < 1 || days > 730) return 14;
-  return days;
-}
+const FREE_REVIEW_LIMIT = 3;
 
 function assertStripeSignupEnabled() {
   if (process.env.STRIPE_SIGNUP_ENABLED !== "true") {
@@ -172,7 +166,7 @@ export const getBillingDetails = action({
       }
     }
 
-    return { plan, paymentMethod, trialDays: getTrialDays() };
+    return { plan, paymentMethod, freeReviewLimit: FREE_REVIEW_LIMIT };
   },
 });
 
@@ -191,7 +185,7 @@ export const getStripeElementsConfig = action({
 
     return {
       currency: price.currency,
-      trialDays: getTrialDays(),
+      freeReviewLimit: FREE_REVIEW_LIMIT,
     };
   },
 });
@@ -202,7 +196,7 @@ export const createTrialSetupIntent = action({
     assertStripeSignupEnabled();
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
-      throw new Error("Sign in to start your trial");
+      throw new Error("Sign in to start Pro");
     }
 
     const stripe = getStripe();
@@ -223,7 +217,7 @@ export const createTrialSetupIntent = action({
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
       payment_method_types: ["card"],
-      metadata: { userId: user._id, purpose: "trial" },
+      metadata: { userId: user._id, purpose: "subscription" },
     });
 
     if (!setupIntent.client_secret) {
@@ -242,12 +236,11 @@ export const startTrialSubscription = action({
     assertStripeSignupEnabled();
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) {
-      throw new Error("Sign in to start your trial");
+      throw new Error("Sign in to start Pro");
     }
 
     const stripe = getStripe();
     const priceId = requireEnv("STRIPE_PRICE_ID");
-    const trialDays = getTrialDays();
     const customerId = await getOrCreateStripeCustomer(ctx, stripe, {
       _id: user._id,
       email: user.email,
@@ -296,7 +289,6 @@ export const startTrialSubscription = action({
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
-      trial_period_days: trialDays,
       default_payment_method: paymentMethodId,
       payment_settings: { save_default_payment_method: "on_subscription" },
       metadata: { userId: user._id },
@@ -306,10 +298,6 @@ export const startTrialSubscription = action({
 
     return {
       status: subscription.status,
-      trialEnd: subscription.trial_end
-        ? subscription.trial_end * 1000
-        : undefined,
-      trialDays,
     };
   },
 });

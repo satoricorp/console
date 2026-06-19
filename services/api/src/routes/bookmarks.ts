@@ -1,7 +1,9 @@
 import { Hono, type Context } from "hono";
 import { getSql } from "../db";
+import { loadFullPayload } from "../gx-payload-store";
 import type { AppEnv } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
+import type { PushBundle } from "../types";
 import {
   type BookmarkRow,
   serializeBookmark,
@@ -282,8 +284,11 @@ bookmarksRoutes.get("/:id", async (c) => {
     if (!row) {
       return c.json({ error: "Not found" }, 404);
     }
+    const payload = row.event_payload
+      ? await loadFullPayload(db, row.latest_event_id, row.event_payload as PushBundle)
+      : undefined;
     return respondBookmark(c, row, {
-      payload: row.event_payload ?? undefined,
+      payload,
     });
   }
 

@@ -48,6 +48,7 @@ import type * as searchActions from "../searchActions.js";
 import type * as stripeActions from "../stripeActions.js";
 import type * as stripeUrls from "../stripeUrls.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
+import type * as userAppState from "../userAppState.js";
 
 import type {
   ApiFromModules,
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   stripeActions: typeof stripeActions;
   stripeUrls: typeof stripeUrls;
   stripeWebhookActions: typeof stripeWebhookActions;
+  userAppState: typeof userAppState;
 }>;
 
 /**

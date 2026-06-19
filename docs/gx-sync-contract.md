@@ -22,7 +22,7 @@ Convex is **not** part of the sync path. The CLI talks to gx-cloud API (Postgres
 1. Every successful publish or server-side mutation bumps `gx_bookmarks.revision`.
 2. `gx sync` stores the last seen revision per bookmark locally (gx.db).
 3. When `remote_revision > local_revision`, the client fetches bookmark metadata and applies catch-up steps below.
-4. Full event payloads are fetched on demand (`GET /bookmarks/:id?include_payload=1`), not on every sync poll.
+4. Full event payloads are fetched on demand (`GET /v1/bookmarks/:id?include_payload=1`), not on every sync poll.
 
 ## Local jj catch-up
 
@@ -39,14 +39,14 @@ If GX Cloud applied server-side jj ops (Phase 4 worker), the client pulls the ne
 
 Until server jj is production-ready:
 
-- **Publish:** `gx pr` → `POST /gx/pr` → append event + upsert bookmark + slim Convex sync
+- **Publish:** `gx pr` → `POST /v1/publish` → append event + upsert bookmark
 - **Sync:** metadata only; no automatic full payload download unless revision changed
 
 Console structural saves will queue jj-worker jobs in Phase 4; until then Console remains read-only for stack edits.
 
 Implemented path (dev):
 
-- `POST /bookmarks/:id/apply` on gx-cloud API (authenticated)
+- `POST /v1/bookmarks/:id/apply` on gx-cloud API (authenticated)
 - Proxies to `jj-worker POST /apply` with service key
 - Worker runs jj ops, pushes bookmark, bumps Postgres `revision` and `remote_head_sha`
 
@@ -60,7 +60,7 @@ Conflict resolution (divergent local jj vs server revision, concurrent edits) is
 | ------ | ------ | --------------- | ------------------ |
 | `open` | default on publish | shown | yes, when revision advances |
 | `merged` | Console merge bar / GitHub merge detection | hidden (toggle **Merged**) | skipped |
-| `closed` | Console **Archive** or `POST /bookmarks/:id/close` | hidden (toggle **Merged**) | skipped |
+| `closed` | Console **Archive** or `POST /v1/bookmarks/:id/close` | hidden (toggle **Merged**) | skipped |
 
 Rules:
 

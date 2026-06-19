@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getSql } from "../db";
+import { loadFullPayload } from "../gx-payload-store";
 import type { AppEnv } from "../middleware/auth";
 import { canAccessEvent, requireAuth } from "../middleware/auth";
 import type { GxPrEventRow, PushBundle } from "../types";
@@ -77,7 +78,8 @@ eventsRoutes.get("/latest", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  return c.json(serializeEvent({ ...row, payload: row.payload as PushBundle }));
+  const payload = await loadFullPayload(db, row.id, row.payload as PushBundle);
+  return c.json(serializeEvent({ ...row, payload }));
 });
 
 eventsRoutes.get("/:id", async (c) => {
@@ -101,5 +103,6 @@ eventsRoutes.get("/:id", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
-  return c.json(serializeEvent({ ...row, payload: row.payload as PushBundle }));
+  const payload = await loadFullPayload(db, row.id, row.payload as PushBundle);
+  return c.json(serializeEvent({ ...row, payload }));
 });

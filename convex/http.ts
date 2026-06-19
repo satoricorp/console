@@ -3,23 +3,12 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
 
-import { repoFullNameFromPayload } from "./lib/gxPrPayload";
-
-function repoFullNameFromBody(body: Record<string, unknown>): string | undefined {
-  if (typeof body.repoFullName === "string") return body.repoFullName;
-  const fromPayload = repoFullNameFromPayload(body);
-  if (fromPayload) return fromPayload;
-  const payload = body.payload;
-  if (payload !== undefined) return repoFullNameFromPayload(payload);
-  return undefined;
-}
-
 const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth);
 
 http.route({
-  path: "/stripe/webhook",
+  path: "/cx/stripe/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const signature = request.headers.get("stripe-signature");
@@ -44,7 +33,7 @@ http.route({
 });
 
 http.route({
-  path: "/github/webhook",
+  path: "/cx/github/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const signature = request.headers.get("x-hub-signature-256");
@@ -75,7 +64,7 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/complete",
+  path: "/cx/auth/complete",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     let body: {
@@ -116,7 +105,7 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/revoke",
+  path: "/cx/auth/revoke",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const authHeader = request.headers.get("authorization");
@@ -131,72 +120,6 @@ http.route({
 
     await ctx.runMutation(api.gxAuth.revokeCliToken, { token });
     return new Response(null, { status: 204 });
-  }),
-});
-
-http.route({
-  path: "/gx/pr",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const secret = process.env.GX_WEBHOOK_SECRET;
-    const provided =
-      request.headers.get("x-gx-webhook-secret") ??
-      request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-
-    if (!secret || provided !== secret) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    let body: Record<string, unknown>;
-    try {
-      body = (await request.json()) as Record<string, unknown>;
-    } catch {
-      return new Response("Invalid JSON body", { status: 400 });
-    }
-
-    const sessionId =
-      typeof body.sessionId === "string"
-        ? body.sessionId
-        : typeof body.session_id === "string"
-          ? body.session_id
-          : undefined;
-
-    let userId =
-      typeof body.userId === "string"
-        ? body.userId
-        : typeof body.user_id === "string"
-          ? body.user_id
-          : undefined;
-
-    if (!userId) {
-      const repoFullName = repoFullNameFromBody(body);
-      if (repoFullName) {
-        const resolvedUserId = await ctx.runQuery(
-          internal.gxPrHttp.findUserIdForRepo,
-          { repoFullName },
-        );
-        if (resolvedUserId) userId = resolvedUserId;
-      }
-    }
-
-    if (!userId) {
-      return new Response("Missing userId (or repo linked to a connected repo)", {
-        status: 400,
-      });
-    }
-
-    const payload =
-      body.payload !== undefined && typeof body.payload === "object"
-        ? body.payload
-        : body;
-
-    await ctx.runMutation(internal.gxPr.ingestPush, {
-      userId,
-      sessionId,
-      payload,
-    });
-
-    return Response.json({ ok: true });
   }),
 });
 

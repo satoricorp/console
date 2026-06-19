@@ -5,15 +5,19 @@ import { bookmarksRoutes } from "./routes/bookmarks";
 import { eventsRoutes } from "./routes/events";
 import { gxPrRoutes } from "./routes/gx-pr";
 import { healthRoutes } from "./routes/health";
+import { openAIRoutes } from "./routes/openai";
+import { usageRoutes } from "./routes/usage";
 
 const app = new Hono<AppEnv>();
 
 app.use(logger());
 
 app.route("/", healthRoutes);
+app.route("/gx/openai", openAIRoutes);
 app.route("/gx", gxPrRoutes);
 app.route("/events", eventsRoutes);
 app.route("/bookmarks", bookmarksRoutes);
+app.route("/usage", usageRoutes);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 

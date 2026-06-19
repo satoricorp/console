@@ -61,7 +61,7 @@ Or run a one-off Fargate task with command `node dist/migrate.js`.
 ```bash
 export GX_CONVEX_SITE_URL="https://<deployment>.convex.site"
 export GX_GITHUB_CLIENT_ID="<oauth-app-client-id>"
-export GX_CLOUD_URL="https://<alb-host>/gx/pr"
+export GX_CLOUD_URL="https://<alb-host>"
 ```
 
 Users run `gx auth login` once per machine, then `gx pr`.
@@ -74,7 +74,7 @@ Users run `gx auth login` once per machine, then `gx pr`.
 |----------|----------|-------------|
 | `DATABASE_URL` | yes | Postgres connection string |
 | `CONVEX_URL` | yes | Convex deployment URL |
-| `PORT` | no | Default `3200` |
+| `PORT` | no | Default `3201` |
 | `CONSOLE_SITE_URL` | no | Used in ingest response `url` field |
 
 ### Convex
@@ -99,4 +99,4 @@ bun run dev
 
 Set `DATABASE_URL` in Convex for local review pages too.
 
-Health check: `curl http://localhost:3200/health`
+Health check: `curl http://localhost:3201/health`

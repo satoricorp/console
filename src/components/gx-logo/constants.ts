@@ -28,6 +28,12 @@ type ContainerConfig = {
   widthRem: number;
   heightRem: number;
   maxWidthRem?: number;
+  /** Left-align the mark inside the canvas (footer). */
+  markAlign?: "center" | "start";
+  /** Nudge canvas horizontally (rem) after alignment — negative pulls left. */
+  markInsetXRem?: number;
+  /** Shift mark right inside the scene to avoid clipping bevels on the left. */
+  markSceneOffsetX?: number;
 };
 
 export type LogoVariantConfig = ContainerConfig & {
@@ -82,6 +88,19 @@ export const LOGO_VARIANTS = {
     1.88,
     GX_HEADER_MESH_PATH,
   ),
+  footer: defineVariant(
+    {
+      widthRem: 4,
+      heightRem: 1.5,
+      markAlign: "start",
+      markInsetXRem: 0,
+      markSceneOffsetX: 0.08,
+    },
+    { position: [0, 0, 2.55], fov: 28 },
+    1.22,
+    1.78,
+    GX_HEADER_MESH_PATH,
+  ),
   /** Square export — full gx mark with padding so letters are not clipped. */
   icon: defineVariant(
     { widthRem: 1, heightRem: 1 },
@@ -110,6 +129,8 @@ export const LOGO_VARIANTS = {
 } as const satisfies Record<string, LogoVariantConfig>;
 
 export type LogoVariant = keyof typeof LOGO_VARIANTS;
+
+export type LogoTone = "chrome" | "graphite";
 
 /** Icon export / design preview — 1024 matches capture output; 4096 cubemap was ~400MB per canvas. */
 export const ICON_ENVIRONMENT_RESOLUTION = 1024;

@@ -1,9 +1,22 @@
 import "server-only";
 
 const CONSOLE_QUERY = "format=console";
+const DEFAULT_GX_CLOUD_URL = "http://localhost:3201";
 
 export function getGxApiBaseUrl(): string {
-  return process.env.GX_CLOUD_API_URL?.replace(/\/$/, "") ?? "http://localhost:3200";
+  return (process.env.GX_CLOUD_URL?.trim() || DEFAULT_GX_CLOUD_URL).replace(/\/+$/, "");
+}
+
+export function normalizeGxApiPath(path: string): string {
+  const trimmed = path.trim();
+  if (trimmed.startsWith("/v1/")) return trimmed;
+  if (trimmed === "/bookmarks" || trimmed.startsWith("/bookmarks?")) {
+    return `/v1${trimmed}`;
+  }
+  if (trimmed.startsWith("/bookmarks/")) {
+    return `/v1${trimmed}`;
+  }
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
 export async function gxApiRequest(
@@ -16,8 +29,9 @@ export async function gxApiRequest(
     throw new Error("GX_CLOUD_API_KEY is not set");
   }
 
-  const separator = path.includes("?") ? "&" : "?";
-  const url = `${getGxApiBaseUrl()}${path}${separator}${CONSOLE_QUERY}`;
+  const normalizedPath = normalizeGxApiPath(path);
+  const separator = normalizedPath.includes("?") ? "&" : "?";
+  const url = `${getGxApiBaseUrl()}${normalizedPath}${separator}${CONSOLE_QUERY}`;
 
   return fetch(url, {
     ...init,

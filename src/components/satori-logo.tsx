@@ -4,9 +4,14 @@ const LOGO_MASK = "url(/satori-engineering-co.png)";
 type SatoriLogoProps = {
   height?: number;
   className?: string;
+  fill?: string;
 };
 
-export function SatoriLogo({ height = 12, className }: SatoriLogoProps) {
+export function SatoriLogo({
+  height = 12,
+  className,
+  fill = "#ffffff",
+}: SatoriLogoProps) {
   const width = Math.round(LOGO_ASPECT * height);
 
   return (
@@ -18,7 +23,7 @@ export function SatoriLogo({ height = 12, className }: SatoriLogoProps) {
         display: "inline-block",
         width,
         height,
-        backgroundColor: "var(--footer-link-hover, #a360a3)",
+        backgroundColor: fill,
         WebkitMaskImage: LOGO_MASK,
         WebkitMaskSize: "100% 100%",
         WebkitMaskRepeat: "no-repeat",

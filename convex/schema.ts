@@ -37,6 +37,13 @@ export default defineSchema({
     .index("by_stripeSubscriptionId", ["stripeSubscriptionId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"]),
 
+  userAppStates: defineTable({
+    userId: v.string(),
+    createdAt: v.number(),
+    downloadScreenCompletedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_userId", ["userId"]),
+
   connectedRepos: defineTable({
     userId: v.string(),
     githubId: v.number(),

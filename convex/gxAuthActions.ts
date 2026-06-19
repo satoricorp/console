@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { generateCliToken } from "./gxAuthUtils";
 
 type GitHubUser = {
@@ -22,6 +23,7 @@ type GitHubEmail = {
 
 type CompleteCliAuthResult = {
   token: string;
+  github_access_token?: string;
   user_id: string;
   login: string;
   session_id: Id<"gxCliSessions">;
@@ -70,52 +72,66 @@ async function resolveGithubEmail(
   return `${githubUser.id}+${githubUser.login}@users.noreply.github.com`;
 }
 
-export const completeCliAuth = action({
+const completeCliAuthArgs = {
+  githubAccessToken: v.string(),
+  machineId: v.string(),
+  machineName: v.string(),
+  gxVersion: v.optional(v.string()),
+};
+
+async function completeAuthWithGitHubToken(
+  ctx: ActionCtx,
   args: {
-    githubAccessToken: v.string(),
-    machineId: v.string(),
-    machineName: v.string(),
-    gxVersion: v.optional(v.string()),
+    githubAccessToken: string;
+    machineId: string;
+    machineName: string;
+    gxVersion?: string;
   },
-  handler: async (ctx, args): Promise<CompleteCliAuthResult> => {
-    const githubUser = await githubFetch<GitHubUser>(
-      "https://api.github.com/user",
-      args.githubAccessToken,
-    );
+): Promise<CompleteCliAuthResult> {
+  const githubUser = await githubFetch<GitHubUser>(
+    "https://api.github.com/user",
+    args.githubAccessToken,
+  );
 
-    if (typeof githubUser.id !== "number" || typeof githubUser.login !== "string") {
-      throw new Error("Invalid GitHub user profile");
-    }
+  if (typeof githubUser.id !== "number" || typeof githubUser.login !== "string") {
+    throw new Error("Invalid GitHub user profile");
+  }
 
-    const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
-    const userId = await ctx.runMutation(internal.gxAuth.ensureGithubUser, {
+  const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
+  const userId = await ctx.runMutation(internal.gxAuth.ensureGithubUser, {
+    githubUserId: githubUser.id,
+    githubLogin: githubUser.login,
+    name: githubUser.name?.trim() || githubUser.login,
+    email,
+    image: githubUser.avatar_url ?? undefined,
+    accessToken: args.githubAccessToken,
+  });
+
+  const token = generateCliToken();
+  const sessionId: Id<"gxCliSessions"> = await ctx.runMutation(
+    internal.gxAuth.finishCliLogin,
+    {
+      userId,
       githubUserId: githubUser.id,
       githubLogin: githubUser.login,
-      name: githubUser.name?.trim() || githubUser.login,
-      email,
-      image: githubUser.avatar_url ?? undefined,
-      accessToken: args.githubAccessToken,
-    });
-
-    const token = generateCliToken();
-    const sessionId: Id<"gxCliSessions"> = await ctx.runMutation(
-      internal.gxAuth.finishCliLogin,
-      {
-        userId,
-        githubUserId: githubUser.id,
-        githubLogin: githubUser.login,
-        machineId: args.machineId,
-        machineName: args.machineName,
-        gxVersion: args.gxVersion,
-        token,
-      },
-    );
-
-    return {
+      machineId: args.machineId,
+      machineName: args.machineName,
+      gxVersion: args.gxVersion,
       token,
-      user_id: userId,
-      login: githubUser.login,
-      session_id: sessionId,
-    };
+    },
+  );
+
+  return {
+    token,
+    user_id: userId,
+    login: githubUser.login,
+    session_id: sessionId,
+  };
+}
+
+export const completeCliAuth = action({
+  args: completeCliAuthArgs,
+  handler: async (ctx, args): Promise<CompleteCliAuthResult> => {
+    return completeAuthWithGitHubToken(ctx, args);
   },
 });

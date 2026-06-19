@@ -5,7 +5,7 @@ Server-side jj mutation engine for GX Cloud. Applies bookmark operations in a wa
 ## Role in GX Cloud
 
 ```text
-Console/API save → POST /bookmarks/:id/apply → jj-worker POST /apply
+Console/API save → POST /v1/bookmarks/:id/apply → jj-worker POST /apply
   → jj ops in colocated clone → jj git push --bookmark
   → Postgres revision + remote_head_sha bump → Convex slim index sync
   → local `gx sync` sees new revision and fetches remote tip
@@ -86,7 +86,7 @@ Errors: `400` invalid body, `401` auth, `404` bookmark, `409` closed bookmark / 
 Authenticated clients call the gx-cloud API instead of jj-worker directly:
 
 ```bash
-curl -X POST http://localhost:3200/bookmarks/$BOOKMARK_ID/apply \
+curl -X POST http://localhost:3201/v1/bookmarks/$BOOKMARK_ID/apply \
   -H "Authorization: Bearer $GX_CLOUD_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"ops":[{"type":"describe","changeId":"@","description":"Updated from server"}]}'

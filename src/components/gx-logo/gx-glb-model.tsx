@@ -10,14 +10,29 @@ import {
   type Mesh,
 } from "three";
 
-import { GX_HEADER_MESH_PATH, GX_MESH_PATH } from "./constants";
-import type { LogoVariantConfig } from "./constants";
+import {
+  GX_HEADER_MESH_PATH,
+  GX_MESH_PATH,
+  type LogoTone,
+  type LogoVariantConfig,
+} from "./constants";
 import { clipGeometryToGlyphX } from "./gx-mesh-glyph";
 
 /** Correct Blender export orientation until rotation is applied in Blender. */
 const BLENDER_MESH_ROTATION: [number, number, number] = [Math.PI, 0, 0];
 
-function createChromeMaterial() {
+function createChromeMaterial(tone: LogoTone = "chrome") {
+  if (tone === "graphite") {
+    return new MeshPhysicalMaterial({
+      color: "#5a6575",
+      metalness: 0.95,
+      roughness: 0.18,
+      clearcoat: 0.65,
+      clearcoatRoughness: 0.08,
+      envMapIntensity: 1.15,
+    });
+  }
+
   return new MeshPhysicalMaterial({
     color: "#e9edf7",
     metalness: 1,
@@ -30,9 +45,10 @@ function createChromeMaterial() {
 
 type GxGlbModelProps = {
   config: LogoVariantConfig;
+  tone?: LogoTone;
 };
 
-export function GxGlbModel({ config }: GxGlbModelProps) {
+export function GxGlbModel({ config, tone = "chrome" }: GxGlbModelProps) {
   const { scene } = useGLTF(config.meshPath);
   const { model, scale } = useMemo(() => {
     const clone = scene.clone(true);
@@ -85,7 +101,7 @@ export function GxGlbModel({ config }: GxGlbModelProps) {
   ]);
 
   useLayoutEffect(() => {
-    const chrome = createChromeMaterial();
+    const chrome = createChromeMaterial(tone);
     model.traverse((child) => {
       const mesh = child as Mesh;
       if (!mesh.isMesh) return;
@@ -93,13 +109,15 @@ export function GxGlbModel({ config }: GxGlbModelProps) {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
     });
-  }, [model]);
+  }, [model, tone]);
 
-  return (
-    <Center>
-      <primitive object={model} scale={scale} />
-    </Center>
-  );
+  const content = <primitive object={model} scale={scale} />;
+
+  if (config.markAlign === "start") {
+    return content;
+  }
+
+  return <Center>{content}</Center>;
 }
 
 useGLTF.preload(GX_MESH_PATH);

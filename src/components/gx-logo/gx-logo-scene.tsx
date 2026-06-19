@@ -25,6 +25,7 @@ import {
   HERO_ENVIRONMENT_RESOLUTION,
   ICON_ENVIRONMENT_RESOLUTION,
   USE_GX_LOGO_MESH,
+  type LogoTone,
   type LogoVariant,
   type LogoVariantConfig,
 } from "./constants";
@@ -35,8 +36,11 @@ const BLOB_FONT = "/fonts/Blob-Regular.typeface.json";
 
 useFont.preload(BLOB_FONT);
 
+export type { LogoTone } from "./constants";
+
 type GxLogoSceneProps = {
   variant?: LogoVariant;
+  tone?: LogoTone;
   /** When false, no mouse parallax or float — used for icon PNG export. */
   interactive?: boolean;
   /** Header: repaint on hover / ease-out only (demand frameloop). */
@@ -47,7 +51,21 @@ type GxLogoSceneProps = {
 
 const MOTION_EPS = 0.002;
 
-function SplineChrome() {
+function SplineChrome({ tone = "chrome" }: { tone?: LogoTone }) {
+  if (tone === "graphite") {
+    return (
+      <meshPhysicalMaterial
+        color="#5a6575"
+        metalness={0.95}
+        roughness={0.18}
+        clearcoat={0.65}
+        clearcoatRoughness={0.08}
+        envMapIntensity={1.15}
+        ior={1.45}
+      />
+    );
+  }
+
   return (
     <meshPhysicalMaterial
       color="#e9edf7"
@@ -64,11 +82,47 @@ function SplineChrome() {
 
 function SplineLighting({
   variant,
+  tone = "chrome",
   environmentResolution,
 }: {
   variant: LogoVariant;
+  tone?: LogoTone;
   environmentResolution?: number;
 }) {
+  if (tone === "graphite") {
+    return (
+      <>
+        <ambientLight intensity={0.5} />
+        <directionalLight position={[8, 10, 12]} intensity={1.75} color="#ffffff" />
+        <directionalLight position={[-10, 4, 8]} intensity={0.85} color="#e4e4e7" />
+        <pointLight position={[0, 0, 10]} intensity={10} color="#fafafa" />
+        <Environment
+          resolution={environmentResolution ?? 2048}
+          environmentIntensity={0.72}
+          preset="studio"
+          blur={0.9}
+        >
+          <Lightformer
+            form="rect"
+            intensity={2.2}
+            color="#f4f4f5"
+            rotation-x={Math.PI / 2}
+            position={[0, 6, -1]}
+            scale={[14, 10, 1]}
+          />
+          <Lightformer
+            form="ring"
+            intensity={1.6}
+            color="#e4e4e7"
+            rotation-y={Math.PI / 2}
+            position={[7, 0, 2]}
+            scale={5}
+          />
+        </Environment>
+      </>
+    );
+  }
+
   return (
     <>
       <ambientLight intensity={0.45} />
@@ -111,6 +165,7 @@ function SplineLighting({
 
 const MOUSE_SMOOTHING = {
   header: { pointer: 10, rotation: 7, yaw: 0.42, pitch: 0.3 },
+  footer: { pointer: 10, rotation: 7, yaw: 0.42, pitch: 0.3 },
   icon: { pointer: 10, rotation: 7, yaw: 0.42, pitch: 0.3 },
   iconX: { pointer: 10, rotation: 7, yaw: 0.42, pitch: 0.3 },
   hero: { pointer: 12, rotation: 8, yaw: 0.55, pitch: 0.38 },
@@ -273,7 +328,13 @@ function roundTextGeometry(geometry: BufferGeometry, passes: number) {
   laplacianSmoothGeometry(geometry, passes, 0.38);
 }
 
-function GxTextMark({ config }: { config: LogoVariantConfig }) {
+function GxTextMark({
+  config,
+  tone = "chrome",
+}: {
+  config: LogoVariantConfig;
+  tone?: LogoTone;
+}) {
   const meshRef = useRef<Mesh>(null);
   const fitRef = useRef<Group>(null);
   const label = config.glyph;
@@ -318,7 +379,7 @@ function GxTextMark({ config }: { config: LogoVariantConfig }) {
       smooth={0.06}
     >
       {label}
-      <SplineChrome />
+      <SplineChrome tone={tone} />
     </Text3D>
   );
 
@@ -330,31 +391,55 @@ function GxTextMark({ config }: { config: LogoVariantConfig }) {
     );
   }
 
+  if (config.markAlign === "start") {
+    return text;
+  }
+
   return <Center>{text}</Center>;
 }
 
-function GxLogoMark({ config }: { config: LogoVariantConfig }) {
-  if (USE_GX_LOGO_MESH) {
-    return <GxGlbModel config={config} />;
-  }
-  return (
-    <Center>
-      <GxTextMark config={config} />
-    </Center>
+function GxLogoMark({
+  config,
+  tone = "chrome",
+}: {
+  config: LogoVariantConfig;
+  tone?: LogoTone;
+}) {
+  const mark = USE_GX_LOGO_MESH ? (
+    <GxGlbModel config={config} tone={tone} />
+  ) : (
+    <GxTextMark config={config} tone={tone} />
   );
+
+  if (config.markAlign === "start") {
+    return (
+      <group position={[config.markSceneOffsetX ?? 0, 0, 0]}>
+        <Center left>{mark}</Center>
+      </group>
+    );
+  }
+
+  if (USE_GX_LOGO_MESH) {
+    return mark;
+  }
+
+  return <Center>{mark}</Center>;
 }
 
 function defaultEnvironmentResolution(variant: LogoVariant) {
   if (variant === "icon" || variant === "iconX") {
     return ICON_ENVIRONMENT_RESOLUTION;
   }
-  if (variant === "header") return HEADER_ENVIRONMENT_RESOLUTION;
+  if (variant === "header" || variant === "footer") {
+    return HEADER_ENVIRONMENT_RESOLUTION;
+  }
   if (variant === "hero") return HERO_ENVIRONMENT_RESOLUTION;
   return 2048;
 }
 
 export function GxLogoScene({
   variant = "header",
+  tone = "chrome",
   interactive = true,
   hoverDrivenMotion = false,
   environmentResolution,
@@ -363,7 +448,7 @@ export function GxLogoScene({
   const isHero = variant === "hero";
   const envResolution =
     environmentResolution ?? defaultEnvironmentResolution(variant);
-  const mark = <GxLogoMark config={config} />;
+  const mark = <GxLogoMark config={config} tone={tone} />;
 
   const content =
     interactive && isHero ? (
@@ -378,6 +463,7 @@ export function GxLogoScene({
     <>
       <SplineLighting
         variant={variant}
+        tone={tone}
         environmentResolution={envResolution}
       />
       {interactive ? (
@@ -398,8 +484,9 @@ export function GxLogoScene({
 export function configureGxLogoRenderer(
   gl: WebGLRenderer,
   variant: LogoVariant = "header",
+  tone: LogoTone = "chrome",
 ) {
   gl.outputColorSpace = SRGBColorSpace;
   gl.toneMapping = ACESFilmicToneMapping;
-  gl.toneMappingExposure = 1.3;
+  gl.toneMappingExposure = tone === "graphite" ? 1.18 : 1.3;
 }

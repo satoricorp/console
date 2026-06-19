@@ -1,9 +1,12 @@
 import { Hono } from "hono";
+import { gunzipSync } from "node:zlib";
 import type postgres from "postgres";
 import { getSql } from "../db";
 import type { AppEnv } from "../middleware/auth";
 import { bearerToken, requireAuth } from "../middleware/auth";
+import { createPayloadManifest, storeFullPayload } from "../gx-payload-store";
 import type { PushBundle } from "../types";
+import { FREE_FULL_STACK_REVIEW_LIMIT } from "./usage";
 import {
   extractIndexFields,
   PayloadValidationError,
@@ -63,6 +66,10 @@ function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
   if (firstChangeLine) return firstChangeLine;
 
   return branchSlugTitle(branchName);
+}
+
+function isFullStackReview(payload: PushBundle): boolean {
+  return Array.isArray(payload.stack) && payload.stack.length > 1;
 }
 
 type BookmarkRow = {
@@ -242,7 +249,14 @@ async function upsertBookmark(
 gxPrRoutes.post("/pr", async (c) => {
   let payload: PushBundle;
   try {
-    const body = await c.req.json();
+    let body: unknown;
+    const encoding = c.req.header("Content-Encoding")?.toLowerCase() ?? "";
+    if (encoding.includes("gzip")) {
+      const compressed = new Uint8Array(await c.req.arrayBuffer());
+      body = JSON.parse(new TextDecoder().decode(gunzipSync(compressed)));
+    } else {
+      body = await c.req.json();
+    }
     payload = validatePushBundle(body);
   } catch (error) {
     if (error instanceof PayloadValidationError) {
@@ -270,6 +284,8 @@ gxPrRoutes.post("/pr", async (c) => {
       "unknown";
     const inferredTitle = inferBookmarkTitle(payload, branchName);
     const githubPrNumber = parseGithubPrNumber(indexFields.github_pr_url);
+    const payloadManifest = createPayloadManifest(payload);
+    const shouldCountFreeReview = isFullStackReview(payload);
 
     const ingestResult = await db.begin(async (tx) => {
       const [eventRow] = await tx<{ id: string }[]>`
@@ -304,10 +320,12 @@ gxPrRoutes.post("/pr", async (c) => {
           ${indexFields.branch_name},
           ${indexFields.head_commit_id},
           ${indexFields.github_pr_url},
-          ${tx.json(payload)}
+          ${tx.json(payloadManifest)}
         )
         RETURNING id
       `;
+
+      await storeFullPayload(tx, eventRow.id, payload);
 
       const bookmarkRow = await upsertBookmark(tx, {
         userId: auth.userId,
@@ -321,6 +339,31 @@ gxPrRoutes.post("/pr", async (c) => {
         githubPrNumber,
         updatedAtMs: payload.created_at,
       });
+
+      let fullStackReviewsUsed: number | undefined;
+      if (shouldCountFreeReview) {
+        await tx`
+          INSERT INTO gx_review_usage (
+            user_id,
+            bookmark_id,
+            first_event_id,
+            counted_at_ms
+          ) VALUES (
+            ${auth.userId},
+            ${bookmarkRow.id},
+            ${eventRow.id},
+            ${payload.created_at}
+          )
+          ON CONFLICT (user_id, bookmark_id) DO NOTHING
+        `;
+
+        const [usageRow] = await tx<{ count: string }[]>`
+          SELECT COUNT(*)::TEXT AS count
+          FROM gx_review_usage
+          WHERE user_id = ${auth.userId}
+        `;
+        fullStackReviewsUsed = Number.parseInt(usageRow?.count ?? "0", 10);
+      }
 
       let remoteHeadSha = bookmarkRow.remote_head_sha;
       const githubToken = process.env.GITHUB_TOKEN?.trim();
@@ -348,14 +391,29 @@ gxPrRoutes.post("/pr", async (c) => {
         eventId: eventRow.id,
         prId: bookmarkRow.id,
         remoteHeadSha,
+        fullStackReviewsUsed,
       };
     });
 
     const url = reviewUrl(ingestResult.prId);
+    const freeReviewsRemaining =
+      ingestResult.fullStackReviewsUsed === undefined
+        ? undefined
+        : Math.max(
+            0,
+            FREE_FULL_STACK_REVIEW_LIMIT - ingestResult.fullStackReviewsUsed,
+          );
     return c.json(
       {
         id: ingestResult.prId,
         event_id: ingestResult.eventId,
+        ...(freeReviewsRemaining !== undefined
+          ? {
+              free_review_limit: FREE_FULL_STACK_REVIEW_LIMIT,
+              full_stack_reviews_used: ingestResult.fullStackReviewsUsed,
+              free_reviews_remaining: freeReviewsRemaining,
+            }
+          : {}),
         ...(url ? { url } : {}),
       },
       201,
