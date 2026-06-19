@@ -17,6 +17,7 @@ import type * as gxAuthUtils from "../gxAuthUtils.js";
 import type * as gxPr from "../gxPr.js";
 import type * as gxPrActions from "../gxPrActions.js";
 import type * as gxPrHttp from "../gxPrHttp.js";
+import type * as gxReviewArtifacts from "../gxReviewArtifacts.js";
 import type * as http from "../http.js";
 import type * as indexing from "../indexing.js";
 import type * as indexingActions from "../indexingActions.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   gxPr: typeof gxPr;
   gxPrActions: typeof gxPrActions;
   gxPrHttp: typeof gxPrHttp;
+  gxReviewArtifacts: typeof gxReviewArtifacts;
   http: typeof http;
   indexing: typeof indexing;
   indexingActions: typeof indexingActions;

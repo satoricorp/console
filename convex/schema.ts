@@ -56,7 +56,8 @@ export default defineSchema({
     accessVerifiedAt: v.optional(v.number()),
   })
     .index("by_userId", ["userId"])
-    .index("by_userId_fullName", ["userId", "fullName"]),
+    .index("by_userId_fullName", ["userId", "fullName"])
+    .index("by_fullName", ["fullName"]),
 
   gxCliSessions: defineTable({
     userId: v.string(),
@@ -74,6 +75,15 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_machineId", ["userId", "machineId"]),
 
+  gxDesktopOAuthTickets: defineTable({
+    ticketHash: v.string(),
+    state: v.string(),
+    githubAccessToken: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index("by_ticketHash", ["ticketHash"]),
+
   gxPrPushes: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),
@@ -84,6 +94,44 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_sessionId", ["sessionId"]),
+
+  gxReviewArtifacts: defineTable({
+    userId: v.string(),
+    sessionId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    artifact: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_sessionId", ["sessionId"])
+    .index("by_repoFullName", ["repoFullName"]),
+
+  gxReviewComments: defineTable({
+    userId: v.string(),
+    reviewId: v.optional(v.string()),
+    bookmarkId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    scope: v.union(
+      v.literal("pr"),
+      v.literal("revision"),
+      v.literal("file"),
+      v.literal("line"),
+    ),
+    bodyMarkdown: v.string(),
+    approvalPercent: v.optional(v.number()),
+    authorLogin: v.string(),
+    assigneeLogin: v.optional(v.string()),
+    status: v.union(v.literal("open"), v.literal("resolved")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_reviewId", ["reviewId"])
+    .index("by_bookmarkId", ["bookmarkId"])
+    .index("by_userId_bookmarkId", ["userId", "bookmarkId"])
+    .index("by_repoFullName", ["repoFullName"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
 
   repoIndexJobs: defineTable({
     fullName: v.string(),
