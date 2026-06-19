@@ -28,7 +28,7 @@ Postgres remains the system of record for full payloads and sessions. Convex hol
 Terminal 1 — API (proxy route):
 
 ```bash
-cd services/api
+cd server
 cp .env.example .env   # set DATABASE_URL, GX_CLOUD_API_KEY, JJ_WORKER_URL=http://localhost:3210
 bun run dev
 ```
@@ -37,7 +37,7 @@ Terminal 2 — jj-worker:
 
 ```bash
 cd services/jj-worker
-export DATABASE_URL=postgres://localhost:5432/api
+export DATABASE_URL=postgres://localhost:5432/gx
 export GX_CLOUD_API_KEY=dev-secret
 export GITHUB_TOKEN=ghp_...
 bun install

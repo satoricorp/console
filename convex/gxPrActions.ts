@@ -89,7 +89,7 @@ async function loadAuthorizedBookmarkContext(
   _bookmarkId: string,
 ): Promise<MergeContext> {
   throw new Error(
-    "Bookmark merge context is loaded via services/api. Use pushId or call through the Next.js bookmark API with publishContext.",
+    "Bookmark merge context is loaded via server. Use pushId or call through the Next.js bookmark API with publishContext.",
   );
 }
 

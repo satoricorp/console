@@ -22,7 +22,7 @@ This uses the rich GX payload already captured during publish: changed files, pa
 
 ## Implementation Outline
 
-Add Postgres-backed job/comment state in `services/api`:
+Add Postgres-backed job/comment state in `server`:
 
 - Track `bookmark_id`, `event_id`, `repo_full_name`, `github_pr_number`, `head_commit_id`, `status`, `github_comment_id`, `last_error`, and timestamps.
 - Make review job creation idempotent with a unique key on `event_id`.
@@ -64,7 +64,7 @@ Likely GitHub App permissions:
 Potential env/config:
 
 - `GX_REVIEW_COMMENT_ENABLED=true|false`
-- `GX_REVIEW_SERVICE_SECRET` shared between `services/api` and Convex if review generation is exposed as a service-only Convex action
+- `GX_REVIEW_SERVICE_SECRET` shared between `server` and Convex if review generation is exposed as a service-only Convex action
 - Optional `GX_REVIEW_MODEL`, defaulting to the existing review/chat model unless changed later
 
 ## Test Plan
@@ -80,7 +80,7 @@ Potential env/config:
   - Enqueues one review job after successful ingest
   - Does not fail ingest when enqueue, review generation, or comment posting fails
 - Mock GitHub API tests for 401, 403, 404, and rate-limit responses, with persisted `last_error`.
-- Typecheck `services/api` and Convex. Run existing app lint/build checks where practical.
+- Typecheck `server` and Convex. Run existing app lint/build checks where practical.
 
 ## Deferred Alternatives
 

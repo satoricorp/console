@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "server:dev": "cd server && bun run dev",
+    "server:migrate": "cd server && bun run migrate",
+    "server:typecheck": "cd server && bun run typecheck",
+    "test:server": "cd server && bun test"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.2",

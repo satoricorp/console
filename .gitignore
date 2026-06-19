@@ -2,9 +2,9 @@
 
 # dependencies
 /node_modules
-services/api/node_modules
+server/node_modules
 services/jj-worker/node_modules
-services/api/dist
+server/dist
 /.pnp
 .pnp.*
 .yarn/*
