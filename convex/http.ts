@@ -160,19 +160,13 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/complete",
-  method: "POST",
-  handler: httpAction(completeCliAuth),
-});
-
-http.route({
   path: "/cx/auth/complete",
   method: "POST",
   handler: httpAction(completeCliAuth),
 });
 
 http.route({
-  path: "/gx/auth/desktop/start",
+  path: "/cx/auth/desktop/start",
   method: "POST",
   handler: httpAction(async (_ctx, request) => {
     try {
@@ -192,7 +186,7 @@ http.route({
     authorizationURL.searchParams.set("client_id", clientId);
     authorizationURL.searchParams.set(
       "redirect_uri",
-      `${origin}/gx/auth/desktop/callback`,
+      `${origin}/cx/auth/desktop/callback`,
     );
     authorizationURL.searchParams.set("scope", "repo");
     authorizationURL.searchParams.set("state", state);
@@ -205,7 +199,7 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/desktop/callback",
+  path: "/cx/auth/desktop/callback",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
@@ -216,7 +210,7 @@ http.route({
     }
 
     try {
-      const redirectUri = `${url.origin}/gx/auth/desktop/callback`;
+      const redirectUri = `${url.origin}/cx/auth/desktop/callback`;
       const result = await ctx.runAction(
         api.gxAuthActions.createDesktopOAuthTicketFromCode,
         {
@@ -256,7 +250,7 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/desktop/complete",
+  path: "/cx/auth/desktop/complete",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     let body: {
@@ -294,19 +288,13 @@ http.route({
 });
 
 http.route({
-  path: "/gx/auth/revoke",
-  method: "POST",
-  handler: httpAction(revokeCliAuth),
-});
-
-http.route({
   path: "/cx/auth/revoke",
   method: "POST",
   handler: httpAction(revokeCliAuth),
 });
 
 http.route({
-  path: "/gx/pr",
+  path: "/cx/pr",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const authHeader = request.headers.get("authorization");
@@ -380,7 +368,7 @@ http.route({
 });
 
 http.route({
-  path: "/gx/pr/comment",
+  path: "/cx/pr/comment",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const authHeader = request.headers.get("authorization");
