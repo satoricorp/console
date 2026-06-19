@@ -4,7 +4,9 @@
 /node_modules
 server/node_modules
 services/jj-worker/node_modules
+infra/node_modules
 server/dist
+infra/cdk.out
 /.pnp
 .pnp.*
 .yarn/*

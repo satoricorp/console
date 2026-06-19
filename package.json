@@ -10,6 +10,9 @@
     "server:dev": "cd server && bun run dev",
     "server:migrate": "cd server && bun run migrate",
     "server:typecheck": "cd server && bun run typecheck",
+    "infra:cdk": "cd infra && bun run cdk",
+    "infra:synth": "cd infra && bun run synth",
+    "infra:typecheck": "cd infra && bun run typecheck",
     "test:server": "cd server && bun test"
   },
   "dependencies": {

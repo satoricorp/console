@@ -1,0 +1,8 @@
+{
+  "app": "bunx tsx bin/gx-server.ts",
+  "context": {
+    "@aws-cdk/aws-ec2:restrictDefaultSecurityGroup": true,
+    "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,
+    "@aws-cdk/core:stackRelativeExports": true
+  }
+}

@@ -1,0 +1,351 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      gx_ref:
+        description: GX source ref to package for the macOS download
+        required: false
+        default: main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos-download:
+    name: Build macOS download
+    runs-on: macos-latest
+
+    steps:
+      - name: Resolve GX source
+        id: gx-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="${{ vars.GX_SOURCE_REPOSITORY }}"
+          if [[ -z "$repository" ]]; then
+            repository="satoricorp/gx"
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ref="${{ inputs.gx_ref }}"
+          else
+            ref="${{ vars.GX_SOURCE_REF }}"
+          fi
+          if [[ -z "$ref" ]]; then
+            ref="main"
+          fi
+
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout GX source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.gx-source.outputs.repository }}
+          ref: ${{ steps.gx-source.outputs.ref }}
+          path: gx-src
+          token: ${{ secrets.GX_SOURCE_TOKEN || github.token }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: gx-src/go.mod
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.4"
+
+      - name: Install just
+        run: brew install just
+
+      - name: Build macOS ZIP
+        working-directory: gx-src
+        env:
+          GITHUB_CLIENT_ID: ${{ vars.GX_GITHUB_CLIENT_ID || vars.GITHUB_CLIENT_ID }}
+          CONVEX_SITE_URL: ${{ vars.GX_CONVEX_SITE_URL || vars.CONVEX_SITE_URL || vars.NEXT_PUBLIC_CONVEX_SITE_URL }}
+          GX_CLOUD_URL: ${{ vars.GX_CLOUD_URL }}
+        run: just menubar
+
+      - name: Verify macOS ZIP
+        run: test -f gx-src/apps/menubar/dist/GX-macOS.zip
+
+      - name: Upload macOS ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GX-macOS.zip
+          path: gx-src/apps/menubar/dist/GX-macOS.zip
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    needs: build-macos-download
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      DEPLOY_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      DEPLOY_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve deployment settings
+        id: settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            deploy_env="${{ inputs.environment }}"
+          else
+            deploy_env="staging"
+          fi
+
+          if [[ "$deploy_env" == "production" ]]; then
+            record_name="api"
+          else
+            record_name="staging"
+          fi
+
+          echo "environment=$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "record_name=$record_name" >> "$GITHUB_OUTPUT"
+          echo "stack_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "downloads_stack_name=gx-downloads" >> "$GITHUB_OUTPUT"
+          echo "cluster_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "service_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "repository_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
+
+      - name: Download macOS ZIP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GX-macOS.zip
+          path: dist
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.4"
+
+      - name: Configure AWS credentials with OIDC
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials with access keys
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ env.DEPLOY_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install server dependencies
+        working-directory: server
+        run: bun install --frozen-lockfile
+
+      - name: Check server
+        working-directory: server
+        run: |
+          bun run typecheck
+          bun test
+
+      - name: Deploy Convex functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
+            echo "CONVEX_DEPLOY_KEY is not set; skipping Convex deploy"
+            exit 0
+          fi
+          bun install --frozen-lockfile
+          bunx convex deploy
+
+      - name: Ensure ECR repository
+        env:
+          ECR_REPOSITORY: ${{ steps.settings.outputs.repository_name }}
+        run: |
+          set -euo pipefail
+          if aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            exit 0
+          fi
+          aws ecr create-repository \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-scanning-configuration scanOnPush=true \
+            --image-tag-mutability MUTABLE >/dev/null
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push server image
+        id: image
+        env:
+          DEPLOY_ENV: ${{ steps.settings.outputs.environment }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ steps.settings.outputs.repository_name }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          env_image="$ECR_REGISTRY/$ECR_REPOSITORY:$DEPLOY_ENV"
+          docker build -f server/Dockerfile -t "$image" -t "$env_image" .
+          docker push "$image"
+          docker push "$env_image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "env_image=$env_image" >> "$GITHUB_OUTPUT"
+
+      - name: Install infra dependencies
+        working-directory: infra
+        run: bun install --frozen-lockfile
+
+      - name: Deploy downloads stack
+        working-directory: infra
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          DOWNLOADS_STACK_NAME: ${{ steps.settings.outputs.downloads_stack_name }}
+        run: |
+          set -euo pipefail
+          test -n "$DOMAIN_NAME"
+          bun run cdk deploy "$DOWNLOADS_STACK_NAME" \
+            -c "domainName=$DOMAIN_NAME" \
+            --require-approval never
+
+      - name: Deploy CDK stack
+        working-directory: infra
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          STACK_NAME: ${{ steps.settings.outputs.stack_name }}
+        run: |
+          set -euo pipefail
+          test -n "$DOMAIN_NAME"
+          bun run cdk deploy "$STACK_NAME" \
+            -c "domainName=$DOMAIN_NAME" \
+            --require-approval never
+
+      - name: Read stack outputs
+        id: outputs
+        env:
+          STACK_NAME: ${{ steps.settings.outputs.stack_name }}
+        run: |
+          set -euo pipefail
+          output() {
+            aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" \
+              --output text
+          }
+          echo "task_definition_family=$(output TaskDefinitionFamily)" >> "$GITHUB_OUTPUT"
+          echo "container_name=$(output ContainerName)" >> "$GITHUB_OUTPUT"
+          echo "private_subnet_ids=$(output PrivateSubnetIds)" >> "$GITHUB_OUTPUT"
+          echo "security_group_ids=$(output ServiceSecurityGroupIds)" >> "$GITHUB_OUTPUT"
+          echo "url=$(output Url)" >> "$GITHUB_OUTPUT"
+
+      - name: Read downloads outputs
+        id: downloads
+        env:
+          DOWNLOADS_STACK_NAME: ${{ steps.settings.outputs.downloads_stack_name }}
+        run: |
+          set -euo pipefail
+          output() {
+            aws cloudformation describe-stacks \
+              --stack-name "$DOWNLOADS_STACK_NAME" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" \
+              --output text
+          }
+          echo "bucket_name=$(output DownloadBucketName)" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$(output DownloadDistributionId)" >> "$GITHUB_OUTPUT"
+          echo "download_url=$(output DownloadUrl)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS download
+        env:
+          DOWNLOAD_BUCKET_NAME: ${{ steps.downloads.outputs.bucket_name }}
+          DOWNLOAD_DISTRIBUTION_ID: ${{ steps.downloads.outputs.distribution_id }}
+        run: |
+          set -euo pipefail
+          aws s3 cp dist/GX-macOS.zip "s3://$DOWNLOAD_BUCKET_NAME/GX-macOS.zip" \
+            --content-type application/zip \
+            --cache-control "public, max-age=300"
+          printf 'GX download not found\n' > 404.txt
+          aws s3 cp 404.txt "s3://$DOWNLOAD_BUCKET_NAME/404.txt" \
+            --content-type text/plain \
+            --cache-control "public, max-age=300"
+          aws cloudfront create-invalidation \
+            --distribution-id "$DOWNLOAD_DISTRIBUTION_ID" \
+            --paths /GX-macOS.zip /404.txt >/dev/null
+
+      - name: Run database migrations
+        env:
+          CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
+          TASK_DEFINITION_FAMILY: ${{ steps.outputs.outputs.task_definition_family }}
+          CONTAINER_NAME: ${{ steps.outputs.outputs.container_name }}
+          PRIVATE_SUBNET_IDS: ${{ steps.outputs.outputs.private_subnet_ids }}
+          SECURITY_GROUP_IDS: ${{ steps.outputs.outputs.security_group_ids }}
+        run: |
+          set -euo pipefail
+          task_arn="$(aws ecs run-task \
+            --cluster "$CLUSTER_NAME" \
+            --launch-type FARGATE \
+            --task-definition "$TASK_DEFINITION_FAMILY" \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_IDS],securityGroups=[$SECURITY_GROUP_IDS],assignPublicIp=DISABLED}" \
+            --overrides "{\"containerOverrides\":[{\"name\":\"$CONTAINER_NAME\",\"command\":[\"bun\",\"src/migrate.ts\"]}]}" \
+            --query 'tasks[0].taskArn' \
+            --output text)"
+
+          if [[ -z "$task_arn" || "$task_arn" == "None" ]]; then
+            echo "Failed to start migration task" >&2
+            exit 1
+          fi
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$task_arn"
+          exit_code="$(aws ecs describe-tasks \
+            --cluster "$CLUSTER_NAME" \
+            --tasks "$task_arn" \
+            --query "tasks[0].containers[?name=='$CONTAINER_NAME'].exitCode | [0]" \
+            --output text)"
+
+          if [[ "$exit_code" != "0" ]]; then
+            aws ecs describe-tasks --cluster "$CLUSTER_NAME" --tasks "$task_arn"
+            exit 1
+          fi
+
+      - name: Roll ECS service
+        env:
+          CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
+          SERVICE_NAME: ${{ steps.settings.outputs.service_name }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$CLUSTER_NAME" \
+            --service "$SERVICE_NAME" \
+            --force-new-deployment >/dev/null
+          aws ecs wait services-stable \
+            --cluster "$CLUSTER_NAME" \
+            --services "$SERVICE_NAME"
+
+      - name: Smoke test
+        env:
+          URL: ${{ steps.outputs.outputs.url }}
+        run: |
+          set -euo pipefail
+          curl --fail --retry 10 --retry-delay 6 --retry-all-errors "$URL/health"

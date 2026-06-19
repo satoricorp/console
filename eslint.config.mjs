@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "server/dist/**",
     "server/node_modules/**",
+    "infra/cdk.out/**",
+    "infra/node_modules/**",
     "next-env.d.ts",
   ]),
 ]);
