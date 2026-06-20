@@ -91,45 +91,35 @@ jobs:
             --image-scanning-configuration scanOnPush=true \
             --image-tag-mutability MUTABLE >/dev/null
 
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Promote staging image
         env:
           COMMIT_SHA: ${{ steps.settings.outputs.commit_sha }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           STAGING_REPOSITORY: ${{ steps.settings.outputs.staging_repository_name }}
           PRODUCTION_REPOSITORY: ${{ steps.settings.outputs.production_repository_name }}
         run: |
           set -euo pipefail
-          image_json="$(aws ecr batch-get-image \
+          if ! aws ecr describe-images \
             --repository-name "$STAGING_REPOSITORY" \
-            --image-ids "imageTag=$COMMIT_SHA" \
-            --output json)"
-
-          manifest="$(jq -r '.images[0].imageManifest // empty' <<< "$image_json")"
-          media_type="$(jq -r '.images[0].imageManifestMediaType // empty' <<< "$image_json")"
-
-          if [[ -z "$manifest" ]]; then
+            --image-ids "imageTag=$COMMIT_SHA" >/dev/null 2>&1; then
             echo "No staging image found for commit $COMMIT_SHA in $STAGING_REPOSITORY" >&2
             echo "Deploy that commit to staging first, then promote it." >&2
             exit 1
           fi
 
-          put_image() {
-            local tag="$1"
-            if [[ -n "$media_type" ]]; then
-              aws ecr put-image \
-                --repository-name "$PRODUCTION_REPOSITORY" \
-                --image-tag "$tag" \
-                --image-manifest "$manifest" \
-                --image-manifest-media-type "$media_type" >/dev/null
-            else
-              aws ecr put-image \
-                --repository-name "$PRODUCTION_REPOSITORY" \
-                --image-tag "$tag" \
-                --image-manifest "$manifest" >/dev/null
-            fi
-          }
+          source_image="$ECR_REGISTRY/$STAGING_REPOSITORY:$COMMIT_SHA"
+          commit_image="$ECR_REGISTRY/$PRODUCTION_REPOSITORY:$COMMIT_SHA"
+          production_image="$ECR_REGISTRY/$PRODUCTION_REPOSITORY:production"
 
-          put_image "$COMMIT_SHA"
-          put_image production
+          docker pull "$source_image"
+          docker tag "$source_image" "$commit_image"
+          docker tag "$source_image" "$production_image"
+          docker push "$commit_image"
+          docker push "$production_image"
 
       - name: Install infra dependencies
         working-directory: infra
