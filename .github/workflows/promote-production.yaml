@@ -1,31 +1,26 @@
-name: Deploy
+name: Promote Production
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      environment:
-        description: Deployment environment. Use Promote Production for prod.
-        required: true
-        type: choice
-        options:
-          - staging
+      commit_sha:
+        description: Commit SHA to promote. Leave blank to promote the selected ref.
+        required: false
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  group: promote-production
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  promote:
+    name: Promote production
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    environment: production
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -35,31 +30,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Resolve deployment settings
+      - name: Resolve promotion settings
         id: settings
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            deploy_env="${{ inputs.environment }}"
-          else
-            deploy_env="staging"
+          raw_commit="${{ inputs.commit_sha }}"
+          if [[ -z "$raw_commit" ]]; then
+            raw_commit="${{ github.sha }}"
           fi
 
-          if [[ "$deploy_env" == "production" ]]; then
-            record_name="api"
-          else
-            record_name="staging"
+          commit_sha="$(git rev-parse "$raw_commit^{commit}")"
+          if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Expected a 40-character git commit SHA, got: $commit_sha" >&2
+            exit 1
           fi
 
-          echo "environment=$deploy_env" >> "$GITHUB_OUTPUT"
-          echo "record_name=$record_name" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$commit_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${commit_sha:0:12}" >> "$GITHUB_OUTPUT"
           echo "downloads_stack_name=gx-downloads" >> "$GITHUB_OUTPUT"
-          echo "stack_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
-          echo "cluster_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
-          echo "service_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
-          echo "repository_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
+          echo "stack_name=gx-server-production" >> "$GITHUB_OUTPUT"
+          echo "cluster_name=gx-server-production" >> "$GITHUB_OUTPUT"
+          echo "service_name=gx-server-production" >> "$GITHUB_OUTPUT"
+          echo "staging_repository_name=gx-server-staging" >> "$GITHUB_OUTPUT"
+          echo "production_repository_name=gx-server-production" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -81,31 +78,9 @@ jobs:
           aws-secret-access-key: ${{ env.DEPLOY_AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install server dependencies
-        working-directory: server
-        run: bun install --frozen-lockfile
-
-      - name: Check server
-        working-directory: server
-        run: |
-          bun run typecheck
-          bun test
-
-      - name: Deploy Convex functions
+      - name: Ensure production ECR repository
         env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
-            echo "CONVEX_DEPLOY_KEY is not set; skipping Convex deploy"
-            exit 0
-          fi
-          bun install --frozen-lockfile
-          bunx convex deploy
-
-      - name: Ensure ECR repository
-        env:
-          ECR_REPOSITORY: ${{ steps.settings.outputs.repository_name }}
+          ECR_REPOSITORY: ${{ steps.settings.outputs.production_repository_name }}
         run: |
           set -euo pipefail
           if aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
@@ -116,26 +91,45 @@ jobs:
             --image-scanning-configuration scanOnPush=true \
             --image-tag-mutability MUTABLE >/dev/null
 
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push server image
-        id: image
+      - name: Promote staging image
         env:
-          DEPLOY_ENV: ${{ steps.settings.outputs.environment }}
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ steps.settings.outputs.repository_name }}
-          IMAGE_TAG: ${{ github.sha }}
+          COMMIT_SHA: ${{ steps.settings.outputs.commit_sha }}
+          STAGING_REPOSITORY: ${{ steps.settings.outputs.staging_repository_name }}
+          PRODUCTION_REPOSITORY: ${{ steps.settings.outputs.production_repository_name }}
         run: |
           set -euo pipefail
-          image="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          env_image="$ECR_REGISTRY/$ECR_REPOSITORY:$DEPLOY_ENV"
-          docker build -f server/Dockerfile -t "$image" -t "$env_image" .
-          docker push "$image"
-          docker push "$env_image"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "env_image=$env_image" >> "$GITHUB_OUTPUT"
+          image_json="$(aws ecr batch-get-image \
+            --repository-name "$STAGING_REPOSITORY" \
+            --image-ids "imageTag=$COMMIT_SHA" \
+            --output json)"
+
+          manifest="$(jq -r '.images[0].imageManifest // empty' <<< "$image_json")"
+          media_type="$(jq -r '.images[0].imageManifestMediaType // empty' <<< "$image_json")"
+
+          if [[ -z "$manifest" ]]; then
+            echo "No staging image found for commit $COMMIT_SHA in $STAGING_REPOSITORY" >&2
+            echo "Deploy that commit to staging first, then promote it." >&2
+            exit 1
+          fi
+
+          put_image() {
+            local tag="$1"
+            if [[ -n "$media_type" ]]; then
+              aws ecr put-image \
+                --repository-name "$PRODUCTION_REPOSITORY" \
+                --image-tag "$tag" \
+                --image-manifest "$manifest" \
+                --image-manifest-media-type "$media_type" >/dev/null
+            else
+              aws ecr put-image \
+                --repository-name "$PRODUCTION_REPOSITORY" \
+                --image-tag "$tag" \
+                --image-manifest "$manifest" >/dev/null
+            fi
+          }
+
+          put_image "$COMMIT_SHA"
+          put_image production
 
       - name: Install infra dependencies
         working-directory: infra
@@ -153,7 +147,7 @@ jobs:
             -c "domainName=$DOMAIN_NAME" \
             --require-approval never
 
-      - name: Deploy CDK stack
+      - name: Deploy production stack
         working-directory: infra
         env:
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
@@ -165,7 +159,7 @@ jobs:
             -c "domainName=$DOMAIN_NAME" \
             --require-approval never
 
-      - name: Read stack outputs
+      - name: Read production stack outputs
         id: outputs
         env:
           STACK_NAME: ${{ steps.settings.outputs.stack_name }}
@@ -183,7 +177,7 @@ jobs:
           echo "security_group_ids=$(output ServiceSecurityGroupIds)" >> "$GITHUB_OUTPUT"
           echo "url=$(output Url)" >> "$GITHUB_OUTPUT"
 
-      - name: Run database migrations
+      - name: Run production database migrations
         env:
           CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
           TASK_DEFINITION_FAMILY: ${{ steps.outputs.outputs.task_definition_family }}
@@ -202,7 +196,7 @@ jobs:
             --output text)"
 
           if [[ -z "$task_arn" || "$task_arn" == "None" ]]; then
-            echo "Failed to start migration task" >&2
+            echo "Failed to start production migration task" >&2
             exit 1
           fi
 
@@ -218,7 +212,7 @@ jobs:
             exit 1
           fi
 
-      - name: Roll ECS service
+      - name: Roll production ECS service
         env:
           CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
           SERVICE_NAME: ${{ steps.settings.outputs.service_name }}
@@ -232,9 +226,23 @@ jobs:
             --cluster "$CLUSTER_NAME" \
             --services "$SERVICE_NAME"
 
-      - name: Smoke test
+      - name: Smoke test production
         env:
           URL: ${{ steps.outputs.outputs.url }}
         run: |
           set -euo pipefail
           curl --fail --retry 10 --retry-delay 6 --retry-all-errors "$URL/health"
+
+      - name: Promotion summary
+        env:
+          COMMIT_SHA: ${{ steps.settings.outputs.commit_sha }}
+          SHORT_SHA: ${{ steps.settings.outputs.short_sha }}
+          URL: ${{ steps.outputs.outputs.url }}
+        run: |
+          {
+            echo "### Production promoted"
+            echo
+            echo "- Commit: \`$COMMIT_SHA\`"
+            echo "- Version: \`$SHORT_SHA\`"
+            echo "- URL: $URL"
+          } >> "$GITHUB_STEP_SUMMARY"

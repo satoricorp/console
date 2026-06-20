@@ -92,7 +92,8 @@ workflow will prefer OIDC and ignore the access-key secrets.
 Use `us-east-1` for this CDK app. The download host uses CloudFront, and its
 ACM certificate must be issued in `us-east-1`.
 
-The workflow file is `.github/workflows/deploy.yaml`.
+The staging deploy workflow is `.github/workflows/deploy.yaml`. The production
+promotion workflow is `.github/workflows/promote-production.yaml`.
 
 ## First Deploy
 
@@ -114,8 +115,23 @@ The workflow file is `.github/workflows/deploy.yaml`.
      }'
    ```
 
-4. Repeat for `production`; the Route 53 record is `api`, so the public URL is
+4. Promote the same commit to `production` with the `Promote Production`
+   workflow; the Route 53 record is `api`, so the public URL is
    `https://api.<domain>`.
+
+## Production Promotion
+
+Production is promoted by commit SHA, not by semver and not by rebuilding.
+
+1. Confirm the commit has deployed cleanly to staging.
+2. Run the `Promote Production` workflow manually.
+3. Leave `commit_sha` blank to promote the selected `main` commit, or paste a
+   full commit SHA to promote a specific staging image.
+
+The workflow copies `gx-server-staging:<commit_sha>` to
+`gx-server-production:<commit_sha>` and `gx-server-production:production`, then
+deploys the production stack, runs production migrations, rolls ECS, and
+smoke-tests `https://api.<domain>/health`.
 
 ## Runtime Notes
 
