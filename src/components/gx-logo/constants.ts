@@ -6,8 +6,8 @@
 export const GX_MESH_PATH = "/models/gx-chrome.glb";
 export const GX_HEADER_MESH_PATH = "/models/gx-icon.glb";
 
-export const USE_GX_LOGO_MESH =
-  process.env.NEXT_PUBLIC_GX_LOGO_MESH === "true";
+// The Text3D fallback does not match the Blender mark; deploys should always use the checked-in GLBs.
+export const USE_GX_LOGO_MESH = true;
 
 function splinePill(textSize: number) {
   return {
