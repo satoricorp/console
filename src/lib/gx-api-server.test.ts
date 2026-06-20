@@ -10,7 +10,6 @@ let normalizeGxApiPath: typeof gxApiServer.normalizeGxApiPath;
 describe("gx api server helpers", () => {
   const originalFetch = globalThis.fetch;
   const originalCloudURL = process.env.GX_CLOUD_URL;
-  const originalCloudAPIURL = process.env.GX_CLOUD_API_URL;
   const originalAPIKey = process.env.GX_CLOUD_API_KEY;
 
   beforeAll(async () => {
@@ -23,13 +22,11 @@ describe("gx api server helpers", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     restoreEnv("GX_CLOUD_URL", originalCloudURL);
-    restoreEnv("GX_CLOUD_API_URL", originalCloudAPIURL);
     restoreEnv("GX_CLOUD_API_KEY", originalAPIKey);
   });
 
   test("uses GX_CLOUD_URL as an origin", () => {
     process.env.GX_CLOUD_URL = "http://localhost:3201/";
-    process.env.GX_CLOUD_API_URL = "http://legacy.invalid";
 
     expect(getGxApiBaseUrl()).toBe("http://localhost:3201");
   });

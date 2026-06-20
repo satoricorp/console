@@ -1,4 +1,5 @@
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
+import { requireConvexSiteUrl } from "@/lib/convex-env";
 
 export const {
   handler,
@@ -10,5 +11,5 @@ export const {
   fetchAuthAction,
 } = convexBetterAuthNextJs({
   convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL!,
-  convexSiteUrl: process.env.NEXT_PUBLIC_CONVEX_SITE_URL!,
+  convexSiteUrl: requireConvexSiteUrl(),
 });
