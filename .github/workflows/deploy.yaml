@@ -56,6 +56,7 @@ jobs:
 
           echo "environment=$deploy_env" >> "$GITHUB_OUTPUT"
           echo "record_name=$record_name" >> "$GITHUB_OUTPUT"
+          echo "downloads_stack_name=gx-downloads" >> "$GITHUB_OUTPUT"
           echo "stack_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
           echo "cluster_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
           echo "service_name=gx-server-$deploy_env" >> "$GITHUB_OUTPUT"
@@ -140,6 +141,18 @@ jobs:
       - name: Install infra dependencies
         working-directory: infra
         run: bun install --frozen-lockfile
+
+      - name: Deploy downloads stack
+        working-directory: infra
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          DOWNLOADS_STACK_NAME: ${{ steps.settings.outputs.downloads_stack_name }}
+        run: |
+          set -euo pipefail
+          test -n "$DOMAIN_NAME"
+          bun run cdk deploy "$DOWNLOADS_STACK_NAME" \
+            -c "domainName=$DOMAIN_NAME" \
+            --require-approval never
 
       - name: Deploy CDK stack
         working-directory: infra

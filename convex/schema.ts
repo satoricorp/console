@@ -59,6 +59,19 @@ export default defineSchema({
     .index("by_userId_fullName", ["userId", "fullName"])
     .index("by_fullName", ["fullName"]),
 
+  apiKeys: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    keyHash: v.string(),
+    keyPrefix: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_keyHash", ["keyHash"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
+
   gxCliSessions: defineTable({
     userId: v.string(),
     tokenHash: v.string(),

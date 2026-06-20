@@ -2,6 +2,7 @@
 
 import { GetStartedButton } from "@/components/get-started-button";
 import { SignInLink } from "@/components/sign-in-link";
+import { UserMenu } from "@/components/user-menu";
 import { authClient } from "@/lib/auth-client";
 
 const navLinkClassName =
@@ -10,8 +11,17 @@ const navLinkClassName =
 export function HeaderAuthActions() {
   const { data: session, isPending } = authClient.useSession();
 
-  if (isPending || session) {
-    return null;
+  if (isPending) {
+    return (
+      <div
+        className="h-8 w-8 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800"
+        aria-hidden="true"
+      />
+    );
+  }
+
+  if (session?.user) {
+    return <UserMenu user={session.user} />;
   }
 
   return (

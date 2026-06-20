@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
+import { OnboardingGate } from "@/components/onboarding-gate";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -34,7 +35,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col font-sans">
         <ConvexClientProvider>
           <SiteHeader />
-          {children}
+          <OnboardingGate>{children}</OnboardingGate>
           <SiteFooter />
         </ConvexClientProvider>
       </body>

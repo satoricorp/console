@@ -99,6 +99,43 @@ async function revokeCliAuth(ctx: ActionCtx, request: Request) {
   return new Response(null, { status: 204 });
 }
 
+async function validateMcpApiKey(ctx: ActionCtx, request: Request) {
+  const authHeader = request.headers.get("authorization");
+  let apiKey = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
+  let repoFullName: string | undefined;
+
+  if (request.headers.get("content-type")?.includes("application/json")) {
+    let body: Record<string, unknown>;
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+    } catch {
+      return jsonError("Invalid JSON body", 400);
+    }
+
+    if (!apiKey) {
+      apiKey = stringFromBody(body, "apiKey", "api_key")?.trim() ?? "";
+    }
+    repoFullName = stringFromBody(body, "repoFullName", "repo_full_name")?.trim();
+  }
+
+  if (!apiKey) {
+    return jsonError("Unauthorized", 401);
+  }
+
+  const result = await ctx.runMutation(api.apiKeys.validateApiKey, {
+    apiKey,
+    repoFullName,
+  });
+
+  if (!result.valid) {
+    return Response.json({ valid: false }, { status: 401 });
+  }
+
+  return Response.json(result);
+}
+
 const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth);
@@ -291,6 +328,12 @@ http.route({
   path: "/cx/auth/revoke",
   method: "POST",
   handler: httpAction(revokeCliAuth),
+});
+
+http.route({
+  path: "/cx/mcp/validate-api-key",
+  method: "POST",
+  handler: httpAction(validateMcpApiKey),
 });
 
 http.route({
