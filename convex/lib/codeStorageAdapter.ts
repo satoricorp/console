@@ -1,6 +1,6 @@
 /**
  * Narrow GitHub integration — temporary storage + CI, not review/merge UX.
- * GX Cloud owns review; this adapter pushes nothing (gx/jj-worker push branches),
+ * GX Cloud owns review; this adapter pushes nothing (gx publishes branches),
  * reads SHA/drift/checks, and propagates GX-initiated land to the default branch.
  *
  * Swap `GitHubAdapter` for another `CodeStorageAdapter` when storage_backend changes.
@@ -47,7 +47,7 @@ export type LandPreflight = {
 };
 
 export interface CodeStorageAdapter {
-  /** Verify branch exists on remote after gx pr / jj-worker push (does not push). */
+  /** Verify branch exists on remote after gx pr publish (does not push). */
   publish(input: {
     accessToken: string;
     repoFullName: string;

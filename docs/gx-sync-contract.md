@@ -33,7 +33,7 @@ jj git fetch
 # reconcile local bookmark to remote tip before applying new ops
 ```
 
-If GX Cloud applied server-side jj ops (Phase 4 worker), the client pulls the new tip via fetch rather than replaying ops locally.
+If GX Cloud applies server-side jj ops, the client pulls the new tip via fetch rather than replaying ops locally.
 
 ## Publish path (today)
 
@@ -42,13 +42,12 @@ Until server jj is production-ready:
 - **Publish:** `gx pr` → `POST /v1/publish` → append event + upsert bookmark
 - **Sync:** metadata only; no automatic full payload download unless revision changed
 
-Console structural saves will queue jj-worker jobs in Phase 4; until then Console remains read-only for stack edits.
+Console remains read-only for stack edits until server-side jj operations are reintroduced.
 
 Implemented path (dev):
 
 - `POST /v1/bookmarks/:id/apply` on gx-cloud API (authenticated)
-- Proxies to `jj-worker POST /apply` with service key
-- Worker runs jj ops, pushes bookmark, bumps Postgres `revision` and `remote_head_sha`
+- Server-side jj apply is currently removed.
 
 ## Conflict policy
 
