@@ -6,7 +6,6 @@ import {
   query,
 } from "./_generated/server";
 import { authComponent } from "./auth";
-import { hashToken } from "./gxAuthUtils";
 import { repoFullNameFromPayload } from "./lib/gxPrPayload";
 
 export const ingestPush = internalMutation({
@@ -19,33 +18,6 @@ export const ingestPush = internalMutation({
     await ctx.db.insert("gxPrPushes", {
       userId,
       sessionId,
-      repoFullName: repoFullNameFromPayload(payload),
-      payload,
-      createdAt: Date.now(),
-    });
-  },
-});
-
-/** Legacy webhook path; Postgres is the source of truth for PR bookmarks. */
-export const ingestCliPush = mutation({
-  args: {
-    token: v.string(),
-    payload: v.any(),
-  },
-  handler: async (ctx, { token, payload }) => {
-    const tokenHash = await hashToken(token);
-    const session = await ctx.db
-      .query("gxCliSessions")
-      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
-      .first();
-
-    if (!session || session.revokedAt) {
-      throw new Error("Unauthorized");
-    }
-
-    await ctx.db.insert("gxPrPushes", {
-      userId: session.userId,
-      sessionId: session._id,
       repoFullName: repoFullNameFromPayload(payload),
       payload,
       createdAt: Date.now(),
