@@ -99,7 +99,6 @@ function SplineLighting({
         <Environment
           resolution={environmentResolution ?? 2048}
           environmentIntensity={0.72}
-          preset="studio"
           blur={0.9}
         >
           <Lightformer
@@ -132,7 +131,6 @@ function SplineLighting({
       <Environment
         resolution={environmentResolution ?? 2048}
         environmentIntensity={1.1}
-        preset="studio"
         blur={1}
       >
         <Lightformer
