@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { hashToken } from "./gxAuthUtils";
+import { betterAuthUserIdFromCreateResult, hashToken } from "./gxAuthUtils";
 
 export const ensureGithubUser = internalMutation({
   args: {
@@ -54,13 +54,14 @@ export const ensureGithubUser = internalMutation({
           updatedAt: now,
         },
       },
-    })) as { id: string };
+    })) as { _id?: string; id?: string; userId?: string | null };
+    const userId = betterAuthUserIdFromCreateResult(user);
 
     await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
         model: "account",
         data: {
-          userId: user.id,
+          userId,
           providerId: "github",
           accountId: String(args.githubUserId),
           accessToken: args.accessToken,
@@ -71,7 +72,7 @@ export const ensureGithubUser = internalMutation({
       },
     });
 
-    return user.id;
+    return userId;
   },
 });
 

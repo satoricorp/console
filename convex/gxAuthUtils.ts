@@ -5,3 +5,17 @@ export async function hashToken(token: string): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+
+export type BetterAuthCreatedUser = {
+  _id?: string;
+  id?: string;
+  userId?: string | null;
+};
+
+export function betterAuthUserIdFromCreateResult(user: BetterAuthCreatedUser): string {
+  const userId = user.userId ?? user.id ?? user._id;
+  if (!userId) {
+    throw new Error("Better Auth user create response missing id");
+  }
+  return userId;
+}
