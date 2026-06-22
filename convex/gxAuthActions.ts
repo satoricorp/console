@@ -2,9 +2,7 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { action, type ActionCtx } from "./_generated/server";
-import { generateCliToken } from "./gxAuthUtils";
 
 type GitHubUser = {
   id: number;
@@ -21,12 +19,10 @@ type GitHubEmail = {
 };
 
 type CompleteCliAuthResult = {
-  token: string;
   github_access_token?: string;
   user_id: string;
   login: string;
   avatar_url?: string;
-  session_id: Id<"gxCliSessions">;
   github_app_install_url?: string;
 };
 
@@ -117,26 +113,10 @@ async function completeAuthWithGitHubToken(
     },
   );
 
-  const token = generateCliToken();
-  const sessionId: Id<"gxCliSessions"> = await ctx.runMutation(
-    internal.gxAuth.finishCliLogin,
-    {
-      userId,
-      githubUserId: githubUser.id,
-      githubLogin: githubUser.login,
-      machineId: args.machineId,
-      machineName: args.machineName,
-      gxVersion: args.gxVersion,
-      token,
-    },
-  );
-
   return {
-    token,
     user_id: userId,
     login: githubUser.login,
     avatar_url: githubUser.avatar_url ?? undefined,
-    session_id: sessionId,
     github_app_install_url:
       process.env.GITHUB_APP_INSTALL_URL?.trim() || undefined,
   };

@@ -72,22 +72,6 @@ export default defineSchema({
     .index("by_keyHash", ["keyHash"])
     .index("by_userId_createdAt", ["userId", "createdAt"]),
 
-  gxCliSessions: defineTable({
-    userId: v.string(),
-    tokenHash: v.string(),
-    githubUserId: v.number(),
-    githubLogin: v.string(),
-    machineId: v.string(),
-    machineName: v.string(),
-    gxVersion: v.optional(v.string()),
-    createdAt: v.number(),
-    lastUsedAt: v.optional(v.number()),
-    revokedAt: v.optional(v.number()),
-  })
-    .index("by_tokenHash", ["tokenHash"])
-    .index("by_userId", ["userId"])
-    .index("by_userId_machineId", ["userId", "machineId"]),
-
   gxDesktopOAuthTickets: defineTable({
     ticketHash: v.string(),
     state: v.string(),
