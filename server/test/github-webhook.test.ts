@@ -263,6 +263,45 @@ describeDb("GitHub webhook", () => {
     delete process.env.TURBOPUFFER_API_KEY;
   });
 
+  test("installation_repositories webhook enqueues index jobs for added repos", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";
+    fetchCalls.length = 0;
+
+    const res = await postWebhook("installation_repositories", {
+      action: "added",
+      installation: {
+        id: INSTALLATION_ID,
+        account: { id: 1, login: "acme", type: "Organization" },
+        repository_selection: "selected",
+        app_id: 1,
+        created_at: new Date().toISOString(),
+      },
+      repositories_added: [
+        {
+          id: 999003,
+          full_name: "acme/music",
+          name: "music",
+          private: true,
+          default_branch: "main",
+          owner: { login: "acme" },
+        },
+      ],
+      repositories_removed: [],
+    });
+    expect(res.status).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      fetchCalls.some(
+        (c) => c.url.includes("turbopuffer.com") || c.url.includes("/embeddings"),
+      ),
+    ).toBe(true);
+
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.TURBOPUFFER_API_KEY;
+  });
+
   test("pull_request opened generates summary and posts comment", async () => {
     const res = await postWebhook("pull_request", {
       action: "opened",

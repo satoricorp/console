@@ -206,11 +206,12 @@ async function handleInstallationRepositories(
   if (!installation) return;
 
   const now = Date.now();
+  const reposAdded = payload.repositories_added ?? [];
   await db.begin(async (tx) => {
     await upsertInstallation(tx, installation, now);
     await upsertOrgForInstallation(tx, installation.installationId, now);
 
-    for (const repo of payload.repositories_added ?? []) {
+    for (const repo of reposAdded) {
       const normalized = normalizeRepository(repo, installation.installationId);
       if (normalized) {
         await upsertRepository(tx, normalized, now);
@@ -228,6 +229,19 @@ async function handleInstallationRepositories(
       `;
     }
   });
+
+  const orgId = await resolveOrgIdForInstallation(db, installation.installationId);
+  if (!orgId) return;
+
+  for (const repo of reposAdded) {
+    if (!repo.full_name) continue;
+    enqueueIndexJob({
+      orgId,
+      repoFullName: repo.full_name,
+      reason: "install",
+      ref: repo.default_branch ? `refs/heads/${repo.default_branch}` : undefined,
+    });
+  }
 }
 
 async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
