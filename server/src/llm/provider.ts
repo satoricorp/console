@@ -16,7 +16,7 @@ export type LLMProvider = {
 
 const defaultOpenAIBaseURL = "https://api.openai.com/v1";
 const defaultModel = "gpt-4o-mini";
-const bedrockAnthropicModel = "anthropic.claude-sonnet-4-6";
+const bedrockAnthropicModel = "us.anthropic.claude-sonnet-4-6";
 
 function openAIBaseURL(): string {
   const baseURL = (
