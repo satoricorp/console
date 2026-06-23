@@ -138,6 +138,7 @@ export function languageFromPath(filePath: string): string {
     ".rs": "rust",
     ".java": "java",
     ".rb": "ruby",
+    ".swift": "swift",
     ".md": "markdown",
     ".json": "json",
     ".yaml": "yaml",
