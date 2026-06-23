@@ -300,19 +300,24 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  if (!bookmark.latest_event_id) {
-    console.info("PR Summary skipped: bookmark has no latest_event_id", {
+  let result;
+  try {
+    result = await generateSummary(db, {
+      orgId,
+      userId: "github-webhook",
       bookmarkId: bookmark.id,
+      provider: createMockProvider(),
     });
-    return;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("no matching review event")) {
+      console.info("PR Summary skipped: bookmark has no matching review event", {
+        bookmarkId: bookmark.id,
+        headSha: pr.head?.sha ?? null,
+      });
+      return;
+    }
+    throw error;
   }
-
-  const result = await generateSummary(db, {
-    orgId,
-    userId: "github-webhook",
-    bookmarkId: bookmark.id,
-    provider: createMockProvider(),
-  });
 
   let githubCommentId: number | null = null;
   try {
@@ -776,7 +781,19 @@ async function findOrCreateBookmark(
     LIMIT 1
   `;
   if (existing) {
-    return existing;
+    const [updated] = await db<{ id: string; latest_event_id: string | null }[]>`
+      UPDATE bookmarks
+      SET
+        branch_name = ${input.branchName},
+        github_pr_url = COALESCE(${input.prUrl}, github_pr_url),
+        remote_head_sha = COALESCE(${input.headSha}, remote_head_sha),
+        head_commit_id = COALESCE(${input.headSha}, head_commit_id),
+        updated_at_ms = ${Date.now()}
+      WHERE id = ${existing.id}
+        AND org_id = ${input.orgId}
+      RETURNING id, latest_event_id
+    `;
+    return updated ?? existing;
   }
 
   const now = Date.now();
@@ -788,6 +805,7 @@ async function findOrCreateBookmark(
       github_pr_url,
       github_pr_number,
       remote_head_sha,
+      head_commit_id,
       published_at_ms,
       updated_at_ms,
       org_id
@@ -797,6 +815,7 @@ async function findOrCreateBookmark(
       ${input.branchName},
       ${input.prUrl},
       ${input.prNumber},
+      ${input.headSha},
       ${input.headSha},
       ${now},
       ${now},

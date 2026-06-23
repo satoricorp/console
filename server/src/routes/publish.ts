@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type postgres from "postgres";
 import { getSql } from "../db";
+import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import type { PublishRegistration, PushBundle } from "../types";
 
@@ -122,6 +123,23 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       return { eventId: event.id, bookmark };
     });
 
+    const indexResult = await indexPublishedArtifact({
+      orgId: auth.orgId,
+      repoFullName: result.bookmark.repo_full_name,
+      eventId: result.eventId,
+      branchName: result.bookmark.branch_name,
+      headSha: payload.push.head_commit_id,
+      payload,
+    });
+    if (indexResult.status === "failed") {
+      console.info("GX artifact indexing failed", {
+        orgId: auth.orgId,
+        repoFullName: result.bookmark.repo_full_name,
+        eventId: result.eventId,
+        error: indexResult.error,
+      });
+    }
+
     const url = reviewUrl(result.bookmark.id);
     return c.json(
       {
@@ -129,7 +147,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
         event_id: result.eventId,
         review_id: result.bookmark.id,
         ...(url ? { url, review_url: url } : {}),
-        index_status: "pending",
+        index_status: indexResult.status,
         repo_full_name: result.bookmark.repo_full_name,
         branch_name: result.bookmark.branch_name,
         title: result.bookmark.title,

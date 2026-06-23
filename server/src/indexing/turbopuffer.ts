@@ -7,6 +7,7 @@ import {
   openAIEmbeddingModel,
   type IndexingConfig,
 } from "./config";
+import type { PushBundle } from "../types";
 
 const maxChunkBytes = 4_000;
 
@@ -36,6 +37,15 @@ export type PushIndexInput = {
   afterSha?: string;
   commitMessages?: string[];
   reason: string;
+};
+
+export type PublishArtifactIndexInput = {
+  orgId: string;
+  repoFullName: string;
+  eventId: string;
+  branchName: string;
+  headSha: string;
+  payload: PushBundle;
 };
 
 type FetchFn = typeof fetch;
@@ -70,6 +80,35 @@ export async function runIncrementalIndex(
       return { status: "empty", chunks: 0 };
     }
 
+    const namespace = namespaceForOrgRepo(input.orgId, input.repoFullName);
+    for (let start = 0; start < chunks.length; start += 64) {
+      const batch = chunks.slice(start, start + 64);
+      const embeddings = await embedTexts(cfg, batch.map((chunk) => chunk.text));
+      await upsertTurboPufferRows(cfg, namespace, batch, embeddings);
+    }
+    return { status: "indexed", chunks: chunks.length };
+  } catch (error) {
+    return {
+      status: "failed",
+      chunks: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function indexPublishedArtifact(
+  input: PublishArtifactIndexInput,
+): Promise<IndexJobResult> {
+  const cfg = indexingConfig();
+  if (!cfg) {
+    return { status: "disabled", chunks: 0 };
+  }
+
+  try {
+    const chunks = buildPublishedArtifactChunks(input);
+    if (chunks.length === 0) {
+      return { status: "empty", chunks: 0 };
+    }
     const namespace = namespaceForOrgRepo(input.orgId, input.repoFullName);
     for (let start = 0; start < chunks.length; start += 64) {
       const batch = chunks.slice(start, start + 64);
@@ -135,6 +174,106 @@ export async function searchIndex(args: {
       attributes,
     }];
   });
+}
+
+function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexChunk[] {
+  const chunks: IndexChunk[] = [];
+  const stack = Array.isArray(input.payload.stack) ? input.payload.stack : [];
+  stack.forEach((revision, index) => {
+    const change = isRecord(revision.change) ? revision.change : {};
+    const files = stringArray(change.files);
+    const patch = typeof revision.patch === "string" ? revision.patch : "";
+    const description =
+      typeof change.description === "string" ? change.description.trim() : "";
+    if (!patch && !description && files.length === 0) {
+      return;
+    }
+    const branchName =
+      typeof revision.branch_name === "string" && revision.branch_name.trim()
+        ? revision.branch_name.trim()
+        : input.branchName;
+    const baseBranchName =
+      typeof revision.base_branch_name === "string"
+        ? revision.base_branch_name.trim()
+        : "";
+    const text = limitBytes(
+      [
+        "GX published revision diff.",
+        `Repo: ${input.repoFullName}`,
+        `Branch: ${branchName}`,
+        baseBranchName ? `Base: ${baseBranchName}` : "",
+        `Head: ${input.headSha}`,
+        description ? `Description: ${description}` : "",
+        files.length ? `Files:\n${files.join("\n")}` : "",
+        patch ? `Patch:\n${patch}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      maxChunkBytes,
+    );
+    chunks.push(
+      chunk(
+        "published-revision",
+        [input.orgId, input.eventId, String(index), branchName],
+        text,
+        {
+          org_id: input.orgId,
+          repo_full_name: input.repoFullName,
+          branch_name: branchName,
+          source_kind: "published_revision_diff",
+          file: files[0] ?? "",
+          session_id: "",
+          head_sha: input.headSha,
+          indexed_reason: "gx_pr_artifact",
+          event_id: input.eventId,
+          text,
+        },
+      ),
+    );
+  });
+
+  const sessions = Array.isArray(input.payload.sessions) ? input.payload.sessions : [];
+  sessions.slice(0, 20).forEach((session, index) => {
+    if (!isRecord(session)) return;
+    const sessionId = typeof session.id === "string" ? session.id : "";
+    const command = typeof session.command === "string" ? session.command : "";
+    const cwd = typeof session.cwd === "string" ? session.cwd : "";
+    const requests = Array.isArray(session.requests) ? session.requests : [];
+    if (!sessionId && !command && requests.length === 0) {
+      return;
+    }
+    const text = limitBytes(
+      [
+        "GX published session context.",
+        `Repo: ${input.repoFullName}`,
+        `Branch: ${input.branchName}`,
+        `Head: ${input.headSha}`,
+        sessionId ? `Session: ${sessionId}` : "",
+        command ? `Command: ${command}` : "",
+        cwd ? `Cwd: ${cwd}` : "",
+        `Requests: ${requests.length}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      maxChunkBytes,
+    );
+    chunks.push(
+      chunk("published-session", [input.orgId, input.eventId, sessionId, String(index)], text, {
+        org_id: input.orgId,
+        repo_full_name: input.repoFullName,
+        branch_name: input.branchName,
+        source_kind: "published_session_context",
+        file: "",
+        session_id: sessionId,
+        head_sha: input.headSha,
+        indexed_reason: "gx_pr_artifact",
+        event_id: input.eventId,
+        text,
+      }),
+    );
+  });
+
+  return chunks;
 }
 
 async function buildIncrementalChunks(
@@ -315,6 +454,7 @@ function turboPufferSchema(): Record<string, unknown> {
     file: filterableString,
     session_id: filterableString,
     head_sha: filterableString,
+    event_id: filterableString,
     indexed_reason: filterableString,
   };
 }
@@ -344,4 +484,10 @@ function limitBytes(text: string, maxBytes: number): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }

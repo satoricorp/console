@@ -49,6 +49,25 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
   lines.push("");
 
   if (input.context) {
+    if (input.context.publishedRevisions?.length) {
+      lines.push("GX published revision diffs:");
+      for (const revision of input.context.publishedRevisions.slice(0, 12)) {
+        const branch = revision.branchName ? ` branch=${revision.branchName}` : "";
+        const base = revision.baseBranchName ? ` base=${revision.baseBranchName}` : "";
+        const description = revision.description
+          ? ` description=${JSON.stringify(revision.description).slice(0, 240)}`
+          : "";
+        lines.push(`- revision${branch}${base}${description}`);
+        if (revision.files.length) {
+          lines.push(`  files: ${revision.files.slice(0, 20).join(", ")}`);
+        }
+        if (revision.patch) {
+          lines.push(revision.patch.slice(0, 1_800));
+        }
+      }
+      lines.push("");
+    }
+
     lines.push("Changed hunks:");
     for (const hunk of input.context.hunkLinks.slice(0, 20)) {
       const model = hunk.model ? ` ${hunk.model}` : "";
@@ -84,6 +103,18 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
       lines.push("- (none)");
     }
     lines.push("");
+
+    if (input.context.publishedSessions?.length) {
+      lines.push("GX published session evidence:");
+      for (const session of input.context.publishedSessions.slice(0, 12)) {
+        const command = session.command ? ` command=${JSON.stringify(session.command).slice(0, 160)}` : "";
+        const cwd = session.cwd ? ` cwd=${session.cwd}` : "";
+        lines.push(
+          `- ${session.sessionId}${command}${cwd} requests=${session.requestCount} responses=${session.responseCount}`,
+        );
+      }
+      lines.push("");
+    }
 
     lines.push("Indexed codebase context:");
     for (const snippet of (input.context.indexSnippets ?? []).slice(0, 12)) {

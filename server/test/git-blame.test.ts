@@ -62,6 +62,53 @@ describe("gx chat prompt git_blame context", () => {
     expect(prompt).toContain("+GX smoke test");
   });
 
+  test("includes GX published revision diffs from artifact context", () => {
+    const prompt = buildGxChatUserPrompt({
+      author: "alice",
+      question: "what changed?",
+      latestSummary: null,
+      context: {
+        eventId: "event",
+        bookmarkId: "bookmark",
+        orgId: "org",
+        repoRootPath: "/repo",
+        headCommitId: "head",
+        refRange: null,
+        fileStats: null,
+        intentCandidates: [],
+        struggleSignals: [],
+        humanOverrides: [],
+        hunkLinks: [],
+        sessionEvents: [],
+        publishedRevisions: [
+          {
+            branchName: "docs/documentation",
+            baseBranchName: "main",
+            description: "documentation",
+            files: ["README.md"],
+            patch: "@@ -1 +1,2 @@\n # Music\n+GX smoke test",
+            githubPrUrl: "https://github.com/acme/music/pull/1",
+          },
+        ],
+        publishedSessions: [
+          {
+            sessionId: "session-one",
+            command: "codex",
+            cwd: "/repo",
+            requestCount: 1,
+            responseCount: 1,
+          },
+        ],
+      },
+      recentComments: [],
+    });
+
+    expect(prompt).toContain("GX published revision diffs");
+    expect(prompt).toContain("branch=docs/documentation");
+    expect(prompt).toContain("+GX smoke test");
+    expect(prompt).toContain("GX published session evidence");
+  });
+
   test("labels previous git work and includes markdown code links", () => {
     const ctx: ExtractContext = {
       eventId: "event",

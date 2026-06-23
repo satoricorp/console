@@ -88,6 +88,8 @@ describeDb("generateSummary integration", () => {
   let orgId: string;
   let bookmarkId: string;
   let eventId: string;
+  let commitOnlyBookmarkId: string;
+  let commitOnlyEventId: string;
 
   beforeAll(async () => {
     delete process.env.OPENAI_API_KEY;
@@ -190,6 +192,43 @@ describeDb("generateSummary integration", () => {
         1
       )
     `;
+
+    const [commitOnlyEvent] = await db<{ id: string }[]>`
+      INSERT INTO pr_events (
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+      ) VALUES (
+        ${now + 1},
+        '0.1.0-test',
+        'plain-git-head',
+        ${JSON.stringify({
+          refRange: "main..plain-git-head",
+          intentCandidates: ["Plain Git capture context"],
+        })}::jsonb,
+        ${orgId},
+        'summary-test-user',
+        '/Users/joe/git/plain'
+      )
+      RETURNING id
+    `;
+    commitOnlyEventId = commitOnlyEvent.id;
+
+    const [commitOnlyBookmark] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms,
+        org_id, remote_head_sha, head_commit_id
+      ) VALUES (
+        'github-webhook',
+        'acme/plain',
+        'feat/plain-git',
+        ${now + 1},
+        ${now + 1},
+        ${orgId},
+        'plain-git-head',
+        'plain-git-head'
+      )
+      RETURNING id
+    `;
+    commitOnlyBookmarkId = commitOnlyBookmark.id;
   });
 
   afterAll(async () => {
@@ -243,6 +282,19 @@ describeDb("generateSummary integration", () => {
     expect(json.eventId).toBe(eventId);
     expect(json.lineCount).toBeLessThanOrEqual(20);
     expect(json.summaryId).toBeTruthy();
+  });
+
+  test("resolves bookmark context from current head commit without latest_event_id", async () => {
+    const db = getSql();
+    const result = await generateSummary(db, {
+      orgId,
+      bookmarkId: commitOnlyBookmarkId,
+      provider: createMockProvider("Plain Git capture context"),
+    });
+
+    expect(result.bookmarkId).toBe(commitOnlyBookmarkId);
+    expect(result.eventId).toBe(commitOnlyEventId);
+    expect(validateSummary(result.content).ok).toBe(true);
   });
 
   test("returns 404 when bookmark missing", async () => {

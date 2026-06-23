@@ -19,6 +19,7 @@ export type PublishRegistration = {
 
 export type PushBundle = {
   event: string;
+  schema_version?: number;
   created_at: number;
   gx_version: string;
   pr_id?: string;
@@ -40,13 +41,21 @@ export type PushBundle = {
     github_pull_request_url?: string;
   };
   change?: {
+    id?: number;
+    jj_change_id?: string;
+    current_commit_id?: string;
     description?: string;
     files?: string[];
+    review_context?: ReviewContextPayload;
   };
   stack?: Array<{
     change?: {
+      id?: number;
+      jj_change_id?: string;
+      current_commit_id?: string;
       description?: string;
       files?: string[];
+      review_context?: ReviewContextPayload;
     };
     branch_name?: string;
     base_branch_name?: string;
@@ -55,6 +64,36 @@ export type PushBundle = {
   }>;
   sessions?: unknown[];
   metadata?: Record<string, string>;
+};
+
+export type ReviewContextPayload = {
+  changed_symbols?: Array<{
+    hunk_id?: string;
+    file?: string;
+    symbol?: string;
+    kind?: string;
+    start_line?: number;
+    end_line?: number;
+  }>;
+  structural_facts?: Array<{
+    file?: string;
+    language?: string;
+    defined_symbols?: string[];
+    symbols?: Array<{
+      name?: string;
+      kind?: string;
+      start_line?: number;
+      end_line?: number;
+    }>;
+  }>;
+  risk?: {
+    level?: string;
+    score?: number;
+    signals?: string[];
+  };
+  transcript_sources?: unknown[];
+  agent_provenance?: unknown[];
+  evidence?: unknown[];
 };
 
 export type HunkLinkInput = {
