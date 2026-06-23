@@ -1,9 +1,11 @@
 import type postgres from "postgres";
+import { getInstallationAccessToken } from "../github/app";
 import { loadGitBlameContext, type GitBlameContext } from "../github/git-blame";
 import { createReviewProviders } from "../llm/provider";
 import {
   buildGxChatUserPrompt,
   GX_CHAT_SYSTEM_PROMPT,
+  type GitHubPrFileContext,
 } from "../llm/prompts/gx-chat";
 import {
   loadExtractContext,
@@ -132,6 +134,8 @@ export async function handleGxMention(
   const latestSummary = await loadLatestSummary(db, input.orgId, input.bookmarkId);
   const context = await loadMentionContext(db, input.orgId, input.bookmarkId);
   const recentComments = await loadRecentComments(db, input.orgId, input.bookmarkId, input.commentId);
+  const githubPrFiles =
+    input.github && !context ? await loadGitHubPrFiles(input.github) : [];
   const gitBlameContext =
     input.github && context
       ? await loadGitBlameContext(db, {
@@ -148,6 +152,7 @@ export async function handleGxMention(
     question,
     latestSummary: latestSummary?.content ?? null,
     context,
+    githubPrFiles,
     gitBlameContext,
     recentComments,
   });
@@ -172,6 +177,7 @@ export async function handleGxMention(
     commentId: input.commentId,
     author: input.author,
     replied: Boolean(reply),
+    githubPrFiles: githubPrFiles.length,
     gitBlameRows: gitBlameContext?.rows.length ?? 0,
   });
 
@@ -229,11 +235,73 @@ async function loadRecentComments(
   `;
 }
 
+async function loadGitHubPrFiles(
+  input: NonNullable<GxMentionInput["github"]>,
+): Promise<GitHubPrFileContext[]> {
+  try {
+    const token = await getInstallationAccessToken(input.installationId);
+    const response = await fetch(
+      `https://api.github.com/repos/${input.repoFullName}/pulls/${input.pullNumber}/files?per_page=100`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "gx-server",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text();
+      console.info("gx-mention GitHub PR files unavailable", {
+        repoFullName: input.repoFullName,
+        pullNumber: input.pullNumber,
+        status: response.status,
+        body: body.slice(0, 300),
+      });
+      return [];
+    }
+
+    const files = (await response.json()) as Array<{
+      filename?: unknown;
+      status?: unknown;
+      additions?: unknown;
+      deletions?: unknown;
+      patch?: unknown;
+    }>;
+
+    return files
+      .flatMap((file) => {
+        if (typeof file.filename !== "string" || !file.filename) return [];
+        return [
+          {
+            filename: file.filename,
+            status: typeof file.status === "string" ? file.status : null,
+            additions:
+              typeof file.additions === "number" ? file.additions : null,
+            deletions:
+              typeof file.deletions === "number" ? file.deletions : null,
+            patch: typeof file.patch === "string" ? file.patch : null,
+          },
+        ];
+      })
+      .slice(0, 20);
+  } catch (error) {
+    console.info("gx-mention GitHub PR files unavailable", {
+      repoFullName: input.repoFullName,
+      pullNumber: input.pullNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
 async function generateGxChatReply(input: {
   author: string;
   question: string;
   latestSummary: string | null;
   context: ExtractContext | null;
+  githubPrFiles: GitHubPrFileContext[];
   gitBlameContext: GitBlameContext | null;
   recentComments: RecentComment[];
 }): Promise<string> {

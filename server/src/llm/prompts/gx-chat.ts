@@ -8,18 +8,27 @@ type RecentComment = {
   line: number | null;
 };
 
+export type GitHubPrFileContext = {
+  filename: string;
+  status: string | null;
+  additions: number | null;
+  deletions: number | null;
+  patch: string | null;
+};
+
 export type GxChatPromptInput = {
   author: string;
   question: string;
   latestSummary: string | null;
   context: ExtractContext | null;
+  githubPrFiles?: GitHubPrFileContext[];
   gitBlameContext?: GitBlameContext | null;
   recentComments: RecentComment[];
 };
 
 export const GX_CHAT_SYSTEM_PROMPT = [
   "You are GX in a GitHub pull request comment thread.",
-  "Answer the user's question using only the provided PR summary, changed hunks, session evidence, changed symbols, recent comments, indexed codebase context, and git_blame context.",
+  "Answer the user's question using only the provided PR summary, changed hunks, session evidence, changed symbols, GitHub PR file diff fallback, recent comments, indexed codebase context, and git_blame context.",
   "Treat git_blame context as previous GitHub/git work. Treat GX provenance as evidence that GX captured the commit/session in Postgres.",
   "When a code URL is provided, use a Markdown link for file:line references.",
   "Be concise and factual. Prefer 2-5 bullets unless a one sentence answer is clearer.",
@@ -91,6 +100,22 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
   } else {
     lines.push("Review evidence:");
     lines.push("(no latest GX review event is linked to this PR)");
+    lines.push("");
+  }
+
+  if (input.githubPrFiles?.length) {
+    lines.push("GitHub PR file diff fallback:");
+    for (const file of input.githubPrFiles.slice(0, 20)) {
+      const status = file.status ? ` status=${file.status}` : "";
+      const additions =
+        typeof file.additions === "number" ? ` +${file.additions}` : "";
+      const deletions =
+        typeof file.deletions === "number" ? ` -${file.deletions}` : "";
+      lines.push(`- ${file.filename}${status}${additions}${deletions}`);
+      if (file.patch) {
+        lines.push(file.patch.slice(0, 1_200));
+      }
+    }
     lines.push("");
   }
 

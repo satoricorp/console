@@ -39,6 +39,29 @@ describe("parsePatchHunks", () => {
 });
 
 describe("gx chat prompt git_blame context", () => {
+  test("includes GitHub PR file fallback when GX event context is missing", () => {
+    const prompt = buildGxChatUserPrompt({
+      author: "alice",
+      question: "what changed?",
+      latestSummary: null,
+      context: null,
+      githubPrFiles: [
+        {
+          filename: "README.md",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          patch: "@@ -1 +1,2 @@\n # Music\n+GX smoke test",
+        },
+      ],
+      recentComments: [],
+    });
+
+    expect(prompt).toContain("GitHub PR file diff fallback");
+    expect(prompt).toContain("- README.md status=modified +1 -0");
+    expect(prompt).toContain("+GX smoke test");
+  });
+
   test("labels previous git work and includes markdown code links", () => {
     const ctx: ExtractContext = {
       eventId: "event",
