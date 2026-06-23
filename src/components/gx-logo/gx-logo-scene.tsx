@@ -33,6 +33,7 @@ import { GxGlbModel } from "./gx-glb-model";
 import { laplacianSmoothGeometry } from "./round-geometry";
 
 const BLOB_FONT = "/fonts/Blob-Regular.typeface.json";
+const STUDIO_HDR = "/hdr/studio_small_03_1k.hdr";
 
 useFont.preload(BLOB_FONT);
 
@@ -99,6 +100,7 @@ function SplineLighting({
         <Environment
           resolution={environmentResolution ?? 2048}
           environmentIntensity={0.72}
+          files={STUDIO_HDR}
           blur={0.9}
         >
           <Lightformer
@@ -131,6 +133,7 @@ function SplineLighting({
       <Environment
         resolution={environmentResolution ?? 2048}
         environmentIntensity={1.1}
+        files={STUDIO_HDR}
         blur={1}
       >
         <Lightformer

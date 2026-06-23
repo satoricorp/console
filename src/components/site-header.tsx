@@ -90,28 +90,42 @@ function NavAnchorLink({ href, label }: { href: string; label: string }) {
 export function SiteHeader() {
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const [pastHero, setPastHero] = useState(false);
+  const [belowFold, setBelowFold] = useState(false);
 
   useEffect(() => {
+    let frame: number | null = null;
+
+    const updateBelowFold = () => {
+      frame = null;
+      setBelowFold(window.scrollY >= window.innerHeight);
+    };
+
+    const scheduleUpdate = () => {
+      if (frame !== null) {
+        return;
+      }
+
+      frame = requestAnimationFrame(updateBelowFold);
+    };
+
     if (!isHome) {
-      return;
+      const resetFrame = requestAnimationFrame(() => setBelowFold(false));
+
+      return () => cancelAnimationFrame(resetFrame);
     }
 
-    const hero = document.getElementById("hero");
-    if (!hero) {
-      const frame = requestAnimationFrame(() => setPastHero(true));
-      return () => cancelAnimationFrame(frame);
-    }
+    scheduleUpdate();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setPastHero(!entry.isIntersecting);
-      },
-      { threshold: 0 },
-    );
+    return () => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
 
-    observer.observe(hero);
-    return () => observer.disconnect();
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
   }, [isHome]);
 
   useEffect(() => {
@@ -123,7 +137,7 @@ export function SiteHeader() {
     });
   }, [pathname]);
 
-  const showNavLogo = !isHome || pastHero;
+  const showNavLogo = !isHome || belowFold;
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-background/95 py-3 backdrop-blur-sm dark:border-zinc-800">
