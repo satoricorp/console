@@ -7,18 +7,6 @@ function jsonError(message: string, status: number) {
   return new Response(message, { status });
 }
 
-function stringFromBody(
-  body: Record<string, unknown>,
-  camelName: string,
-  snakeName: string,
-): string | undefined {
-  const camelValue = body[camelName];
-  if (typeof camelValue === "string") return camelValue;
-  const snakeValue = body[snakeName];
-  if (typeof snakeValue === "string") return snakeValue;
-  return undefined;
-}
-
 async function completeCliAuth(ctx: ActionCtx, request: Request) {
   let body: {
     github_access_token?: string;
@@ -49,43 +37,6 @@ async function completeCliAuth(ctx: ActionCtx, request: Request) {
     const message = error instanceof Error ? error.message : "Authentication failed";
     return jsonError(message, 401);
   }
-}
-
-async function validateMcpApiKey(ctx: ActionCtx, request: Request) {
-  const authHeader = request.headers.get("authorization");
-  let apiKey = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : "";
-  let repoFullName: string | undefined;
-
-  if (request.headers.get("content-type")?.includes("application/json")) {
-    let body: Record<string, unknown>;
-    try {
-      body = (await request.json()) as Record<string, unknown>;
-    } catch {
-      return jsonError("Invalid JSON body", 400);
-    }
-
-    if (!apiKey) {
-      apiKey = stringFromBody(body, "apiKey", "api_key")?.trim() ?? "";
-    }
-    repoFullName = stringFromBody(body, "repoFullName", "repo_full_name")?.trim();
-  }
-
-  if (!apiKey) {
-    return jsonError("Unauthorized", 401);
-  }
-
-  const result = await ctx.runMutation(api.apiKeys.validateApiKey, {
-    apiKey,
-    repoFullName,
-  });
-
-  if (!result.valid) {
-    return Response.json({ valid: false }, { status: 401 });
-  }
-
-  return Response.json(result);
 }
 
 const http = httpRouter();
@@ -274,12 +225,6 @@ http.route({
       return jsonError(message, 401);
     }
   }),
-});
-
-http.route({
-  path: "/cx/mcp/validate-api-key",
-  method: "POST",
-  handler: httpAction(validateMcpApiKey),
 });
 
 export default http;

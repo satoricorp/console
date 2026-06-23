@@ -16,5 +16,6 @@ describe("Convex HTTP route ownership", () => {
     expect(httpSource).not.toContain('path: "/cx/auth/revoke"');
     expect(httpSource).not.toContain('path: "/cx/pr"');
     expect(httpSource).not.toContain('path: "/cx/pr/comment"');
+    expect(httpSource).not.toContain('path: "/cx/mcp/validate-api-key"');
   });
 });

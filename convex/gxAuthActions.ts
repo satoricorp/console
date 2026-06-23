@@ -3,20 +3,12 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
-
-type GitHubUser = {
-  id: number;
-  login: string;
-  name?: string | null;
-  avatar_url?: string | null;
-  email?: string | null;
-};
-
-type GitHubEmail = {
-  email: string;
-  primary: boolean;
-  verified: boolean;
-};
+import {
+  githubFetch,
+  resolveGitHubEmail,
+  type GitHubEmail,
+  type GitHubProfile,
+} from "./githubProfile";
 
 type CompleteCliAuthResult = {
   github_access_token?: string;
@@ -32,44 +24,21 @@ type GitHubOAuthTokenResponse = {
   error_description?: string;
 };
 
-async function githubFetch<T>(url: string, accessToken: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "gx-cloud",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub request failed: ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-}
-
 async function resolveGithubEmail(
   accessToken: string,
-  githubUser: GitHubUser,
+  githubUser: GitHubProfile,
 ): Promise<string> {
-  if (githubUser.email) {
-    return githubUser.email;
-  }
-
   try {
     const emails = await githubFetch<GitHubEmail[]>(
       "https://api.github.com/user/emails",
       accessToken,
     );
-    const primary = emails.find((entry) => entry.primary && entry.verified);
-    if (primary?.email) return primary.email;
-    if (emails[0]?.email) return emails[0].email;
+    return resolveGitHubEmail(githubUser, emails).email;
   } catch {
     // GitHub can hide emails; keep auth usable with the canonical noreply fallback.
   }
 
-  return `${githubUser.id}+${githubUser.login}@users.noreply.github.com`;
+  return resolveGitHubEmail(githubUser).email;
 }
 
 const completeCliAuthArgs = {
@@ -88,23 +57,29 @@ async function completeAuthWithGitHubToken(
     gxVersion?: string;
   },
 ): Promise<CompleteCliAuthResult> {
-  const githubUser = await githubFetch<GitHubUser>(
+  const githubUser = await githubFetch<GitHubProfile>(
     "https://api.github.com/user",
     args.githubAccessToken,
   );
 
   if (
-    typeof githubUser.id !== "number" ||
+    (typeof githubUser.id !== "number" && typeof githubUser.id !== "string") ||
     typeof githubUser.login !== "string"
   ) {
     throw new Error("Invalid GitHub user profile");
+  }
+
+  const githubUserId =
+    typeof githubUser.id === "number" ? githubUser.id : Number(githubUser.id);
+  if (!Number.isSafeInteger(githubUserId)) {
+    throw new Error("Invalid GitHub user id");
   }
 
   const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
   const userId = await ctx.runMutation(
     internal.gxAuth.ensureGithubUser,
     {
-      githubUserId: githubUser.id,
+      githubUserId,
       githubLogin: githubUser.login,
       name: githubUser.name?.trim() || githubUser.login,
       email,

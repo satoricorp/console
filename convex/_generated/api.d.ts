@@ -8,10 +8,10 @@
  * @module
  */
 
-import type * as apiKeys from "../apiKeys.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as githubAccess from "../githubAccess.js";
+import type * as githubProfile from "../githubProfile.js";
 import type * as gxAuth from "../gxAuth.js";
 import type * as gxAuthActions from "../gxAuthActions.js";
 import type * as gxAuthUtils from "../gxAuthUtils.js";
@@ -44,6 +44,7 @@ import type * as lib_turbopuffer_turbopufferClient from "../lib/turbopuffer/turb
 import type * as lib_turbopuffer_upsertDocuments from "../lib/turbopuffer/upsertDocuments.js";
 import type * as lib_turbopuffer_utils from "../lib/turbopuffer/utils.js";
 import type * as prChatActions from "../prChatActions.js";
+import type * as profile from "../profile.js";
 import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
 import type * as searchActions from "../searchActions.js";
@@ -59,10 +60,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  apiKeys: typeof apiKeys;
   auth: typeof auth;
   billing: typeof billing;
   githubAccess: typeof githubAccess;
+  githubProfile: typeof githubProfile;
   gxAuth: typeof gxAuth;
   gxAuthActions: typeof gxAuthActions;
   gxAuthUtils: typeof gxAuthUtils;
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/upsertDocuments": typeof lib_turbopuffer_upsertDocuments;
   "lib/turbopuffer/utils": typeof lib_turbopuffer_utils;
   prChatActions: typeof prChatActions;
+  profile: typeof profile;
   repoActions: typeof repoActions;
   repos: typeof repos;
   searchActions: typeof searchActions;

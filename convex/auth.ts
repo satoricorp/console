@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
+import { getBetterAuthGitHubUserInfo } from "./githubProfile";
 
 const siteUrl = process.env.SITE_URL!;
 
@@ -20,10 +21,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
         clientSecret: process.env.GITHUB_CLIENT_SECRET!,
         scope: ["repo"],
         overrideUserInfoOnSignIn: true,
-        mapProfileToUser: (profile) => ({
-          username: profile.login,
-          displayUsername: profile.login,
-        }),
+        getUserInfo: getBetterAuthGitHubUserInfo,
       },
     },
     plugins: [convex({ authConfig })],
