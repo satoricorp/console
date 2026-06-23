@@ -3,6 +3,9 @@
 import type { ActionCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 
+const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const TOKEN_REFRESH_SKEW_MS = 60_000;
+
 // GitHub App permissions required by GX merge/status flows:
 // - contents: read/write
 // - pull_requests: read
@@ -12,20 +15,156 @@ export type GithubAccessResult =
   | { ok: true; defaultBranch?: string }
   | { ok: false; status: number; message: string };
 
-export async function getGithubAccessToken(ctx: ActionCtx, userId: string) {
+type GithubAccount = {
+  accessToken?: string | null;
+  accessTokenExpiresAt?: number | null;
+  refreshToken?: string | null;
+  refreshTokenExpiresAt?: number | null;
+};
+
+type GitHubRefreshTokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  refresh_token_expires_in?: number;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+};
+
+async function findGithubAccount(ctx: ActionCtx, userId: string) {
   const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "account",
     where: [
       { field: "userId", value: userId },
       { field: "providerId", value: "github" },
     ],
-  })) as { accessToken?: string | null } | null;
+  })) as GithubAccount | null;
+
+  return account;
+}
+
+export function shouldRefreshGithubAccessToken(
+  account: GithubAccount,
+  now = Date.now(),
+) {
+  if (!account.accessToken) return true;
+  if (!account.accessTokenExpiresAt) return false;
+  return account.accessTokenExpiresAt <= now + TOKEN_REFRESH_SKEW_MS;
+}
+
+async function refreshGithubAccessToken(
+  ctx: ActionCtx,
+  userId: string,
+  account: GithubAccount,
+) {
+  const refreshToken = account.refreshToken?.trim();
+  if (!refreshToken) {
+    throw new Error(
+      "GitHub session expired. Sign out and sign in again to grant repository access.",
+    );
+  }
+
+  if (
+    account.refreshTokenExpiresAt &&
+    account.refreshTokenExpiresAt <= Date.now()
+  ) {
+    throw new Error(
+      "GitHub session expired. Sign out and sign in again to grant repository access.",
+    );
+  }
+
+  const clientId = process.env.GITHUB_CLIENT_ID?.trim();
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    throw new Error("GitHub OAuth refresh is not configured");
+  }
+
+  const response = await fetch(GITHUB_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "console-app",
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub OAuth refresh failed: ${response.status}`);
+  }
+
+  const body = (await response.json()) as GitHubRefreshTokenResponse;
+  if (body.error) {
+    throw new Error(
+      body.error_description || body.error || "GitHub OAuth refresh failed",
+    );
+  }
+  if (!body.access_token) {
+    throw new Error("GitHub OAuth refresh response missing access token");
+  }
+
+  const now = Date.now();
+  const update: {
+    accessToken: string;
+    updatedAt: number;
+    accessTokenExpiresAt?: number;
+    refreshToken?: string;
+    refreshTokenExpiresAt?: number;
+    scope?: string;
+  } = {
+    accessToken: body.access_token,
+    updatedAt: now,
+  };
+
+  if (typeof body.expires_in === "number") {
+    update.accessTokenExpiresAt = now + body.expires_in * 1000;
+  }
+  if (body.refresh_token) {
+    update.refreshToken = body.refresh_token;
+  }
+  if (typeof body.refresh_token_expires_in === "number") {
+    update.refreshTokenExpiresAt = now + body.refresh_token_expires_in * 1000;
+  }
+  if (body.scope) {
+    update.scope = body.scope;
+  }
+
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "account",
+      where: [
+        { field: "userId", value: userId },
+        { field: "providerId", value: "github" },
+      ],
+      update,
+    },
+  });
+
+  return body.access_token;
+}
+
+export async function getGithubAccessToken(
+  ctx: ActionCtx,
+  userId: string,
+  options: { forceRefresh?: boolean } = {},
+) {
+  const account = await findGithubAccount(ctx, userId);
 
   const accessToken = account?.accessToken;
-  if (!accessToken) {
+  if (!account || !accessToken) {
     throw new Error(
       "GitHub access is missing. Sign out and sign in again to grant repository access.",
     );
+  }
+
+  if (options.forceRefresh || shouldRefreshGithubAccessToken(account)) {
+    return refreshGithubAccessToken(ctx, userId, account);
   }
 
   return accessToken;
@@ -80,5 +219,11 @@ export async function verifyGithubRepoAccess(
   fullName: string,
 ): Promise<GithubAccessResult> {
   const accessToken = await getGithubAccessToken(ctx, userId);
-  return verifyGithubRepoAccessWithToken(accessToken, fullName);
+  const result = await verifyGithubRepoAccessWithToken(accessToken, fullName);
+  if (result.ok || result.status !== 401) return result;
+
+  const refreshedAccessToken = await getGithubAccessToken(ctx, userId, {
+    forceRefresh: true,
+  });
+  return verifyGithubRepoAccessWithToken(refreshedAccessToken, fullName);
 }

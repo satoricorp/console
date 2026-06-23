@@ -18,6 +18,20 @@ type GithubRepo = {
   default_branch?: string;
 };
 
+async function fetchGithubReposPage(accessToken: string, page: number) {
+  return fetch(
+    `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${accessToken}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "console-app",
+      },
+    },
+  );
+}
+
 const repoInput = v.object({
   githubId: v.number(),
   owner: v.string(),
@@ -35,24 +49,27 @@ export const listAvailableRepos = action({
       throw new Error("Sign in with GitHub to list repositories");
     }
 
-    const accessToken = await getGithubAccessToken(ctx, user._id);
+    let accessToken = await getGithubAccessToken(ctx, user._id);
     const repos: GithubRepo[] = [];
     let page = 1;
 
     while (page <= 5) {
-      const response = await fetch(
-        `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
-        {
-          headers: {
-            Accept: "application/vnd.github+json",
-            Authorization: `Bearer ${accessToken}`,
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "console-app",
-          },
-        },
-      );
+      let response = await fetchGithubReposPage(accessToken, page);
+
+      if (response.status === 401) {
+        accessToken = await getGithubAccessToken(ctx, user._id, {
+          forceRefresh: true,
+        });
+        response = await fetchGithubReposPage(accessToken, page);
+      }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error(
+            "GitHub session expired. Sign out and sign in again to grant repository access.",
+          );
+        }
+
         const body = await response.text();
         throw new Error(
           `Failed to load GitHub repositories (${response.status}): ${body}`,
