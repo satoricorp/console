@@ -437,6 +437,46 @@ describeDb("GitHub webhook", () => {
     expect(updatedRule.status).toBe("retired");
   });
 
+  test("@gx issue comment backfills missed installation state", async () => {
+    const missingInstallationId = INSTALLATION_ID + 1000;
+    const repoFullName = "acme/missed-install";
+    const issueCommentId = 65502 + Math.floor(Math.random() * 100000);
+
+    const res = await postWebhook("issue_comment", {
+      action: "created",
+      installation: { id: missingInstallationId },
+      repository: {
+        id: 999777,
+        full_name: repoFullName,
+        name: "missed-install",
+        private: false,
+        default_branch: "main",
+        owner: { login: "acme", type: "Organization" },
+      },
+      issue: { number: 31, pull_request: {} },
+      comment: {
+        id: issueCommentId,
+        user: { login: "alice" },
+        body: "@gx please skip rule never use var",
+      },
+    });
+
+    expect(res.status).toBe(200);
+
+    const db = getSql();
+    const [org] = await db<{ id: string }[]>`
+      SELECT id FROM orgs WHERE installation_id = ${missingInstallationId}
+    `;
+    expect(org?.id).toBeTruthy();
+
+    const comments = await db<{ is_gx_mention: boolean }[]>`
+      SELECT is_gx_mention FROM pr_comments
+      WHERE org_id = ${org.id} AND github_comment_id = ${issueCommentId}
+    `;
+    expect(comments[0]?.is_gx_mention).toBe(true);
+    expect(fetchCalls.some((c) => c.url.includes("/issues/31/comments"))).toBe(true);
+  });
+
   test("push webhook enqueues incremental index without blocking", async () => {
     process.env.OPENAI_API_KEY = "test-openai-key";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";

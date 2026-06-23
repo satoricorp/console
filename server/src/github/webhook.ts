@@ -257,7 +257,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const orgId = await resolveOrgIdForInstallation(db, installationId);
+  const orgId = await ensureOrgIdForPayload(db, payload);
   if (!orgId) {
     return;
   }
@@ -376,7 +376,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
     return;
   }
 
-  const orgId = await resolveOrgIdForInstallation(db, installationId);
+  const orgId = await ensureOrgIdForPayload(db, payload);
   if (!orgId) return;
 
   const bookmark = await findOrCreateBookmark(db, {
@@ -459,7 +459,9 @@ async function handlePullRequestReviewComment(
     return;
   }
 
+  const orgId = await ensureOrgIdForPayload(db, payload);
   await ingestLineComment(db, {
+    orgId: orgId ?? undefined,
     installationId,
     repoFullName: repo.full_name,
     pullNumber: pr.number,
@@ -490,7 +492,9 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
+  const orgId = await ensureOrgIdForPayload(db, payload);
   await ingestLineComment(db, {
+    orgId: orgId ?? undefined,
     installationId,
     repoFullName: repo.full_name,
     pullNumber: issueNumber,
@@ -509,7 +513,7 @@ async function handlePush(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const orgId = await resolveOrgIdForInstallation(db, installationId);
+  const orgId = await ensureOrgIdForPayload(db, payload);
   detectOutcomeStub({
     orgId: orgId ?? "unknown",
     bookmarkId: "unknown",
@@ -533,6 +537,7 @@ async function handlePush(db: postgres.Sql, payload: WebhookPayload) {
 async function ingestLineComment(
   db: postgres.Sql,
   input: {
+    orgId?: string;
     installationId: number;
     repoFullName: string;
     pullNumber: number;
@@ -543,7 +548,8 @@ async function ingestLineComment(
     reviewState: ClassifyInput["reviewState"];
   },
 ) {
-  const orgId = await resolveOrgIdForInstallation(db, input.installationId);
+  const orgId =
+    input.orgId ?? (await resolveOrgIdForInstallation(db, input.installationId));
   if (!orgId) return;
 
   const bookmark = await findOrCreateBookmark(db, {
@@ -813,6 +819,29 @@ async function upsertOrgForInstallation(
   `;
 }
 
+async function ensureOrgIdForPayload(
+  db: postgres.Sql,
+  payload: WebhookPayload,
+): Promise<string | null> {
+  const installation = normalizeInstallation(payload.installation);
+  if (!installation) return null;
+
+  const repo = payload.repository
+    ? normalizeRepository(payload.repository, installation.installationId)
+    : null;
+  const now = Date.now();
+
+  await db.begin(async (tx) => {
+    await upsertInstallation(tx, installation, now);
+    await upsertOrgForInstallation(tx, installation.installationId, now);
+    if (repo) {
+      await upsertRepository(tx, repo, now);
+    }
+  });
+
+  return resolveOrgIdForInstallation(db, installation.installationId);
+}
+
 async function upsertInstallation(
   tx: postgres.TransactionSql,
   installation: NonNullable<ReturnType<typeof normalizeInstallation>>,
@@ -841,11 +870,11 @@ async function upsertInstallation(
       ${now}
     )
     ON CONFLICT (installation_id) DO UPDATE SET
-      account_id = EXCLUDED.account_id,
-      account_login = EXCLUDED.account_login,
-      account_type = EXCLUDED.account_type,
-      repository_selection = EXCLUDED.repository_selection,
-      app_id = EXCLUDED.app_id,
+      account_id = COALESCE(EXCLUDED.account_id, github_app_installations.account_id),
+      account_login = COALESCE(NULLIF(EXCLUDED.account_login, ''), github_app_installations.account_login),
+      account_type = COALESCE(NULLIF(EXCLUDED.account_type, ''), github_app_installations.account_type),
+      repository_selection = COALESCE(NULLIF(EXCLUDED.repository_selection, ''), github_app_installations.repository_selection),
+      app_id = COALESCE(EXCLUDED.app_id, github_app_installations.app_id),
       suspended_at_ms = EXCLUDED.suspended_at_ms,
       updated_at_ms = EXCLUDED.updated_at_ms
   `;
