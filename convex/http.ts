@@ -39,6 +39,43 @@ async function completeCliAuth(ctx: ActionCtx, request: Request) {
   }
 }
 
+async function verifyCliAuth(ctx: ActionCtx, request: Request) {
+  let body: {
+    token?: string;
+  };
+
+  try {
+    body = await request.json();
+  } catch {
+    return jsonError("Invalid JSON", 400);
+  }
+
+  if (!body.token) {
+    return jsonError("Missing token", 400);
+  }
+
+  try {
+    const result = await ctx.runAction(api.gxAuthActions.verifyCliSession, {
+      token: body.token,
+    });
+    if (!result) {
+      return jsonError("Unauthorized", 401);
+    }
+    return Response.json({
+      session_id: result.sessionId,
+      user_id: result.userId,
+      github_user_id: result.githubUserId,
+      github_login: result.githubLogin,
+      machine_id: result.machineId,
+      machine_name: result.machineName,
+      expires_at: result.expiresAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Authentication failed";
+    return jsonError(message, 401);
+  }
+}
+
 const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth);
@@ -103,6 +140,12 @@ http.route({
   path: "/cx/auth/complete",
   method: "POST",
   handler: httpAction(completeCliAuth),
+});
+
+http.route({
+  path: "/cx/auth/cli/verify",
+  method: "POST",
+  handler: httpAction(verifyCliAuth),
 });
 
 http.route({

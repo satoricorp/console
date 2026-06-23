@@ -109,6 +109,7 @@ promotion workflow is `.github/workflows/promote-production.yaml`.
      --secret-id /gx/staging/server \
      --secret-string '{
        "GX_CLOUD_API_KEY": "...",
+       "CONVEX_SITE_URL": "https://<your-convex-deployment>.convex.site",
        "GITHUB_APP_ID": "...",
        "GITHUB_APP_PRIVATE_KEY": "...",
        "GITHUB_WEBHOOK_SECRET": "..."

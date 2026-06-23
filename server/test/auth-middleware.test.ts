@@ -5,6 +5,7 @@ import { authHeaders, installTestAuth, testAuthToken } from "./auth";
 
 const originalFetch = globalThis.fetch;
 const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
+const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
 
 function authApp() {
@@ -20,6 +21,11 @@ describe("requireAuth", () => {
       delete process.env.GX_CLOUD_API_KEY;
     } else {
       process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
+    }
+    if (originalConvexSiteUrl === undefined) {
+      delete process.env.CONVEX_SITE_URL;
+    } else {
+      process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
     }
     if (originalNodeEnv === undefined) {
       delete process.env.NODE_ENV;
@@ -89,6 +95,48 @@ describe("requireAuth", () => {
       headers: authHeaders("test-user", "test-org"),
     });
     expect(res.status).toBe(401);
+  });
+
+  test("authorizes a GX CLI session token through Convex", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    process.env.CONVEX_SITE_URL = "https://convex.example";
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("https://convex.example/cx/auth/cli/verify");
+      expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+      expect(JSON.parse(String(init?.body))).toEqual({ token: "gxcs_test" });
+      return new Response(
+        JSON.stringify({
+          session_id: "session_1",
+          user_id: "user_1",
+          github_user_id: 12345,
+          github_login: "octocat",
+          machine_id: "machine_1",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gxcs_test",
+        "X-Org-Id": "test-org",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      orgId: "test-org",
+      userId: "user_1",
+      tokenLabel: "gx-cli:octocat",
+      githubUserId: 12345,
+      githubUserLogin: "octocat",
+      sessionId: "session_1",
+      machineId: "machine_1",
+    });
   });
 
   test("authorizes a GitHub access token", async () => {

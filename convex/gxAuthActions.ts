@@ -12,11 +12,23 @@ import {
 
 type CompleteCliAuthResult = {
   github_access_token?: string;
+  cli_session_token: string;
+  cli_session_expires_at: number;
   user_id: string;
   login: string;
   avatar_url?: string;
   github_app_install_url?: string;
 };
+
+type VerifyCliSessionResult = {
+  sessionId: string;
+  userId: string;
+  githubUserId: number;
+  githubLogin: string;
+  machineId: string;
+  machineName: string;
+  expiresAt: number;
+} | null;
 
 type GitHubOAuthTokenResponse = {
   access_token?: string;
@@ -47,6 +59,12 @@ const completeCliAuthArgs = {
   machineName: v.string(),
   gxVersion: v.optional(v.string()),
 };
+
+const CLI_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function newCliSessionToken() {
+  return `gxcs_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
+}
 
 async function completeAuthWithGitHubToken(
   ctx: ActionCtx,
@@ -88,10 +106,25 @@ async function completeAuthWithGitHubToken(
     },
   );
 
+  const cliSessionToken = newCliSessionToken();
+  const cliSessionExpiresAt = Date.now() + CLI_SESSION_TTL_MS;
+  await ctx.runMutation(internal.gxAuth.createCliSession, {
+    token: cliSessionToken,
+    userId,
+    githubUserId,
+    githubLogin: githubUser.login,
+    machineId: args.machineId,
+    machineName: args.machineName,
+    gxVersion: args.gxVersion,
+    expiresAt: cliSessionExpiresAt,
+  });
+
   return {
     user_id: userId,
     login: githubUser.login,
     avatar_url: githubUser.avatar_url ?? undefined,
+    cli_session_token: cliSessionToken,
+    cli_session_expires_at: cliSessionExpiresAt,
     github_app_install_url:
       process.env.GITHUB_APP_INSTALL_URL?.trim() || undefined,
   };
@@ -200,5 +233,16 @@ export const completeDesktopOAuth = action({
       ...result,
       github_access_token: ticket.githubAccessToken,
     };
+  },
+});
+
+export const verifyCliSession = action({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args): Promise<VerifyCliSessionResult> => {
+    return ctx.runMutation(internal.gxAuth.verifyCliSession, {
+      token: args.token,
+    });
   },
 });

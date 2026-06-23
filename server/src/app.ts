@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { githubWebhookRoutes } from "./github/webhook";
 import type { AppEnv } from "./middleware/auth";
 import { activityRoutes } from "./routes/activity";
+import { authRoutes } from "./routes/auth";
 import { bookmarksRoutes } from "./routes/bookmarks";
 import { healthRoutes } from "./routes/health";
 import { ingestRoutes } from "./routes/ingest";
@@ -13,6 +14,7 @@ import { summaryRoutes } from "./routes/summary";
 const app = new Hono<AppEnv>();
 
 app.route("/", healthRoutes);
+app.route("/", authRoutes);
 app.route("/", ingestRoutes);
 app.route("/", summaryRoutes);
 app.route("/", reviewRoutes);

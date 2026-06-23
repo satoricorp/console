@@ -95,6 +95,7 @@ export class GxServerStack extends Stack {
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
           GX_CLOUD_API_KEY: "replace-me",
+          CONVEX_SITE_URL: "replace-me",
           GITHUB_APP_ID: "replace-me",
           GITHUB_APP_PRIVATE_KEY: "replace-me",
           GITHUB_WEBHOOK_SECRET: "replace-me",
@@ -169,6 +170,10 @@ export class GxServerStack extends Stack {
             GX_CLOUD_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
               "GX_CLOUD_API_KEY",
+            ),
+            CONVEX_SITE_URL: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "CONVEX_SITE_URL",
             ),
             GITHUB_APP_ID: ecs.Secret.fromSecretsManager(
               appSecret,

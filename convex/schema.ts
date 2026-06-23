@@ -68,6 +68,22 @@ export default defineSchema({
     usedAt: v.optional(v.number()),
   }).index("by_ticketHash", ["ticketHash"]),
 
+  gxCliSessions: defineTable({
+    tokenHash: v.string(),
+    userId: v.string(),
+    githubUserId: v.number(),
+    githubLogin: v.string(),
+    machineId: v.string(),
+    machineName: v.string(),
+    gxVersion: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_userId", ["userId"]),
+
   gxPrPushes: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),

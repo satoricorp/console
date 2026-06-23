@@ -95,6 +95,67 @@ export const createDesktopOAuthTicket = internalMutation({
   },
 });
 
+export const createCliSession = internalMutation({
+  args: {
+    token: v.string(),
+    userId: v.string(),
+    githubUserId: v.number(),
+    githubLogin: v.string(),
+    machineId: v.string(),
+    machineName: v.string(),
+    gxVersion: v.optional(v.string()),
+    expiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.token);
+    await ctx.db.insert("gxCliSessions", {
+      tokenHash,
+      userId: args.userId,
+      githubUserId: args.githubUserId,
+      githubLogin: args.githubLogin,
+      machineId: args.machineId,
+      machineName: args.machineName,
+      gxVersion: args.gxVersion,
+      createdAt: Date.now(),
+      expiresAt: args.expiresAt,
+    });
+  },
+});
+
+export const verifyCliSession = internalMutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashToken(args.token);
+    const session = await ctx.db
+      .query("gxCliSessions")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+
+    if (!session || session.revokedAt) {
+      return null;
+    }
+
+    const now = Date.now();
+    if (session.expiresAt <= now) {
+      await ctx.db.patch(session._id, { revokedAt: now });
+      return null;
+    }
+
+    await ctx.db.patch(session._id, { lastUsedAt: now });
+    return {
+      sessionId: session._id,
+      userId: session.userId,
+      githubUserId: session.githubUserId,
+      githubLogin: session.githubLogin,
+      machineId: session.machineId,
+      machineName: session.machineName,
+      expiresAt: session.expiresAt,
+    };
+  },
+});
+
 export const consumeDesktopOAuthTicket = internalMutation({
   args: {
     ticket: v.string(),
