@@ -26,6 +26,7 @@ type GxServerStackProps = StackProps & {
 const containerName = "gx-server";
 const containerPort = 3201;
 const bedrockModelId = "anthropic.claude-sonnet-4-6";
+const bedrockInferenceProfileId = "us.anthropic.claude-sonnet-4-6";
 
 export class GxServerStack extends Stack {
   constructor(scope: Construct, id: string, props: GxServerStackProps) {
@@ -210,8 +211,8 @@ export class GxServerStack extends Stack {
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
         resources: [
-          `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}::foundation-model/${bedrockModelId}`,
-          `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:inference-profile/*`,
+          `arn:${Stack.of(this).partition}:bedrock:*::foundation-model/${bedrockModelId}`,
+          `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:inference-profile/${bedrockInferenceProfileId}`,
           `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:application-inference-profile/*`,
         ],
       }),
