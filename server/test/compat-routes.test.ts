@@ -134,6 +134,128 @@ describeDb("compat bookmarks route", () => {
 
     expect(res.status).toBe(400);
   });
+
+  test("POST /v1/publish resolves installed repo org and updates existing PR bookmark", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const installationId = Math.floor(Math.random() * 1_000_000_000) + 1_000_000;
+    const installedRepo = `acme/publish-${crypto.randomUUID()}`;
+    const prNumber = Math.floor(Math.random() * 10_000) + 1;
+    const prUrl = `https://github.com/${installedRepo}/pull/${prNumber}`;
+
+    await db`
+      INSERT INTO github_app_installations (
+        installation_id, account_login, updated_at_ms, installed_at_ms
+      ) VALUES (
+        ${installationId}, 'acme', ${now}, ${now}
+      )
+      ON CONFLICT (installation_id) DO NOTHING
+    `;
+    const [installedOrg] = await db<{ id: string }[]>`
+      INSERT INTO orgs (installation_id, plan, created_at_ms)
+      VALUES (${installationId}, 'free', ${now})
+      ON CONFLICT (installation_id) DO UPDATE SET plan = EXCLUDED.plan
+      RETURNING id
+    `;
+    await db`
+      INSERT INTO github_app_repositories (
+        github_repo_id, installation_id, full_name, owner_login, name,
+        access_state, updated_at_ms, added_at_ms
+      ) VALUES (
+        ${Math.floor(Math.random() * 1_000_000_000) + 2_000_000},
+        ${installationId},
+        ${installedRepo},
+        'acme',
+        'publish-test',
+        'installed',
+        ${now},
+        ${now}
+      )
+    `;
+
+    const [existingBookmark] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        'github-webhook',
+        ${installedRepo},
+        'docs/documentation',
+        ${prNumber},
+        ${prUrl},
+        ${now},
+        ${now},
+        ${installedOrg.id}
+      )
+      RETURNING id
+    `;
+
+    const res = await app.request("http://localhost/v1/publish", {
+      method: "POST",
+      headers: {
+        ...authHeaders("cli-publish-user"),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event: "gx.pr",
+        schema_version: 1,
+        created_at: now + 1,
+        gx_version: "test",
+        repo: {
+          root_path: "/tmp/publish-test",
+          backend: "jj",
+          remote_url: `https://github.com/${installedRepo}.git`,
+          branch_name: "docs/documentation",
+        },
+        push: {
+          branch_name: "docs/documentation",
+          head_commit_id: "abc123publish",
+          github_pull_request_url: prUrl,
+        },
+        stack: [
+          {
+            branch_name: "docs/documentation",
+            patch: "diff --git a/README.md b/README.md\n",
+            change: {
+              description: "update README.md",
+              files: ["README.md"],
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; event_id: string };
+    expect(body.id).toBe(existingBookmark.id);
+
+    const [bookmark] = await db<{
+      org_id: string;
+      latest_event_id: string | null;
+      head_commit_id: string | null;
+    }[]>`
+      SELECT org_id, latest_event_id, head_commit_id
+      FROM bookmarks
+      WHERE id = ${existingBookmark.id}
+    `;
+    expect(bookmark.org_id).toBe(installedOrg.id);
+    expect(bookmark.latest_event_id).toBe(body.event_id);
+    expect(bookmark.head_commit_id).toBe("abc123publish");
+
+    const [event] = await db<{ org_id: string }[]>`
+      SELECT org_id FROM pr_events WHERE id = ${body.event_id}
+    `;
+    expect(event.org_id).toBe(installedOrg.id);
+
+    const [{ count }] = await db<{ count: string }[]>`
+      SELECT count(*)::text AS count
+      FROM bookmarks
+      WHERE org_id = ${installedOrg.id}
+        AND repo_full_name = ${installedRepo}
+        AND github_pr_number = ${prNumber}
+    `;
+    expect(count).toBe("1");
+  });
 });
 
 describe("compat OpenAI proxy routes", () => {

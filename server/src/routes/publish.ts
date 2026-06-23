@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type postgres from "postgres";
 import { getSql } from "../db";
+import { findInstalledRepository, resolveOrgIdForInstallation } from "../github/app";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import type { PublishRegistration, PushBundle } from "../types";
@@ -62,6 +63,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
 
   try {
     const db = getSql();
+    const orgId = await resolvePublishOrgId(db, auth.orgId, repoFullName);
     const result = await db.begin(async (tx) => {
       const [event] = await tx<{ id: string }[]>`
         INSERT INTO pr_events (
@@ -97,7 +99,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
           ${payload.push.head_commit_id},
           ${githubPrUrl},
           ${JSON.stringify(payload)}::jsonb,
-          ${auth.orgId}
+          ${orgId}
         )
         RETURNING id
       `;
@@ -106,7 +108,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       }
 
       const bookmark = await upsertBookmark(tx, {
-        orgId: auth.orgId,
+        orgId,
         userId: auth.userId,
         requestedId: validUuid(payload.pr_id) ? payload.pr_id! : null,
         repoFullName,
@@ -124,7 +126,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
     });
 
     const indexResult = await indexPublishedArtifact({
-      orgId: auth.orgId,
+      orgId,
       repoFullName: result.bookmark.repo_full_name,
       eventId: result.eventId,
       branchName: result.bookmark.branch_name,
@@ -176,8 +178,10 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
   }
 
   try {
-    const bookmark = await upsertBookmark(getSql(), {
-      orgId: auth.orgId,
+    const db = getSql();
+    const orgId = await resolvePublishOrgId(db, auth.orgId, registration.repo_full_name);
+    const bookmark = await upsertBookmark(db, {
+      orgId,
       userId: auth.userId,
       requestedId: null,
       repoFullName: registration.repo_full_name,
@@ -250,6 +254,18 @@ function validatePublishRegistration(value: unknown): PublishRegistration {
   };
 }
 
+async function resolvePublishOrgId(
+  db: SqlExecutor,
+  fallbackOrgId: string,
+  repoFullName: string,
+): Promise<string> {
+  const grant = await findInstalledRepository(db, repoFullName);
+  if (!grant) {
+    return fallbackOrgId;
+  }
+  return (await resolveOrgIdForInstallation(db, grant.installationId)) ?? fallbackOrgId;
+}
+
 async function upsertBookmark(
   tx: SqlExecutor,
   args: {
@@ -267,6 +283,36 @@ async function upsertBookmark(
     updatedAtMs: number;
   },
 ): Promise<BookmarkRow> {
+  if (!args.requestedId && args.githubPrNumber !== null) {
+    const [existingPrBookmark] = await tx<BookmarkRow[]>`
+      UPDATE bookmarks
+      SET
+        branch_name = ${args.branchName},
+        title = COALESCE(bookmarks.title, ${args.title}),
+        revision = bookmarks.revision + 1,
+        latest_event_id = COALESCE(${args.eventId}, bookmarks.latest_event_id),
+        head_commit_id = ${args.headCommitId},
+        github_pr_url = COALESCE(${args.githubPrUrl}, bookmarks.github_pr_url),
+        remote_head_sha = COALESCE(${args.remoteHeadSha}, bookmarks.remote_head_sha),
+        updated_at_ms = ${args.updatedAtMs},
+        merge_status = CASE
+          WHEN bookmarks.merge_status = 'closed' THEN 'open'
+          ELSE bookmarks.merge_status
+        END,
+        merged_at_ms = CASE
+          WHEN bookmarks.merge_status = 'closed' THEN NULL
+          ELSE bookmarks.merged_at_ms
+        END
+      WHERE org_id = ${args.orgId}
+        AND repo_full_name = ${args.repoFullName}
+        AND github_pr_number = ${args.githubPrNumber}
+      RETURNING *
+    `;
+    if (existingPrBookmark) {
+      return existingPrBookmark;
+    }
+  }
+
   if (args.requestedId) {
     const [row] = await tx<BookmarkRow[]>`
       INSERT INTO bookmarks (
