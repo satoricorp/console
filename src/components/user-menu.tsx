@@ -4,7 +4,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, KeyRound, LogOut } from "lucide-react";
+import {
+  LogOut,
+  UserRound,
+} from "lucide-react";
 import { useState } from "react";
 import { GitHubIcon } from "@/components/github-icon";
 import {
@@ -127,16 +130,9 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
         </div>
 
         <DropdownMenuItem asChild className="cursor-pointer gap-2">
-          <Link href="/api-keys">
-            <KeyRound className="h-4 w-4" />
-            API keys
-          </Link>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem asChild className="cursor-pointer gap-2">
-          <Link href="/download">
-            <Download className="h-4 w-4" />
-            Download GX
+          <Link href="/profile">
+            <UserRound className="h-4 w-4" />
+            Profile
           </Link>
         </DropdownMenuItem>
 

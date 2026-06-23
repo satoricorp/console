@@ -4,10 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DiscordIcon } from "@/components/discord-icon";
+import { AppCommandPalette } from "@/components/app-command-palette";
+import { AppSupportLinks } from "@/components/app-support-links";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
 import { NavSeparator } from "@/components/nav-separator";
+import { UserMenu } from "@/components/user-menu";
+import { authClient } from "@/lib/auth-client";
 import { DISCORD_URL, GITHUB_REPO_URL, NAV_LINKS } from "@/lib/site-links";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +93,7 @@ function NavAnchorLink({ href, label }: { href: string; label: string }) {
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const { data: session, isPending } = authClient.useSession();
   const isHome = pathname === "/";
   const [belowFold, setBelowFold] = useState(false);
 
@@ -138,6 +143,33 @@ export function SiteHeader() {
   }, [pathname]);
 
   const showNavLogo = !isHome || belowFold;
+
+  if (isPending) {
+    return (
+      <header className="fixed right-5 top-4 z-50 sm:right-10">
+        <div className="flex justify-end">
+          <div
+            className="h-8 w-8 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800"
+            aria-hidden="true"
+          />
+        </div>
+      </header>
+    );
+  }
+
+  if (session?.user) {
+    return (
+      <>
+        <header className="fixed right-5 top-4 z-50 sm:right-10">
+          <div className="flex justify-end gap-2">
+            <AppCommandPalette />
+            <UserMenu user={session.user} />
+          </div>
+        </header>
+        <AppSupportLinks />
+      </>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-background/95 py-3 backdrop-blur-sm dark:border-zinc-800">

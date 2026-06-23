@@ -18,7 +18,13 @@ type AvailableRepo = {
   defaultBranch?: string;
 };
 
-export function ConnectReposStep() {
+export function ConnectReposStep({
+  eyebrow = "Step 1 of onboarding",
+  title = "Connect your GitHub repositories",
+}: {
+  eyebrow?: string;
+  title?: string;
+}) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const listAvailableRepos = useAction(api.repoActions.listAvailableRepos);
@@ -148,10 +154,10 @@ export function ConnectReposStep() {
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div className="space-y-2 text-left">
         <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Step 1 of onboarding
+          {eyebrow}
         </p>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Connect your GitHub repositories
+          {title}
         </h1>
       </div>
 

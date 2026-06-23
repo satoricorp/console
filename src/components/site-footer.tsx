@@ -1,7 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import { GxLogo } from "@/components/gx-logo";
 import { SatoriLogo } from "@/components/satori-logo";
-import { DISCORD_URL, GITHUB_REPO_URL, NAV_LINKS } from "@/lib/site-links";
+import { authClient } from "@/lib/auth-client";
+import {
+  DISCORD_URL,
+  GITHUB_REPO_URL,
+  NAV_LINKS,
+  SUPPORT_EMAIL,
+  SUPPORT_EMAIL_URL,
+} from "@/lib/site-links";
 
 const linkClassName =
   "text-xs leading-5 text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-600 dark:hover:text-zinc-950";
@@ -10,6 +19,12 @@ const sectionLabelClassName =
   "text-xs font-medium uppercase tracking-[0.08em] text-zinc-500";
 
 export function SiteFooter() {
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending || session?.user) {
+    return null;
+  }
+
   return (
     <footer className="mt-auto border-t border-zinc-200 bg-white text-zinc-950 dark:border-zinc-800 dark:bg-white dark:text-zinc-950">
       <div className="mx-auto max-w-6xl px-5 pt-10 pb-8 sm:px-8 sm:pt-12">
@@ -85,8 +100,8 @@ export function SiteFooter() {
                   </a>
                 </li>
                 <li>
-                  <a href="mailto:hi@satori.sh" className={linkClassName}>
-                    hi@satori.sh
+                  <a href={SUPPORT_EMAIL_URL} className={linkClassName}>
+                    {SUPPORT_EMAIL}
                   </a>
                 </li>
               </ul>

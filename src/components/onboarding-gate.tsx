@@ -10,7 +10,7 @@ import { SIGNED_IN_HOME_URL } from "@/lib/site-links";
 const ONBOARDING_PATH = "/onboarding";
 
 /** Routes reachable before repo connect. */
-const ONBOARDING_BYPASS_PATHS = ["/billing"];
+const ONBOARDING_BYPASS_PATHS = ["/billing", "/repositories"];
 
 function bypassesOnboarding(pathname: string) {
   return ONBOARDING_BYPASS_PATHS.some(
