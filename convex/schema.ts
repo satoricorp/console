@@ -77,7 +77,7 @@ export default defineSchema({
     machineName: v.string(),
     gxVersion: v.optional(v.string()),
     createdAt: v.number(),
-    expiresAt: v.number(),
+    expiresAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
   })

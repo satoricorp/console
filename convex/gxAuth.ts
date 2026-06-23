@@ -138,7 +138,7 @@ export const verifyCliSession = internalMutation({
     }
 
     const now = Date.now();
-    if (session.expiresAt <= now) {
+    if (!session.expiresAt || session.expiresAt <= now) {
       await ctx.db.patch(session._id, { revokedAt: now });
       return null;
     }
