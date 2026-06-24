@@ -603,9 +603,21 @@ export async function generateSummary(
     buildPRSummaryUserPrompt(ctx),
   );
 
-  const validation = validateSummary(completion.text);
+  let content = completion.text;
+  let validation = validateSummary(content);
   if (!validation.ok) {
-    assertValidSummary(completion.text);
+    console.info("PR Summary provider output invalid; using fallback summary", {
+      orgId: input.orgId,
+      bookmarkId: target.bookmarkId,
+      eventId: target.eventId,
+      error: validation.error,
+      detail: validation.detail,
+    });
+    content = buildFallbackSummary(ctx);
+    validation = validateSummary(content);
+    if (!validation.ok) {
+      assertValidSummary(content);
+    }
   }
   const lineCount = validation.ok ? validation.lineCount : 0;
 
@@ -618,7 +630,7 @@ export async function generateSummary(
     ) VALUES (
       ${input.orgId},
       ${target.bookmarkId},
-      ${completion.text},
+      ${content},
       ${completion.model},
       ${latencyMs},
       ${postedAt}
@@ -662,9 +674,45 @@ export async function generateSummary(
     summaryId: summary.id,
     bookmarkId: target.bookmarkId,
     eventId: target.eventId,
-    content: completion.text,
+    content,
     model: completion.model,
     latencyMs,
     lineCount,
   };
+}
+
+export function buildFallbackSummary(ctx: ExtractContext): string {
+  const files = [
+    ...(ctx.publishedRevisions ?? []).flatMap((revision) => revision.files),
+    ...ctx.hunkLinks.map((hunk) => hunk.file),
+    ...(ctx.changedSymbols ?? []).map((symbol) => symbol.file),
+  ];
+  const uniqueFiles = [...new Set(files.filter(Boolean))];
+  const primaryFiles = uniqueFiles.slice(0, 3);
+  const firstRevision = ctx.publishedRevisions?.[0];
+  const intent =
+    firstRevision?.description ||
+    (primaryFiles.length ? `Update ${primaryFiles.join(", ")}` : "Update pull request changes");
+  const provenance = firstRevision
+    ? "GX published revision diff"
+    : ctx.hunkLinks.length > 0
+      ? "GX hunk_links and session_events"
+      : "GitHub webhook context";
+
+  return [
+    "Intent",
+    intent.slice(0, 160),
+    "Read these",
+    primaryFiles.length ? `- ${primaryFiles.join(", ")}` : "- Pull request diff",
+    "Safe to skim",
+    uniqueFiles.length > 3 ? `- ${uniqueFiles.length - 3} additional changed files` : "- No extra files",
+    "Blast radius",
+    primaryFiles.every((file) => file.toLowerCase().endsWith(".md"))
+      ? "- Documentation only"
+      : "- Limited to changed PR files",
+    "Agent friction",
+    "- Fallback summary after invalid model output",
+    "Provenance",
+    `- ${provenance}`,
+  ].join("\n");
 }

@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
-import { generateSummary, loadExtractContext } from "../src/summary/generate";
+import {
+  buildFallbackSummary,
+  generateSummary,
+  loadExtractContext,
+} from "../src/summary/generate";
 import { validateSummary, REQUIRED_SECTIONS } from "../src/summary/validate";
 import { authHeaders, installTestAuth } from "./auth";
 
@@ -78,6 +82,37 @@ describe("validateSummary", () => {
       )
       .join("\n");
     expect(validateSummary(markdown).ok).toBe(true);
+  });
+
+  test("fallback summary is valid and uses GX publish context", () => {
+    const summary = buildFallbackSummary({
+      eventId: "event",
+      bookmarkId: "bookmark",
+      orgId: "org",
+      repoRootPath: "/repo",
+      headCommitId: "head",
+      refRange: null,
+      fileStats: null,
+      intentCandidates: [],
+      struggleSignals: [],
+      humanOverrides: [],
+      hunkLinks: [],
+      sessionEvents: [],
+      publishedRevisions: [
+        {
+          branchName: "docs/documentation",
+          baseBranchName: "main",
+          description: "update README.md",
+          files: ["README.md"],
+          patch: "+GX menubar rebuild smoke test",
+          githubPrUrl: null,
+        },
+      ],
+    });
+
+    expect(validateSummary(summary).ok).toBe(true);
+    expect(summary).toContain("update README.md");
+    expect(summary).toContain("GX published revision diff");
   });
 });
 
