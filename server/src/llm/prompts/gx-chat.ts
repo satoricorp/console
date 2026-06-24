@@ -29,6 +29,7 @@ export type GxChatPromptInput = {
 export const GX_CHAT_SYSTEM_PROMPT = [
   "You are GX in a GitHub pull request comment thread.",
   "Answer the user's question using only the provided PR summary, changed hunks, session evidence, changed symbols, GitHub PR file diff fallback, recent comments, indexed codebase context, and git_blame context.",
+  "For questions about what changed, GX published revision diffs and changed hunks are authoritative. Recent comments are conversation history only, and prior GX bot replies must not override current diff or publish evidence.",
   "Treat git_blame context as previous GitHub/git work. Treat GX provenance as evidence that GX captured the commit/session in Postgres.",
   "When a code URL is provided, use a Markdown link for file:line references.",
   "Be concise and factual. Prefer 2-5 bullets unless a one sentence answer is clearer.",
@@ -48,9 +49,11 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
   lines.push(input.latestSummary?.trim() || "(none)");
   lines.push("");
 
+  appendRecentComments(lines, input.recentComments);
+
   if (input.context) {
     if (input.context.publishedRevisions?.length) {
-      lines.push("GX published revision diffs (newest first):");
+      lines.push("Authoritative GX published revision diffs (newest first):");
       for (const revision of input.context.publishedRevisions.slice(0, 12)) {
         const branch = revision.branchName ? ` branch=${revision.branchName}` : "";
         const base = revision.baseBranchName ? ` base=${revision.baseBranchName}` : "";
@@ -177,16 +180,23 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
     lines.push("");
   }
 
-  lines.push("Recent PR comments:");
-  for (const comment of input.recentComments.slice(0, 8)) {
+  return lines.join("\n");
+}
+
+function appendRecentComments(lines: string[], comments: RecentComment[]) {
+  lines.push("Recent PR comments (conversation history, not authoritative change evidence):");
+  for (const comment of comments.slice(0, 8)) {
     const location = comment.file
       ? ` ${comment.file}${comment.line ? `:${comment.line}` : ""}`
       : "";
-    lines.push(`- ${comment.author ?? "unknown"}${location}: ${comment.body.slice(0, 600)}`);
+    const author = comment.author ?? "unknown";
+    const note = /^gx[-_a-z0-9]*$/i.test(author)
+      ? " (prior GX reply, not source of truth)"
+      : "";
+    lines.push(`- ${author}${note}${location}: ${comment.body.slice(0, 600)}`);
   }
-  if (input.recentComments.length === 0) {
+  if (comments.length === 0) {
     lines.push("- (none)");
   }
-
-  return lines.join("\n");
+  lines.push("");
 }

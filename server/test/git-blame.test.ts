@@ -155,6 +155,57 @@ describe("gx chat prompt git_blame context", () => {
     );
   });
 
+  test("keeps prior GX comments from overriding publish evidence", () => {
+    const prompt = buildGxChatUserPrompt({
+      author: "alice",
+      question: "what changed latest?",
+      latestSummary: null,
+      context: {
+        eventId: "event",
+        bookmarkId: "bookmark",
+        orgId: "org",
+        repoRootPath: "/repo",
+        headCommitId: "head",
+        refRange: null,
+        fileStats: null,
+        intentCandidates: [],
+        struggleSignals: [],
+        humanOverrides: [],
+        hunkLinks: [],
+        sessionEvents: [],
+        publishedRevisions: [
+          {
+            branchName: "docs/documentation",
+            baseBranchName: "main",
+            description: "newest revision",
+            files: ["README.md"],
+            patch: "+current publish evidence",
+            githubPrUrl: null,
+          },
+        ],
+      },
+      recentComments: [
+        {
+          author: "gx-agentic-code-review",
+          body: "GX: older bot answer about stale evidence",
+          file: null,
+          line: null,
+        },
+      ],
+    });
+
+    expect(prompt).toContain(
+      "Recent PR comments (conversation history, not authoritative change evidence)",
+    );
+    expect(prompt).toContain(
+      "gx-agentic-code-review (prior GX reply, not source of truth)",
+    );
+    expect(prompt).toContain("Authoritative GX published revision diffs");
+    expect(prompt.indexOf("older bot answer")).toBeLessThan(
+      prompt.indexOf("current publish evidence"),
+    );
+  });
+
   test("labels previous git work and includes markdown code links", () => {
     const ctx: ExtractContext = {
       eventId: "event",
