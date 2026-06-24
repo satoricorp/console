@@ -33,7 +33,7 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
   }
 
   if (ctx.publishedRevisions?.length) {
-    lines.push("GX published revisions:");
+    lines.push("GX published revisions (newest first):");
     for (const revision of ctx.publishedRevisions.slice(0, 12)) {
       const branch = revision.branchName ? ` branch=${revision.branchName}` : "";
       const base = revision.baseBranchName ? ` base=${revision.baseBranchName}` : "";

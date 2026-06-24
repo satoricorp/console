@@ -400,24 +400,26 @@ async function loadIndexSnippets(
 }
 
 function extractPublishedRevisions(payload: PrEventPayload): PublishedRevisionRow[] {
-  return arrayRecords(payload.stack).flatMap((entry) => {
-    const change = asRecord(entry.change);
-    const patch = stringValue(entry.patch);
-    const files = stringArray(change?.files);
-    if (!patch && files.length === 0 && !stringValue(change?.description)) {
-      return [];
-    }
-    return [
-      {
-        branchName: stringValue(entry.branch_name) || null,
-        baseBranchName: stringValue(entry.base_branch_name) || null,
-        description: stringValue(change?.description) || null,
-        files,
-        patch,
-        githubPrUrl: stringValue(entry.github_pull_request_url) || null,
-      },
-    ];
-  });
+  return arrayRecords(payload.stack)
+    .flatMap((entry) => {
+      const change = asRecord(entry.change);
+      const patch = stringValue(entry.patch);
+      const files = stringArray(change?.files);
+      if (!patch && files.length === 0 && !stringValue(change?.description)) {
+        return [];
+      }
+      return [
+        {
+          branchName: stringValue(entry.branch_name) || null,
+          baseBranchName: stringValue(entry.base_branch_name) || null,
+          description: stringValue(change?.description) || null,
+          files,
+          patch,
+          githubPrUrl: stringValue(entry.github_pull_request_url) || null,
+        },
+      ];
+    })
+    .reverse();
 }
 
 function extractPublishedSessions(payload: PrEventPayload): PublishedSessionRow[] {

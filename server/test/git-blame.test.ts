@@ -109,6 +109,52 @@ describe("gx chat prompt git_blame context", () => {
     expect(prompt).toContain("GX published session evidence");
   });
 
+  test("labels published revision diff order as newest first", () => {
+    const prompt = buildGxChatUserPrompt({
+      author: "alice",
+      question: "what changed latest?",
+      latestSummary: null,
+      context: {
+        eventId: "event",
+        bookmarkId: "bookmark",
+        orgId: "org",
+        repoRootPath: "/repo",
+        headCommitId: "head",
+        refRange: null,
+        fileStats: null,
+        intentCandidates: [],
+        struggleSignals: [],
+        humanOverrides: [],
+        hunkLinks: [],
+        sessionEvents: [],
+        publishedRevisions: [
+          {
+            branchName: "docs/documentation",
+            baseBranchName: "main",
+            description: "newest revision",
+            files: ["README.md"],
+            patch: "+newest",
+            githubPrUrl: null,
+          },
+          {
+            branchName: "docs/documentation",
+            baseBranchName: "main",
+            description: "older revision",
+            files: ["README.md"],
+            patch: "+older",
+            githubPrUrl: null,
+          },
+        ],
+      },
+      recentComments: [],
+    });
+
+    expect(prompt).toContain("GX published revision diffs (newest first)");
+    expect(prompt.indexOf("newest revision")).toBeLessThan(
+      prompt.indexOf("older revision"),
+    );
+  });
+
   test("labels previous git work and includes markdown code links", () => {
     const ctx: ExtractContext = {
       eventId: "event",

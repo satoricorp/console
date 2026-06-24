@@ -50,7 +50,7 @@ export function buildGxChatUserPrompt(input: GxChatPromptInput): string {
 
   if (input.context) {
     if (input.context.publishedRevisions?.length) {
-      lines.push("GX published revision diffs:");
+      lines.push("GX published revision diffs (newest first):");
       for (const revision of input.context.publishedRevisions.slice(0, 12)) {
         const branch = revision.branchName ? ` branch=${revision.branchName}` : "";
         const base = revision.baseBranchName ? ` base=${revision.baseBranchName}` : "";
