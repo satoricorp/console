@@ -110,10 +110,10 @@ promotion workflow is `.github/workflows/promote-production.yaml`.
      --secret-string '{
        "GX_CLOUD_API_KEY": "...",
        "CONVEX_SITE_URL": "https://<your-convex-deployment>.convex.site",
-       "GX_EMBEDDING_OPENAI_API_KEY": "...",
        "GITHUB_APP_ID": "...",
        "GITHUB_APP_PRIVATE_KEY": "...",
        "GITHUB_WEBHOOK_SECRET": "...",
+       "OPENAI_API_KEY": "...",
        "TURBOPUFFER_API_KEY": "..."
      }'
    ```

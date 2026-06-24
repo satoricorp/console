@@ -11,6 +11,8 @@ const originalEnv = {
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   AWS_REGION: process.env.AWS_REGION,
+  AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION,
+  AWS_PROFILE: process.env.AWS_PROFILE,
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
 };
@@ -62,6 +64,16 @@ describe("createLLMProvider", () => {
       input: "user prompt",
       max_output_tokens: 1200,
     });
+  });
+
+  test("prefers Bedrock over plain OPENAI_API_KEY when AWS is configured", () => {
+    delete process.env.GX_OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "embedding-key";
+    process.env.AWS_REGION = "us-east-1";
+
+    const provider = createLLMProvider();
+
+    expect(provider.label).toBe("Anthropic");
   });
 });
 

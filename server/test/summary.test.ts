@@ -129,7 +129,7 @@ describeDb("generateSummary integration", () => {
   let publishPreferredEventId: string;
 
   beforeAll(async () => {
-    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "mock";
     installTestAuth();
     await runMigrations();
 

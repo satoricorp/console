@@ -259,7 +259,7 @@ describeDb("GitHub webhook", () => {
       ),
     ).toBe(true);
 
-    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "mock";
     delete process.env.TURBOPUFFER_API_KEY;
   });
 
@@ -298,7 +298,7 @@ describeDb("GitHub webhook", () => {
       ),
     ).toBe(true);
 
-    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "mock";
     delete process.env.TURBOPUFFER_API_KEY;
   });
 

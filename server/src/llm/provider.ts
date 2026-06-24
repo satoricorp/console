@@ -208,12 +208,14 @@ async function openAIComplete(system: string, user: string): Promise<LLMCompleti
 }
 
 export function createLLMProvider(contextHint?: string): LLMProvider {
-  const apiKey = process.env.GX_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
+  const explicitOpenAIKey = process.env.GX_OPENAI_API_KEY?.trim();
+  const fallbackOpenAIKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = explicitOpenAIKey || fallbackOpenAIKey;
   if (apiKey === "mock") {
     return createMockProvider(contextHint);
   }
 
-  if (apiKey && apiKey !== "mock") {
+  if (explicitOpenAIKey && explicitOpenAIKey !== "mock") {
     return {
       name: "openai",
       label: "OpenAI",
@@ -226,6 +228,14 @@ export function createLLMProvider(contextHint?: string): LLMProvider {
       name: "anthropic",
       label: "Anthropic",
       complete: bedrockAnthropicComplete,
+    };
+  }
+
+  if (fallbackOpenAIKey && fallbackOpenAIKey !== "mock") {
+    return {
+      name: "openai",
+      label: "OpenAI",
+      complete: openAIComplete,
     };
   }
 
