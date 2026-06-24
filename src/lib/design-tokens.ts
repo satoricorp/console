@@ -25,9 +25,9 @@ export const ACCENT_COLORS = [{ token: "amber-500", hex: "#f59e0b" }] as const;
 
 export const TYPOGRAPHY = [
   {
-    name: "Geist Sans",
-    variable: "--font-geist-sans",
-    stack: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
+    name: "FK Display Trial",
+    variable: "--font-fk-display",
+    stack: 'var(--font-fk-display), ui-sans-serif, system-ui, sans-serif',
   },
   {
     name: "Geist Mono",

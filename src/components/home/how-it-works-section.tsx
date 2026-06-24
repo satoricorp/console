@@ -1,60 +1,36 @@
-import { GetStartedButton } from "@/components/get-started-button";
-import { GitHubIcon } from "@/components/github-icon";
-
 const STEPS = [
   {
     step: "01",
-    verb: "Connect",
-    title: "One sign-in, your whole workflow.",
-    detail:
-      "Sign in with GitHub and install the GX desktop app. Your repo links in minutes — no manual branch gymnastics or stack setup.",
-    visual: "connect",
-  },
-  {
-    step: "02",
     verb: "Capture",
-    title: "Work saves into stacks automatically.",
+    title: "The session travels with the diff.",
     detail:
-      "Keep your normal editor and agent workflow. GX organizes your session into thoughtful stacks as you go — so you are not juggling messy git state before review.",
+      "GX attaches the prompt, tool calls, and test output to the code — not just the patch at the end.",
     visual: "capture",
   },
   {
-    step: "03",
-    verb: "Review",
-    title: "Walk the stack. Ship what is ready.",
+    step: "02",
+    verb: "Verify",
+    title: "GPT 5.5 and Opus 4.8 on every review.",
     detail:
-      "Review revision by revision in the desktop app — diffs, file tree, and threaded comments in one view. Each stack is structured for review, so you understand what changed without untangling unrelated diffs. Three full-stack reviews are free.",
+      "Both models review the same change against REVIEW.md and your repo context. When they agree, you ship with confidence. When they disagree, you know where to look.",
+    visual: "verify",
+  },
+  {
+    step: "03",
+    verb: "Ship",
+    title: "You get a Review Stack you can trust.",
+    detail:
+      "Session evidence, model signals, and repo rules in one place — ready to merge.",
     visual: "review",
   },
 ] as const;
 
-function ConnectMockup() {
-  return (
-    <div
-      aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-zinc-950 font-mono text-xs leading-relaxed text-zinc-300 dark:border-zinc-800"
-    >
-      <div className="border-b border-zinc-800 px-4 py-2 text-zinc-500">
-        your-project
-      </div>
-      <div className="space-y-1 px-4 py-4">
-        <p>
-          <span className="text-zinc-500">$</span>{" "}
-          <span className="text-zinc-100">brew install gx</span>
-        </p>
-        <p className="text-emerald-400">✓ signed in with GitHub</p>
-        <p className="text-emerald-400">✓ gx desktop connected</p>
-        <p className="text-zinc-500"># stacks save automatically as you code</p>
-      </div>
-    </div>
-  );
-}
-
 function CaptureMockup() {
-  const revisions = [
-    { status: "saved", title: "Add auth middleware", files: "3f" },
-    { status: "saved", title: "Wire session cookies", files: "2f" },
-    { status: "active", title: "Fix redirect loop", files: "1f" },
+  const signals = [
+    "Agent prompt",
+    "Files read + commands run",
+    "Test output",
+    "Diff attached",
   ] as const;
 
   return (
@@ -62,33 +38,55 @@ function CaptureMockup() {
       aria-hidden
       className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
     >
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Stack · 3 revisions
+          Session captured
         </p>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-          capturing
-        </span>
       </div>
       <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-        {revisions.map((rev) => (
+        {signals.map((signal) => (
+          <li key={signal} className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
+            {signal}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VerifyMockup() {
+  const models = [
+    { name: "GPT 5.5", signal: "auth bypass risk", tone: "warn" },
+    { name: "Opus 4.8", signal: "auth bypass risk", tone: "warn" },
+    { name: "REVIEW.md", signal: "require session tests", tone: "rule" },
+  ] as const;
+
+  return (
+    <div
+      aria-hidden
+      className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+    >
+      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
+          Model verification
+        </p>
+      </div>
+      <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+        {models.map((model) => (
           <li
-            key={rev.title}
-            className="flex items-center gap-3 px-4 py-3 text-xs"
+            key={model.name}
+            className="flex items-center justify-between gap-3 px-4 py-3 text-xs"
           >
+            <span className="font-mono text-zinc-500">{model.name}</span>
             <span
-              className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
-                rev.status === "active"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-zinc-400"
+              className={`truncate text-right ${
+                model.tone === "warn"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-zinc-700 dark:text-zinc-300"
               }`}
             >
-              {rev.status}
+              {model.signal}
             </span>
-            <span className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-300">
-              {rev.title}
-            </span>
-            <span className="shrink-0 font-mono text-zinc-400">{rev.files}</span>
           </li>
         ))}
       </ul>
@@ -98,13 +96,8 @@ function CaptureMockup() {
 
 function ReviewMockup() {
   const reviews = [
-    { title: "Auth middleware stack", status: "reviewed", tone: "muted" },
-    { title: "Invite modal fix on tab switch", status: "ready", tone: "ready" },
-    {
-      title: "Timeline tooltip hover delay",
-      status: "in progress",
-      tone: "active",
-    },
+    { title: "Auth middleware", status: "verified", tone: "ready" },
+    { title: "Session cookies", status: "needs fix", tone: "active" },
   ] as const;
 
   return (
@@ -112,11 +105,10 @@ function ReviewMockup() {
       aria-hidden
       className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
     >
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Stack reviews
+          Review Stack
         </p>
-        <span className="font-mono text-[10px] text-zinc-500">3 free</span>
       </div>
       <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {reviews.map((item) => (
@@ -131,9 +123,7 @@ function ReviewMockup() {
               className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
                 item.tone === "ready"
                   ? "text-emerald-600 dark:text-emerald-400"
-                  : item.tone === "active"
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-zinc-400"
+                  : "text-amber-600 dark:text-amber-400"
               }`}
             >
               {item.status}
@@ -146,8 +136,8 @@ function ReviewMockup() {
 }
 
 function StepVisual({ type }: { type: (typeof STEPS)[number]["visual"] }) {
-  if (type === "connect") return <ConnectMockup />;
   if (type === "capture") return <CaptureMockup />;
+  if (type === "verify") return <VerifyMockup />;
   return <ReviewMockup />;
 }
 
@@ -163,11 +153,8 @@ export function HowItWorksSection() {
             How it works
           </p>
           <h2 className="mt-3 text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
-            Three steps. No coordination glue.
+            Capture. Verify. Ship.
           </h2>
-          <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Stacks that save themselves, reviewed in one place.
-          </p>
         </div>
 
         <ol className="flex flex-col gap-20 sm:gap-24">
@@ -191,7 +178,7 @@ export function HowItWorksSection() {
                   <h3 className="text-lg font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-xl">
                     {item.title}
                   </h3>
-                  <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
+                  <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                     {item.detail}
                   </p>
                 </div>
@@ -203,14 +190,6 @@ export function HowItWorksSection() {
             );
           })}
         </ol>
-
-        <div className="mt-16 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-          <GetStartedButton className="px-8 py-3" />
-          <p className="inline-flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-500">
-            <GitHubIcon className="h-4 w-4" />
-            Free to start · no credit card
-          </p>
-        </div>
       </div>
     </section>
   );

@@ -32,7 +32,7 @@ export function SiteFooter() {
           <div className="flex w-fit max-w-xs flex-col items-start gap-2.5 text-left">
             <GxLogo variant="footer" tone="graphite" />
             <p className="max-w-[16rem] text-sm leading-6 text-zinc-600">
-              Review what matters at shipping speed.
+              The Quality Layer for Agents
             </p>
           </div>
 

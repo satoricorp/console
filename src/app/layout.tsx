@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { OnboardingGate } from "@/components/onboarding-gate";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const fkDisplay = localFont({
+  src: "../fonts/FKDisplay-Regular.otf",
+  variable: "--font-fk-display",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -17,9 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GX — Review what matters at shipping speed",
+  title: "GX — The Quality Layer for Agents",
   description:
-    "GX organizes your work into linear stacks so code review never bottlenecks how fast you ship. Know what you are shipping — review what matters, revision by revision. Download for macOS — 3 full-stack reviews free.",
+    "GX is a verification layer for AI-written code. It captures agent sessions, compares changes across multiple models, and uses repo-specific review context. Download for macOS — 2 weeks free.",
 };
 
 export default function RootLayout({
@@ -30,7 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fkDisplay.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
         <ConvexClientProvider>
