@@ -38,13 +38,22 @@ export function createMockProvider(contextHint?: string): LLMProvider {
     label: "Mock",
     async complete(system: string, user: string): Promise<LLMCompletion> {
       if (/GitHub pull request comment thread/i.test(system)) {
-        void user;
+        const citationIds = [...new Set([...user.matchAll(/\[(S\d+)\]/g)].map((match) => match[1]))];
+        const firstCitation = citationIds[0];
+        if (firstCitation) {
+          return {
+            text: JSON.stringify({
+              answer: `Start with the changed runtime file and the test assertion it depends on. [${firstCitation}]`,
+              citations: [firstCitation],
+            }),
+            model: "mock",
+          };
+        }
         return {
-          text: [
-            "GX: Start with the changed runtime file and the test assertion it depends on.",
-            "- The highest-signal surface is the hunk-linked file from the latest PR summary.",
-            "- Ask for a narrower follow-up if you want risk, test, or provenance detail.",
-          ].join("\n"),
+          text: JSON.stringify({
+            answer: "I couldn't answer from the available review context because no citeable sources were provided.",
+            citations: [],
+          }),
           model: "mock",
         };
       }

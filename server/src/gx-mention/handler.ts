@@ -6,12 +6,21 @@ import {
   buildGxChatUserPrompt,
   GX_CHAT_SYSTEM_PROMPT,
   type GitHubPrFileContext,
+  type RecentComment,
 } from "../llm/prompts/gx-chat";
 import {
   loadExtractContext,
   resolveSummaryTarget,
   type ExtractContext,
 } from "../summary/generate";
+import {
+  buildGxCitationContext,
+  formatGxCitedReply,
+  inlineCitationIds,
+  parseGxChatModelReply,
+  validCitationIds,
+  type GxCitationContext,
+} from "./citations";
 
 export type GxMentionInput = {
   orgId: string;
@@ -37,13 +46,6 @@ export type GxMentionResult = {
 type LatestSummary = {
   id: string;
   content: string;
-};
-
-type RecentComment = {
-  author: string | null;
-  body: string;
-  file: string | null;
-  line: number | null;
 };
 
 type ChatRun = {
@@ -147,6 +149,13 @@ export async function handleGxMention(
           fileHints: pickGitBlameFileHints(question, context, recentComments, input.file ?? null),
         })
       : null;
+  const citationContext = buildGxCitationContext({
+    latestSummary: latestSummary?.content ?? null,
+    context,
+    githubPrFiles,
+    gitBlameContext,
+    recentComments,
+  });
   const reply = await generateGxChatReply({
     author: input.author,
     question,
@@ -155,6 +164,7 @@ export async function handleGxMention(
     githubPrFiles,
     gitBlameContext,
     recentComments,
+    citationContext,
   });
 
   if (latestSummary) {
@@ -179,6 +189,7 @@ export async function handleGxMention(
     replied: Boolean(reply),
     githubPrFiles: githubPrFiles.length,
     gitBlameRows: gitBlameContext?.rows.length ?? 0,
+    citationCount: citationContext.citations.length,
   });
 
   return {
@@ -304,15 +315,22 @@ async function generateGxChatReply(input: {
   githubPrFiles: GitHubPrFileContext[];
   gitBlameContext: GitBlameContext | null;
   recentComments: RecentComment[];
+  citationContext: GxCitationContext;
 }): Promise<string> {
   const providers = createReviewProviders(input.question || input.latestSummary || "gx mention");
-  const userPrompt = buildGxChatUserPrompt(input);
+  const userPrompt = buildGxChatUserPrompt({
+    ...input,
+    citationPromptText: input.citationContext.promptText,
+  });
   const runs: ChatRun[] = [];
 
   for (const provider of providers) {
     try {
       const completion = await provider.complete(GX_CHAT_SYSTEM_PROMPT, userPrompt);
-      const text = normalizeChatReply(completion.text);
+      const structured = parseGxChatModelReply(completion.text);
+      const text = structured
+        ? formatStructuredChatReply(structured, input.citationContext, provider.name)
+        : normalizeChatReply(completion.text);
       runs.push({ text, score: scoreChatReply(text), error: null });
     } catch (error) {
       runs.push({
@@ -336,6 +354,32 @@ async function generateGxChatReply(input: {
     : "GX: I couldn't answer from the available review context.";
 }
 
+function formatStructuredChatReply(
+  reply: { answer: string; citations: string[] },
+  citationContext: GxCitationContext,
+  providerName: string,
+): string {
+  const requestedIds = [...reply.citations, ...inlineCitationIds(reply.answer)];
+  const validIds = validCitationIds(requestedIds, citationContext.citations);
+  const validIdSet = new Set(validIds);
+  const invalidIds = requestedIds.filter((id) => !validIdSet.has(id));
+
+  if (citationContext.citations.length > 0 && validIds.length === 0) {
+    console.info("gx-mention sources available but not cited", {
+      provider: providerName,
+      availableCitationCount: citationContext.citations.length,
+      invalidCitationIds: invalidIds,
+    });
+  } else if (invalidIds.length > 0) {
+    console.info("gx-mention dropped invalid citation ids", {
+      provider: providerName,
+      invalidCitationIds: invalidIds,
+    });
+  }
+
+  return formatGxCitedReply(reply.answer, validIds, citationContext.citations);
+}
+
 function normalizeChatReply(text: string): string {
   const trimmed = text.trim();
   const lines = trimmed
@@ -352,6 +396,8 @@ function normalizeChatReply(text: string): string {
 
 function scoreChatReply(text: string): number {
   let score = 1;
+  if (/\nSources:\s.*\[S\d+\]/.test(text)) score += 1;
+  if (/\[S\d+\]/.test(text)) score += 0.5;
   if (/[\w./-]+\.\w+:\d+/.test(text)) score += 1;
   if (/\b(risk|review|test|security|auth|tenant|payment|llm|prompt|migration|ci)\b/i.test(text)) {
     score += 0.75;

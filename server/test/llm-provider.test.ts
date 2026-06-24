@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createLLMProvider, createReviewProviders } from "../src/llm/provider";
+import { createLLMProvider, createMockProvider, createReviewProviders } from "../src/llm/provider";
 
 const originalFetch = globalThis.fetch;
 const originalEnv = {
@@ -74,5 +74,33 @@ describe("createReviewProviders", () => {
     const providers = createReviewProviders();
 
     expect(providers.map((provider) => provider.label)).toEqual(["OpenAI", "Anthropic"]);
+  });
+});
+
+describe("createMockProvider", () => {
+  test("returns structured cited JSON for gx mention prompts with available sources", async () => {
+    const provider = createMockProvider();
+    const result = await provider.complete(
+      "You are GX in a GitHub pull request comment thread.",
+      "Available sources:\n[S1] published_revision: docs/documentation touched README.md",
+    );
+
+    expect(JSON.parse(result.text)).toEqual({
+      answer: "Start with the changed runtime file and the test assertion it depends on. [S1]",
+      citations: ["S1"],
+    });
+  });
+
+  test("returns structured no-source JSON for gx mention prompts without sources", async () => {
+    const provider = createMockProvider();
+    const result = await provider.complete(
+      "You are GX in a GitHub pull request comment thread.",
+      "Available sources:\n(none)",
+    );
+
+    expect(JSON.parse(result.text)).toEqual({
+      answer: "I couldn't answer from the available review context because no citeable sources were provided.",
+      citations: [],
+    });
   });
 });
