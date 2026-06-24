@@ -287,11 +287,22 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     );
     try {
       const token = await getInstallationAccessToken(installationId);
-      await postIssueComment(
+      const posted = await postIssueComment(
         token,
         repo.full_name,
         pr.number,
         upgradeMessage(quota),
+      );
+      captureGitHubCommentPosted(
+        {
+          bookmarkId: bookmark.id,
+          prNumber: pr.number,
+          repo: repo.full_name,
+          githubCommentId: posted.id,
+          commentKind: "quota_upgrade",
+          source: "github_webhook",
+        },
+        orgId,
       );
     } catch (error) {
       console.error("Failed to post quota upgrade comment", { orgId, error });
@@ -348,6 +359,21 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     },
     orgId,
   );
+  if (githubCommentId !== null) {
+    captureGitHubCommentPosted(
+      {
+        bookmarkId: bookmark.id,
+        eventId: result.eventId,
+        summaryId: result.summaryId,
+        prNumber: pr.number,
+        repo: repo.full_name,
+        githubCommentId,
+        commentKind: "pr_summary",
+        source: "github_webhook",
+      },
+      orgId,
+    );
+  }
 
   const now = Date.now();
   await db`
@@ -734,28 +760,71 @@ async function processGxMention(
 
   try {
     const token = await getInstallationAccessToken(input.installationId);
+    let githubCommentId: number;
     if (
       input.replyMode === "review" &&
       typeof input.githubCommentId === "number"
     ) {
-      await postPullRequestReviewReply(
+      const posted = await postPullRequestReviewReply(
         token,
         input.repoFullName,
         input.pullNumber,
         result.reply,
         input.githubCommentId,
       );
+      githubCommentId = posted.id;
     } else {
-      await postIssueComment(
+      const posted = await postIssueComment(
         token,
         input.repoFullName,
         input.pullNumber,
         result.reply,
       );
+      githubCommentId = posted.id;
     }
+    captureGitHubCommentPosted(
+      {
+        bookmarkId: input.bookmarkId,
+        prNumber: input.pullNumber,
+        repo: input.repoFullName,
+        githubCommentId,
+        commentKind: input.replyMode === "review" ? "gx_review_reply" : "gx_issue_reply",
+        source: "gx_mention",
+      },
+      input.orgId,
+    );
   } catch (error) {
     console.error("Failed to post @gx reply", { error, commentId: input.commentId });
   }
+}
+
+function captureGitHubCommentPosted(
+  input: {
+    bookmarkId: string;
+    eventId?: string | null;
+    summaryId?: string | null;
+    prNumber: number | null;
+    repo: string;
+    githubCommentId: number;
+    commentKind: string;
+    source: string;
+  },
+  orgId: string,
+) {
+  capture(
+    Events.GitHubCommentPosted,
+    {
+      bookmark_id: input.bookmarkId,
+      event_id: input.eventId ?? null,
+      summary_id: input.summaryId ?? null,
+      pr_number: input.prNumber,
+      repo: input.repo,
+      github_comment_id: input.githubCommentId,
+      comment_kind: input.commentKind,
+      source: input.source,
+    },
+    orgId,
+  );
 }
 
 async function findOrCreateBookmark(

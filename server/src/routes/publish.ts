@@ -155,6 +155,12 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       bookmark: result.bookmark,
     });
 
+    capturePublishArtifact(payload, result.bookmark, {
+      orgId,
+      eventId: result.eventId,
+      indexStatus: indexResult.status,
+    });
+
     const url = reviewUrl(result.bookmark.id);
     return c.json(
       {
@@ -282,6 +288,19 @@ async function postMissingPrSummaryAfterPublish(
     },
     input.orgId,
   );
+  captureGitHubCommentPosted(
+    {
+      bookmarkId: input.bookmark.id,
+      eventId: summary.eventId,
+      summaryId: summary.summaryId,
+      prNumber: input.bookmark.github_pr_number,
+      repo: input.bookmark.repo_full_name,
+      githubCommentId,
+      commentKind: "pr_summary",
+      source: "publish",
+    },
+    input.orgId,
+  );
 
   await db`
     INSERT INTO pr_comments (
@@ -354,6 +373,8 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
       remoteHeadSha: registration.remote_head_sha ?? null,
       updatedAtMs: Date.now(),
     });
+
+    capturePublishRegistration(registration, bookmark, orgId);
 
     return c.json(
       {
@@ -616,6 +637,86 @@ function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
   const title = payload.change?.description?.split("\n")[0]?.trim();
   if (title) return title;
   return branchSlugTitle(branchName);
+}
+
+function capturePublishArtifact(
+  payload: PushBundle,
+  bookmark: BookmarkRow,
+  input: { orgId: string; eventId: string; indexStatus: string },
+) {
+  capture(
+    Events.PublishArtifact,
+    {
+      bookmark_id: bookmark.id,
+      event_id: input.eventId,
+      repo: bookmark.repo_full_name,
+      revision_count: publishRevisionCount(payload),
+      stack_count: 1,
+      session_count: payload.sessions?.length ?? 0,
+      has_github_pr: bookmark.github_pr_number !== null,
+      github_pr_number: bookmark.github_pr_number,
+      index_status: input.indexStatus,
+      gx_version: payload.gx_version,
+      source: "artifact",
+    },
+    input.orgId,
+  );
+}
+
+function capturePublishRegistration(
+  registration: PublishRegistration,
+  bookmark: BookmarkRow,
+  orgId: string,
+) {
+  capture(
+    Events.PublishRegistration,
+    {
+      bookmark_id: bookmark.id,
+      repo: bookmark.repo_full_name,
+      stack_count: 1,
+      has_github_pr: bookmark.github_pr_number !== null,
+      github_pr_number: bookmark.github_pr_number,
+      has_remote_head_sha: Boolean(registration.remote_head_sha),
+      source: "registration",
+    },
+    orgId,
+  );
+}
+
+function publishRevisionCount(payload: PushBundle): number {
+  if (payload.stack?.length) {
+    return payload.stack.length;
+  }
+  return payload.change ? 1 : 0;
+}
+
+function captureGitHubCommentPosted(
+  input: {
+    bookmarkId: string;
+    eventId?: string | null;
+    summaryId?: string | null;
+    prNumber: number | null;
+    repo: string;
+    githubCommentId: number | null;
+    commentKind: string;
+    source: string;
+  },
+  orgId: string,
+) {
+  capture(
+    Events.GitHubCommentPosted,
+    {
+      bookmark_id: input.bookmarkId,
+      event_id: input.eventId ?? null,
+      summary_id: input.summaryId ?? null,
+      pr_number: input.prNumber,
+      repo: input.repo,
+      github_comment_id: input.githubCommentId,
+      comment_kind: input.commentKind,
+      source: input.source,
+    },
+    orgId,
+  );
 }
 
 function branchSlugTitle(branchName: string): string {
