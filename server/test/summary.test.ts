@@ -90,6 +90,8 @@ describeDb("generateSummary integration", () => {
   let eventId: string;
   let commitOnlyBookmarkId: string;
   let commitOnlyEventId: string;
+  let publishPreferredBookmarkId: string;
+  let publishPreferredEventId: string;
 
   beforeAll(async () => {
     delete process.env.OPENAI_API_KEY;
@@ -229,6 +231,69 @@ describeDb("generateSummary integration", () => {
       RETURNING id
     `;
     commitOnlyBookmarkId = commitOnlyBookmark.id;
+
+    const [publishPreferredEvent] = await db<{ id: string }[]>`
+      INSERT INTO pr_events (
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+      ) VALUES (
+        ${now + 2},
+        '0.1.0-test',
+        'publish-head',
+        ${JSON.stringify({
+          event: "gx.pr",
+          stack: [
+            {
+              change: {
+                description: "Published artifact context",
+                files: ["README.md"],
+              },
+              patch: "+published context",
+            },
+          ],
+        })}::jsonb,
+        ${orgId},
+        'summary-test-user',
+        '/Users/joe/git/published'
+      )
+      RETURNING id
+    `;
+    publishPreferredEventId = publishPreferredEvent.id;
+
+    const [publishPreferredBookmark] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms,
+        org_id, latest_event_id, remote_head_sha, head_commit_id
+      ) VALUES (
+        'github-webhook',
+        'acme/published',
+        'docs/published',
+        ${now + 2},
+        ${now + 2},
+        ${orgId},
+        ${publishPreferredEventId},
+        'publish-head',
+        'publish-head'
+      )
+      RETURNING id
+    `;
+    publishPreferredBookmarkId = publishPreferredBookmark.id;
+
+    await db`
+      INSERT INTO pr_events (
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+      ) VALUES (
+        ${now + 3},
+        '0.1.0-test',
+        'publish-head',
+        ${JSON.stringify({
+          refRange: "main..publish-head",
+          intentCandidates: [],
+        })}::jsonb,
+        ${orgId},
+        'summary-test-user',
+        '/Users/joe/git/published'
+      )
+    `;
   });
 
   afterAll(async () => {
@@ -294,6 +359,19 @@ describeDb("generateSummary integration", () => {
 
     expect(result.bookmarkId).toBe(commitOnlyBookmarkId);
     expect(result.eventId).toBe(commitOnlyEventId);
+    expect(validateSummary(result.content).ok).toBe(true);
+  });
+
+  test("prefers bookmark publish event over newer empty event for same head", async () => {
+    const db = getSql();
+    const result = await generateSummary(db, {
+      orgId,
+      bookmarkId: publishPreferredBookmarkId,
+      provider: createMockProvider("Published artifact context"),
+    });
+
+    expect(result.bookmarkId).toBe(publishPreferredBookmarkId);
+    expect(result.eventId).toBe(publishPreferredEventId);
     expect(validateSummary(result.content).ok).toBe(true);
   });
 

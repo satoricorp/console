@@ -208,13 +208,46 @@ async function resolveEventForBookmark(
     Boolean(value) && values.indexOf(value) === index,
   );
 
+  if (bookmark.latest_event_id) {
+    const [latestEvent] = await db<{ id: string }[]>`
+      SELECT id
+      FROM pr_events
+      WHERE org_id = ${orgId}
+        AND id = ${bookmark.latest_event_id}
+        AND (
+          ${headShas.length} = 0
+          OR head_commit_id = ANY(${headShas})
+        )
+      LIMIT 1
+    `;
+    if (latestEvent?.id) {
+      return latestEvent.id;
+    }
+  }
+
   if (headShas.length > 0) {
     const [event] = await db<{ id: string }[]>`
       SELECT id
       FROM pr_events
       WHERE org_id = ${orgId}
         AND head_commit_id = ANY(${headShas})
-      ORDER BY created_at_ms DESC
+      ORDER BY
+        CASE
+          WHEN jsonb_typeof(payload->'stack') = 'array'
+            AND jsonb_array_length(payload->'stack') > 0
+            THEN 3
+          WHEN payload ? 'change'
+            THEN 2
+          WHEN EXISTS (
+            SELECT 1
+            FROM hunk_links
+            WHERE hunk_links.org_id = ${orgId}
+              AND hunk_links.event_id = pr_events.id
+          )
+            THEN 1
+          ELSE 0
+        END DESC,
+        created_at_ms DESC
       LIMIT 1
     `;
     if (event?.id) {
