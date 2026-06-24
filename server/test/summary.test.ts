@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
-import { generateSummary } from "../src/summary/generate";
+import { generateSummary, loadExtractContext } from "../src/summary/generate";
 import { validateSummary, REQUIRED_SECTIONS } from "../src/summary/validate";
 import { authHeaders, installTestAuth } from "./auth";
 
@@ -373,6 +373,19 @@ describeDb("generateSummary integration", () => {
     expect(result.bookmarkId).toBe(publishPreferredBookmarkId);
     expect(result.eventId).toBe(publishPreferredEventId);
     expect(validateSummary(result.content).ok).toBe(true);
+  });
+
+  test("unwraps legacy string-encoded publish payloads", async () => {
+    const db = getSql();
+    const context = await loadExtractContext(db, orgId, {
+      bookmarkId: publishPreferredBookmarkId,
+      eventId: publishPreferredEventId,
+    });
+
+    expect(context.publishedRevisions?.[0]?.description).toBe(
+      "Published artifact context",
+    );
+    expect(context.publishedRevisions?.[0]?.patch).toContain("+published context");
   });
 
   test("returns 404 when bookmark missing", async () => {

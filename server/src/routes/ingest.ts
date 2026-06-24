@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type postgres from "postgres";
 import { getSql } from "../db";
 import { resolveHunkFileLines } from "../ingest/parse-hunk";
 import { promoteSessionRaw } from "../ingest/promote";
@@ -32,14 +33,14 @@ ingestRoutes.post("/v1/extracts", async (c) => {
       ${now},
       ${gxVersion},
       ${body.headCommit},
-      ${JSON.stringify({
+      ${db.json({
         refRange: body.refRange,
         intentCandidates: body.intentCandidates ?? [],
         struggleSignals: body.struggleSignals ?? [],
         humanOverrides: body.humanOverrides ?? [],
         fileStats: body.fileStats ?? null,
         toolVersions: body.toolVersions ?? {},
-      })}::jsonb,
+      } as postgres.JSONValue)},
       ${auth.orgId},
       ${auth.userId},
       ${body.repoRoot}

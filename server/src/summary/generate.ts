@@ -266,7 +266,7 @@ export async function loadExtractContext(
   const [event] = await db<{
     repo_root_path: string | null;
     head_commit_id: string | null;
-    payload: PrEventPayload;
+    payload: unknown;
   }[]>`
     SELECT repo_root_path, head_commit_id, payload
     FROM pr_events
@@ -276,7 +276,7 @@ export async function loadExtractContext(
     throw new Error("event not found");
   }
 
-  const payload = event.payload ?? {};
+  const payload = normalizePrEventPayload(event.payload);
   const hunkRows = await db<{
     file: string;
     line_start: number;
@@ -453,6 +453,18 @@ function extractPublishedRevisions(payload: PrEventPayload): PublishedRevisionRo
       ];
     })
     .reverse();
+}
+
+function normalizePrEventPayload(payload: unknown): PrEventPayload {
+  if (typeof payload === "string") {
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      return asRecord(parsed) ?? {};
+    } catch {
+      return {};
+    }
+  }
+  return asRecord(payload) ?? {};
 }
 
 function extractPublishedSessions(payload: PrEventPayload): PublishedSessionRow[] {

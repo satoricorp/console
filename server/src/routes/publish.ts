@@ -98,7 +98,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
           ${branchName},
           ${payload.push.head_commit_id},
           ${githubPrUrl},
-          ${JSON.stringify(payload)}::jsonb,
+          ${tx.json(payload as postgres.JSONValue)},
           ${orgId}
         )
         RETURNING id
