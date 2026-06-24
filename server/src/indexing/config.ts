@@ -12,7 +12,10 @@ export type IndexingConfig = {
 };
 
 export function indexingConfig(): IndexingConfig | null {
-  const openAIAPIKey = process.env.OPENAI_API_KEY?.trim() || "";
+  const openAIAPIKey =
+    process.env.GX_EMBEDDING_OPENAI_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim() ||
+    "";
   const turboPufferAPIKey = process.env.TURBOPUFFER_API_KEY?.trim() || "";
   if (!openAIAPIKey || !turboPufferAPIKey) {
     return null;

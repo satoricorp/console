@@ -1,9 +1,16 @@
 import { Hono, type Context } from "hono";
 import type postgres from "postgres";
 import { getSql } from "../db";
-import { findInstalledRepository, resolveOrgIdForInstallation } from "../github/app";
+import {
+  findInstalledRepository,
+  getInstallationAccessToken,
+  resolveOrgIdForInstallation,
+} from "../github/app";
+import { postIssueComment } from "../github/comments";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
+import { generateSummary } from "../summary/generate";
+import { capture, Events } from "../telemetry/posthog";
 import type { PublishRegistration, PushBundle } from "../types";
 
 type SqlExecutor = postgres.Sql | postgres.TransactionSql;
@@ -142,6 +149,12 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       });
     }
 
+    await postMissingPrSummaryAfterPublish(db, {
+      orgId,
+      userId: auth.userId,
+      bookmark: result.bookmark,
+    });
+
     const url = reviewUrl(result.bookmark.id);
     return c.json(
       {
@@ -164,6 +177,153 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
   } catch (error) {
     console.error("Failed to publish GX payload", error);
     return c.json({ error: "Failed to publish" }, 500);
+  }
+}
+
+async function postMissingPrSummaryAfterPublish(
+  db: postgres.Sql,
+  input: {
+    orgId: string;
+    userId: string;
+    bookmark: BookmarkRow;
+  },
+) {
+  if (!input.bookmark.github_pr_number) {
+    return;
+  }
+
+  const [existingPostedComment] = await db<{ id: string }[]>`
+    SELECT id
+    FROM pr_comments
+    WHERE org_id = ${input.orgId}
+      AND bookmark_id = ${input.bookmark.id}
+      AND author = 'gx'
+      AND github_comment_id IS NOT NULL
+    LIMIT 1
+  `;
+  if (existingPostedComment) {
+    return;
+  }
+
+  const [existingSummary] = await db<{ id: string; content: string }[]>`
+    SELECT id
+         , content
+    FROM summaries
+    WHERE org_id = ${input.orgId}
+      AND bookmark_id = ${input.bookmark.id}
+    ORDER BY posted_at_ms DESC
+    LIMIT 1
+  `;
+
+  const grant = await findInstalledRepository(db, input.bookmark.repo_full_name);
+  if (!grant) {
+    console.info("PR Summary after publish skipped: repo is not installed", {
+      orgId: input.orgId,
+      bookmarkId: input.bookmark.id,
+      repoFullName: input.bookmark.repo_full_name,
+    });
+    return;
+  }
+
+  let token: string;
+  try {
+    token = await getInstallationAccessToken(grant.installationId);
+  } catch (error) {
+    console.error("PR Summary after publish skipped: failed to get installation token", {
+      orgId: input.orgId,
+      bookmarkId: input.bookmark.id,
+      error,
+    });
+    return;
+  }
+
+  const summary = existingSummary
+    ? {
+        summaryId: existingSummary.id,
+        eventId: input.bookmark.latest_event_id,
+        content: existingSummary.content,
+      }
+    : await generateMissingSummary(db, {
+        orgId: input.orgId,
+        userId: input.userId,
+        bookmarkId: input.bookmark.id,
+      });
+  if (!summary) return;
+
+  let githubCommentId: number | null = null;
+  try {
+    const posted = await postIssueComment(
+      token,
+      input.bookmark.repo_full_name,
+      input.bookmark.github_pr_number,
+      summary.content,
+    );
+    githubCommentId = posted.id;
+  } catch (error) {
+    console.error("Failed to post PR Summary after publish", {
+      orgId: input.orgId,
+      bookmarkId: input.bookmark.id,
+      error,
+    });
+    return;
+  }
+
+  capture(
+    Events.SummaryPosted,
+    {
+      bookmark_id: input.bookmark.id,
+      event_id: summary.eventId,
+      summary_id: summary.summaryId,
+      pr_number: input.bookmark.github_pr_number,
+      repo: input.bookmark.repo_full_name,
+      github_comment_id: githubCommentId,
+      posted: githubCommentId !== null,
+      source: "publish",
+    },
+    input.orgId,
+  );
+
+  await db`
+    INSERT INTO pr_comments (
+      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+    ) VALUES (
+      ${input.orgId},
+      ${input.bookmark.id},
+      ${githubCommentId},
+      'gx',
+      ${summary.content},
+      false,
+      ${Date.now()}
+    )
+  `;
+}
+
+async function generateMissingSummary(
+  db: postgres.Sql,
+  input: {
+    orgId: string;
+    userId: string;
+    bookmarkId: string;
+  },
+): Promise<{ summaryId: string; eventId: string; content: string } | null> {
+  try {
+    const result = await generateSummary(db, {
+      orgId: input.orgId,
+      userId: input.userId,
+      bookmarkId: input.bookmarkId,
+    });
+    return {
+      summaryId: result.summaryId,
+      eventId: result.eventId,
+      content: result.content,
+    };
+  } catch (error) {
+    console.error("PR Summary after publish failed", {
+      orgId: input.orgId,
+      bookmarkId: input.bookmarkId,
+      error,
+    });
+    return null;
   }
 }
 

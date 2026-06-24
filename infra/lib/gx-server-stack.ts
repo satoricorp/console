@@ -97,9 +97,11 @@ export class GxServerStack extends Stack {
         secretStringTemplate: JSON.stringify({
           GX_CLOUD_API_KEY: "replace-me",
           CONVEX_SITE_URL: "replace-me",
+          GX_EMBEDDING_OPENAI_API_KEY: "replace-me",
           GITHUB_APP_ID: "replace-me",
           GITHUB_APP_PRIVATE_KEY: "replace-me",
           GITHUB_WEBHOOK_SECRET: "replace-me",
+          TURBOPUFFER_API_KEY: "replace-me",
         }),
         generateStringKey: "_generated",
         excludePunctuation: true,
@@ -176,6 +178,10 @@ export class GxServerStack extends Stack {
               appSecret,
               "CONVEX_SITE_URL",
             ),
+            GX_EMBEDDING_OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GX_EMBEDDING_OPENAI_API_KEY",
+            ),
             GITHUB_APP_ID: ecs.Secret.fromSecretsManager(
               appSecret,
               "GITHUB_APP_ID",
@@ -187,6 +193,10 @@ export class GxServerStack extends Stack {
             GITHUB_WEBHOOK_SECRET: ecs.Secret.fromSecretsManager(
               appSecret,
               "GITHUB_WEBHOOK_SECRET",
+            ),
+            TURBOPUFFER_API_KEY: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "TURBOPUFFER_API_KEY",
             ),
           },
           logDriver: ecs.LogDrivers.awsLogs({

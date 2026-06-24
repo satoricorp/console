@@ -7,7 +7,6 @@ import { checkPrSummaryQuota, upgradeMessage } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
-import { createMockProvider } from "../llm/provider";
 import { capture, Events } from "../telemetry/posthog";
 import {
   getInstallationAccessToken,
@@ -306,7 +305,6 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       orgId,
       userId: "github-webhook",
       bookmarkId: bookmark.id,
-      provider: createMockProvider(),
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("no matching review event")) {

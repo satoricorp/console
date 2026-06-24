@@ -14,7 +14,7 @@ describeDb("indexing turbopuffer", () => {
   const originalFetch = globalThis.fetch;
 
   beforeAll(async () => {
-    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.GX_EMBEDDING_OPENAI_API_KEY = "test-openai-key";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";
     await runMigrations();
 
@@ -60,6 +60,7 @@ describeDb("indexing turbopuffer", () => {
   });
 
   afterAll(async () => {
+    delete process.env.GX_EMBEDDING_OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.TURBOPUFFER_API_KEY;
     resetIndexingFetch();
@@ -68,6 +69,7 @@ describeDb("indexing turbopuffer", () => {
   });
 
   test("returns disabled when API keys missing", async () => {
+    delete process.env.GX_EMBEDDING_OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.TURBOPUFFER_API_KEY;
     const db = getSql();
@@ -79,7 +81,7 @@ describeDb("indexing turbopuffer", () => {
       afterSha: "deadbeef",
     });
     expect(result.status).toBe("disabled");
-    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.GX_EMBEDDING_OPENAI_API_KEY = "test-openai-key";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";
   });
 

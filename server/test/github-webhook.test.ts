@@ -43,7 +43,7 @@ describeDb("GitHub webhook", () => {
 
   beforeAll(async () => {
     process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
-    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "mock";
 
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     process.env.GITHUB_APP_ID = "12345";
