@@ -32,22 +32,6 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
     lines.push(`Intent candidates: ${JSON.stringify(ctx.intentCandidates)}`);
   }
 
-  if (ctx.publishedRevisions?.length) {
-    lines.push("GX published revisions (newest first):");
-    for (const revision of ctx.publishedRevisions.slice(0, 12)) {
-      const branch = revision.branchName ? ` branch=${revision.branchName}` : "";
-      const base = revision.baseBranchName ? ` base=${revision.baseBranchName}` : "";
-      const description = revision.description ? ` description=${revision.description}` : "";
-      lines.push(`- revision${branch}${base}${description}`);
-      if (revision.files.length > 0) {
-        lines.push(`  files: ${revision.files.slice(0, 20).join(", ")}`);
-      }
-      if (revision.patch) {
-        lines.push(revision.patch.slice(0, 1_500));
-      }
-    }
-  }
-
   if (ctx.hunkLinks.length > 0) {
     lines.push("Hunk links (file, lines, session, tier, authorship):");
     for (const link of ctx.hunkLinks.slice(0, 40)) {
@@ -65,16 +49,6 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
     for (const event of ctx.sessionEvents.slice(0, 20)) {
       lines.push(
         `- ${event.sessionId} ${event.eventType} ${event.filePath ?? ""} line=${event.rawLine}`,
-      );
-    }
-  }
-
-  if (ctx.publishedSessions?.length) {
-    lines.push("GX published sessions:");
-    for (const session of ctx.publishedSessions.slice(0, 12)) {
-      const command = session.command ? ` command=${session.command}` : "";
-      lines.push(
-        `- ${session.sessionId}${command} requests=${session.requestCount} responses=${session.responseCount}`,
       );
     }
   }

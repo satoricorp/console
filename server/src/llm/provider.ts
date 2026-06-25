@@ -16,7 +16,7 @@ export type LLMProvider = {
 
 const defaultOpenAIBaseURL = "https://api.openai.com/v1";
 const defaultModel = "gpt-4o-mini";
-const bedrockAnthropicModel = "us.anthropic.claude-sonnet-4-6";
+const bedrockAnthropicModel = "anthropic.claude-sonnet-4-6";
 
 function openAIBaseURL(): string {
   const baseURL = (
@@ -38,22 +38,13 @@ export function createMockProvider(contextHint?: string): LLMProvider {
     label: "Mock",
     async complete(system: string, user: string): Promise<LLMCompletion> {
       if (/GitHub pull request comment thread/i.test(system)) {
-        const citationIds = [...new Set([...user.matchAll(/\[(S\d+)\]/g)].map((match) => match[1]))];
-        const firstCitation = citationIds[0];
-        if (firstCitation) {
-          return {
-            text: JSON.stringify({
-              answer: `Start with the changed runtime file and the test assertion it depends on. [${firstCitation}]`,
-              citations: [firstCitation],
-            }),
-            model: "mock",
-          };
-        }
+        void user;
         return {
-          text: JSON.stringify({
-            answer: "I couldn't answer from the available review context because no citeable sources were provided.",
-            citations: [],
-          }),
+          text: [
+            "GX: Start with the changed runtime file and the test assertion it depends on.",
+            "- The highest-signal surface is the hunk-linked file from the latest PR summary.",
+            "- Ask for a narrower follow-up if you want risk, test, or provenance detail.",
+          ].join("\n"),
           model: "mock",
         };
       }
@@ -208,38 +199,16 @@ async function openAIComplete(system: string, user: string): Promise<LLMCompleti
 }
 
 export function createLLMProvider(contextHint?: string): LLMProvider {
-  const explicitOpenAIKey = process.env.GX_OPENAI_API_KEY?.trim();
-  const fallbackOpenAIKey = process.env.OPENAI_API_KEY?.trim();
-  const apiKey = explicitOpenAIKey || fallbackOpenAIKey;
-  if (apiKey === "mock") {
+  const apiKey = process.env.GX_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey || apiKey === "mock") {
     return createMockProvider(contextHint);
   }
 
-  if (explicitOpenAIKey && explicitOpenAIKey !== "mock") {
-    return {
-      name: "openai",
-      label: "OpenAI",
-      complete: openAIComplete,
-    };
-  }
-
-  if (bedrockConfigured()) {
-    return {
-      name: "anthropic",
-      label: "Anthropic",
-      complete: bedrockAnthropicComplete,
-    };
-  }
-
-  if (fallbackOpenAIKey && fallbackOpenAIKey !== "mock") {
-    return {
-      name: "openai",
-      label: "OpenAI",
-      complete: openAIComplete,
-    };
-  }
-
-  return createMockProvider(contextHint);
+  return {
+    name: "openai",
+    label: "OpenAI",
+    complete: openAIComplete,
+  };
 }
 
 export function createReviewProviders(contextHint?: string): LLMProvider[] {

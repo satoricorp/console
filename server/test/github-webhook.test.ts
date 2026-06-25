@@ -43,7 +43,7 @@ describeDb("GitHub webhook", () => {
 
   beforeAll(async () => {
     process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
-    process.env.OPENAI_API_KEY = "mock";
+    delete process.env.OPENAI_API_KEY;
 
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     process.env.GITHUB_APP_ID = "12345";
@@ -259,46 +259,7 @@ describeDb("GitHub webhook", () => {
       ),
     ).toBe(true);
 
-    process.env.OPENAI_API_KEY = "mock";
-    delete process.env.TURBOPUFFER_API_KEY;
-  });
-
-  test("installation_repositories webhook enqueues index jobs for added repos", async () => {
-    process.env.OPENAI_API_KEY = "test-openai-key";
-    process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";
-    fetchCalls.length = 0;
-
-    const res = await postWebhook("installation_repositories", {
-      action: "added",
-      installation: {
-        id: INSTALLATION_ID,
-        account: { id: 1, login: "acme", type: "Organization" },
-        repository_selection: "selected",
-        app_id: 1,
-        created_at: new Date().toISOString(),
-      },
-      repositories_added: [
-        {
-          id: 999003,
-          full_name: "acme/music",
-          name: "music",
-          private: true,
-          default_branch: "main",
-          owner: { login: "acme" },
-        },
-      ],
-      repositories_removed: [],
-    });
-    expect(res.status).toBe(200);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(
-      fetchCalls.some(
-        (c) => c.url.includes("turbopuffer.com") || c.url.includes("/embeddings"),
-      ),
-    ).toBe(true);
-
-    process.env.OPENAI_API_KEY = "mock";
+    delete process.env.OPENAI_API_KEY;
     delete process.env.TURBOPUFFER_API_KEY;
   });
 
@@ -435,46 +396,6 @@ describeDb("GitHub webhook", () => {
       SELECT status FROM rules WHERE id = ${rule.id}
     `;
     expect(updatedRule.status).toBe("retired");
-  });
-
-  test("@gx issue comment backfills missed installation state", async () => {
-    const missingInstallationId = INSTALLATION_ID + 1000;
-    const repoFullName = "acme/missed-install";
-    const issueCommentId = 65502 + Math.floor(Math.random() * 100000);
-
-    const res = await postWebhook("issue_comment", {
-      action: "created",
-      installation: { id: missingInstallationId },
-      repository: {
-        id: 999777,
-        full_name: repoFullName,
-        name: "missed-install",
-        private: false,
-        default_branch: "main",
-        owner: { login: "acme", type: "Organization" },
-      },
-      issue: { number: 31, pull_request: {} },
-      comment: {
-        id: issueCommentId,
-        user: { login: "alice" },
-        body: "@gx please skip rule never use var",
-      },
-    });
-
-    expect(res.status).toBe(200);
-
-    const db = getSql();
-    const [org] = await db<{ id: string }[]>`
-      SELECT id FROM orgs WHERE installation_id = ${missingInstallationId}
-    `;
-    expect(org?.id).toBeTruthy();
-
-    const comments = await db<{ is_gx_mention: boolean }[]>`
-      SELECT is_gx_mention FROM pr_comments
-      WHERE org_id = ${org.id} AND github_comment_id = ${issueCommentId}
-    `;
-    expect(comments[0]?.is_gx_mention).toBe(true);
-    expect(fetchCalls.some((c) => c.url.includes("/issues/31/comments"))).toBe(true);
   });
 
   test("push webhook enqueues incremental index without blocking", async () => {

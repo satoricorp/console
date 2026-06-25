@@ -7,6 +7,7 @@ import { checkPrSummaryQuota, upgradeMessage } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
+import { createMockProvider } from "../llm/provider";
 import { capture, Events } from "../telemetry/posthog";
 import {
   getInstallationAccessToken,
@@ -205,12 +206,11 @@ async function handleInstallationRepositories(
   if (!installation) return;
 
   const now = Date.now();
-  const reposAdded = payload.repositories_added ?? [];
   await db.begin(async (tx) => {
     await upsertInstallation(tx, installation, now);
     await upsertOrgForInstallation(tx, installation.installationId, now);
 
-    for (const repo of reposAdded) {
+    for (const repo of payload.repositories_added ?? []) {
       const normalized = normalizeRepository(repo, installation.installationId);
       if (normalized) {
         await upsertRepository(tx, normalized, now);
@@ -228,19 +228,6 @@ async function handleInstallationRepositories(
       `;
     }
   });
-
-  const orgId = await resolveOrgIdForInstallation(db, installation.installationId);
-  if (!orgId) return;
-
-  for (const repo of reposAdded) {
-    if (!repo.full_name) continue;
-    enqueueIndexJob({
-      orgId,
-      repoFullName: repo.full_name,
-      reason: "install",
-      ref: repo.default_branch ? `refs/heads/${repo.default_branch}` : undefined,
-    });
-  }
 }
 
 async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
@@ -256,7 +243,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const orgId = await ensureOrgIdForPayload(db, payload);
+  const orgId = await resolveOrgIdForInstallation(db, installationId);
   if (!orgId) {
     return;
   }
@@ -287,22 +274,11 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     );
     try {
       const token = await getInstallationAccessToken(installationId);
-      const posted = await postIssueComment(
+      await postIssueComment(
         token,
         repo.full_name,
         pr.number,
         upgradeMessage(quota),
-      );
-      captureGitHubCommentPosted(
-        {
-          bookmarkId: bookmark.id,
-          prNumber: pr.number,
-          repo: repo.full_name,
-          githubCommentId: posted.id,
-          commentKind: "quota_upgrade",
-          source: "github_webhook",
-        },
-        orgId,
       );
     } catch (error) {
       console.error("Failed to post quota upgrade comment", { orgId, error });
@@ -310,23 +286,19 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  let result;
-  try {
-    result = await generateSummary(db, {
-      orgId,
-      userId: "github-webhook",
+  if (!bookmark.latest_event_id) {
+    console.info("PR Summary skipped: bookmark has no latest_event_id", {
       bookmarkId: bookmark.id,
     });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("no matching review event")) {
-      console.info("PR Summary skipped: bookmark has no matching review event", {
-        bookmarkId: bookmark.id,
-        headSha: pr.head?.sha ?? null,
-      });
-      return;
-    }
-    throw error;
+    return;
   }
+
+  const result = await generateSummary(db, {
+    orgId,
+    userId: "github-webhook",
+    bookmarkId: bookmark.id,
+    provider: createMockProvider(),
+  });
 
   let githubCommentId: number | null = null;
   try {
@@ -359,21 +331,6 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     },
     orgId,
   );
-  if (githubCommentId !== null) {
-    captureGitHubCommentPosted(
-      {
-        bookmarkId: bookmark.id,
-        eventId: result.eventId,
-        summaryId: result.summaryId,
-        prNumber: pr.number,
-        repo: repo.full_name,
-        githubCommentId,
-        commentKind: "pr_summary",
-        source: "github_webhook",
-      },
-      orgId,
-    );
-  }
 
   const now = Date.now();
   await db`
@@ -405,7 +362,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
     return;
   }
 
-  const orgId = await ensureOrgIdForPayload(db, payload);
+  const orgId = await resolveOrgIdForInstallation(db, installationId);
   if (!orgId) return;
 
   const bookmark = await findOrCreateBookmark(db, {
@@ -488,9 +445,7 @@ async function handlePullRequestReviewComment(
     return;
   }
 
-  const orgId = await ensureOrgIdForPayload(db, payload);
   await ingestLineComment(db, {
-    orgId: orgId ?? undefined,
     installationId,
     repoFullName: repo.full_name,
     pullNumber: pr.number,
@@ -521,9 +476,7 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const orgId = await ensureOrgIdForPayload(db, payload);
   await ingestLineComment(db, {
-    orgId: orgId ?? undefined,
     installationId,
     repoFullName: repo.full_name,
     pullNumber: issueNumber,
@@ -542,7 +495,7 @@ async function handlePush(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const orgId = await ensureOrgIdForPayload(db, payload);
+  const orgId = await resolveOrgIdForInstallation(db, installationId);
   detectOutcomeStub({
     orgId: orgId ?? "unknown",
     bookmarkId: "unknown",
@@ -566,7 +519,6 @@ async function handlePush(db: postgres.Sql, payload: WebhookPayload) {
 async function ingestLineComment(
   db: postgres.Sql,
   input: {
-    orgId?: string;
     installationId: number;
     repoFullName: string;
     pullNumber: number;
@@ -577,8 +529,7 @@ async function ingestLineComment(
     reviewState: ClassifyInput["reviewState"];
   },
 ) {
-  const orgId =
-    input.orgId ?? (await resolveOrgIdForInstallation(db, input.installationId));
+  const orgId = await resolveOrgIdForInstallation(db, input.installationId);
   if (!orgId) return;
 
   const bookmark = await findOrCreateBookmark(db, {
@@ -760,71 +711,28 @@ async function processGxMention(
 
   try {
     const token = await getInstallationAccessToken(input.installationId);
-    let githubCommentId: number;
     if (
       input.replyMode === "review" &&
       typeof input.githubCommentId === "number"
     ) {
-      const posted = await postPullRequestReviewReply(
+      await postPullRequestReviewReply(
         token,
         input.repoFullName,
         input.pullNumber,
         result.reply,
         input.githubCommentId,
       );
-      githubCommentId = posted.id;
     } else {
-      const posted = await postIssueComment(
+      await postIssueComment(
         token,
         input.repoFullName,
         input.pullNumber,
         result.reply,
       );
-      githubCommentId = posted.id;
     }
-    captureGitHubCommentPosted(
-      {
-        bookmarkId: input.bookmarkId,
-        prNumber: input.pullNumber,
-        repo: input.repoFullName,
-        githubCommentId,
-        commentKind: input.replyMode === "review" ? "gx_review_reply" : "gx_issue_reply",
-        source: "gx_mention",
-      },
-      input.orgId,
-    );
   } catch (error) {
     console.error("Failed to post @gx reply", { error, commentId: input.commentId });
   }
-}
-
-function captureGitHubCommentPosted(
-  input: {
-    bookmarkId: string;
-    eventId?: string | null;
-    summaryId?: string | null;
-    prNumber: number | null;
-    repo: string;
-    githubCommentId: number;
-    commentKind: string;
-    source: string;
-  },
-  orgId: string,
-) {
-  capture(
-    Events.GitHubCommentPosted,
-    {
-      bookmark_id: input.bookmarkId,
-      event_id: input.eventId ?? null,
-      summary_id: input.summaryId ?? null,
-      pr_number: input.prNumber,
-      repo: input.repo,
-      github_comment_id: input.githubCommentId,
-      comment_kind: input.commentKind,
-      source: input.source,
-    },
-    orgId,
-  );
 }
 
 async function findOrCreateBookmark(
@@ -848,19 +756,7 @@ async function findOrCreateBookmark(
     LIMIT 1
   `;
   if (existing) {
-    const [updated] = await db<{ id: string; latest_event_id: string | null }[]>`
-      UPDATE bookmarks
-      SET
-        branch_name = ${input.branchName},
-        github_pr_url = COALESCE(${input.prUrl}, github_pr_url),
-        remote_head_sha = COALESCE(${input.headSha}, remote_head_sha),
-        head_commit_id = COALESCE(${input.headSha}, head_commit_id),
-        updated_at_ms = ${Date.now()}
-      WHERE id = ${existing.id}
-        AND org_id = ${input.orgId}
-      RETURNING id, latest_event_id
-    `;
-    return updated ?? existing;
+    return existing;
   }
 
   const now = Date.now();
@@ -872,7 +768,6 @@ async function findOrCreateBookmark(
       github_pr_url,
       github_pr_number,
       remote_head_sha,
-      head_commit_id,
       published_at_ms,
       updated_at_ms,
       org_id
@@ -882,7 +777,6 @@ async function findOrCreateBookmark(
       ${input.branchName},
       ${input.prUrl},
       ${input.prNumber},
-      ${input.headSha},
       ${input.headSha},
       ${now},
       ${now},
@@ -903,29 +797,6 @@ async function upsertOrgForInstallation(
     VALUES (${installationId}, ${now})
     ON CONFLICT (installation_id) DO NOTHING
   `;
-}
-
-async function ensureOrgIdForPayload(
-  db: postgres.Sql,
-  payload: WebhookPayload,
-): Promise<string | null> {
-  const installation = normalizeInstallation(payload.installation);
-  if (!installation) return null;
-
-  const repo = payload.repository
-    ? normalizeRepository(payload.repository, installation.installationId)
-    : null;
-  const now = Date.now();
-
-  await db.begin(async (tx) => {
-    await upsertInstallation(tx, installation, now);
-    await upsertOrgForInstallation(tx, installation.installationId, now);
-    if (repo) {
-      await upsertRepository(tx, repo, now);
-    }
-  });
-
-  return resolveOrgIdForInstallation(db, installation.installationId);
 }
 
 async function upsertInstallation(
@@ -956,11 +827,11 @@ async function upsertInstallation(
       ${now}
     )
     ON CONFLICT (installation_id) DO UPDATE SET
-      account_id = COALESCE(EXCLUDED.account_id, github_app_installations.account_id),
-      account_login = COALESCE(NULLIF(EXCLUDED.account_login, ''), github_app_installations.account_login),
-      account_type = COALESCE(NULLIF(EXCLUDED.account_type, ''), github_app_installations.account_type),
-      repository_selection = COALESCE(NULLIF(EXCLUDED.repository_selection, ''), github_app_installations.repository_selection),
-      app_id = COALESCE(EXCLUDED.app_id, github_app_installations.app_id),
+      account_id = EXCLUDED.account_id,
+      account_login = EXCLUDED.account_login,
+      account_type = EXCLUDED.account_type,
+      repository_selection = EXCLUDED.repository_selection,
+      app_id = EXCLUDED.app_id,
       suspended_at_ms = EXCLUDED.suspended_at_ms,
       updated_at_ms = EXCLUDED.updated_at_ms
   `;

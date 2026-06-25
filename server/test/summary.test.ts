@@ -2,11 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
-import {
-  buildFallbackSummary,
-  generateSummary,
-  loadExtractContext,
-} from "../src/summary/generate";
+import { generateSummary } from "../src/summary/generate";
 import { validateSummary, REQUIRED_SECTIONS } from "../src/summary/validate";
 import { authHeaders, installTestAuth } from "./auth";
 
@@ -83,37 +79,6 @@ describe("validateSummary", () => {
       .join("\n");
     expect(validateSummary(markdown).ok).toBe(true);
   });
-
-  test("fallback summary is valid and uses GX publish context", () => {
-    const summary = buildFallbackSummary({
-      eventId: "event",
-      bookmarkId: "bookmark",
-      orgId: "org",
-      repoRootPath: "/repo",
-      headCommitId: "head",
-      refRange: null,
-      fileStats: null,
-      intentCandidates: [],
-      struggleSignals: [],
-      humanOverrides: [],
-      hunkLinks: [],
-      sessionEvents: [],
-      publishedRevisions: [
-        {
-          branchName: "docs/documentation",
-          baseBranchName: "main",
-          description: "update README.md",
-          files: ["README.md"],
-          patch: "+GX menubar rebuild smoke test",
-          githubPrUrl: null,
-        },
-      ],
-    });
-
-    expect(validateSummary(summary).ok).toBe(true);
-    expect(summary).toContain("update README.md");
-    expect(summary).toContain("GX published revision diff");
-  });
 });
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -123,13 +88,9 @@ describeDb("generateSummary integration", () => {
   let orgId: string;
   let bookmarkId: string;
   let eventId: string;
-  let commitOnlyBookmarkId: string;
-  let commitOnlyEventId: string;
-  let publishPreferredBookmarkId: string;
-  let publishPreferredEventId: string;
 
   beforeAll(async () => {
-    process.env.OPENAI_API_KEY = "mock";
+    delete process.env.OPENAI_API_KEY;
     installTestAuth();
     await runMigrations();
 
@@ -229,106 +190,6 @@ describeDb("generateSummary integration", () => {
         1
       )
     `;
-
-    const [commitOnlyEvent] = await db<{ id: string }[]>`
-      INSERT INTO pr_events (
-        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
-      ) VALUES (
-        ${now + 1},
-        '0.1.0-test',
-        'plain-git-head',
-        ${JSON.stringify({
-          refRange: "main..plain-git-head",
-          intentCandidates: ["Plain Git capture context"],
-        })}::jsonb,
-        ${orgId},
-        'summary-test-user',
-        '/Users/joe/git/plain'
-      )
-      RETURNING id
-    `;
-    commitOnlyEventId = commitOnlyEvent.id;
-
-    const [commitOnlyBookmark] = await db<{ id: string }[]>`
-      INSERT INTO bookmarks (
-        user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms,
-        org_id, remote_head_sha, head_commit_id
-      ) VALUES (
-        'github-webhook',
-        'acme/plain',
-        'feat/plain-git',
-        ${now + 1},
-        ${now + 1},
-        ${orgId},
-        'plain-git-head',
-        'plain-git-head'
-      )
-      RETURNING id
-    `;
-    commitOnlyBookmarkId = commitOnlyBookmark.id;
-
-    const [publishPreferredEvent] = await db<{ id: string }[]>`
-      INSERT INTO pr_events (
-        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
-      ) VALUES (
-        ${now + 2},
-        '0.1.0-test',
-        'publish-head',
-        ${JSON.stringify({
-          event: "gx.pr",
-          stack: [
-            {
-              change: {
-                description: "Published artifact context",
-                files: ["README.md"],
-              },
-              patch: "+published context",
-            },
-          ],
-        })}::jsonb,
-        ${orgId},
-        'summary-test-user',
-        '/Users/joe/git/published'
-      )
-      RETURNING id
-    `;
-    publishPreferredEventId = publishPreferredEvent.id;
-
-    const [publishPreferredBookmark] = await db<{ id: string }[]>`
-      INSERT INTO bookmarks (
-        user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms,
-        org_id, latest_event_id, remote_head_sha, head_commit_id
-      ) VALUES (
-        'github-webhook',
-        'acme/published',
-        'docs/published',
-        ${now + 2},
-        ${now + 2},
-        ${orgId},
-        ${publishPreferredEventId},
-        'publish-head',
-        'publish-head'
-      )
-      RETURNING id
-    `;
-    publishPreferredBookmarkId = publishPreferredBookmark.id;
-
-    await db`
-      INSERT INTO pr_events (
-        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
-      ) VALUES (
-        ${now + 3},
-        '0.1.0-test',
-        'publish-head',
-        ${JSON.stringify({
-          refRange: "main..publish-head",
-          intentCandidates: [],
-        })}::jsonb,
-        ${orgId},
-        'summary-test-user',
-        '/Users/joe/git/published'
-      )
-    `;
   });
 
   afterAll(async () => {
@@ -382,45 +243,6 @@ describeDb("generateSummary integration", () => {
     expect(json.eventId).toBe(eventId);
     expect(json.lineCount).toBeLessThanOrEqual(20);
     expect(json.summaryId).toBeTruthy();
-  });
-
-  test("resolves bookmark context from current head commit without latest_event_id", async () => {
-    const db = getSql();
-    const result = await generateSummary(db, {
-      orgId,
-      bookmarkId: commitOnlyBookmarkId,
-      provider: createMockProvider("Plain Git capture context"),
-    });
-
-    expect(result.bookmarkId).toBe(commitOnlyBookmarkId);
-    expect(result.eventId).toBe(commitOnlyEventId);
-    expect(validateSummary(result.content).ok).toBe(true);
-  });
-
-  test("prefers bookmark publish event over newer empty event for same head", async () => {
-    const db = getSql();
-    const result = await generateSummary(db, {
-      orgId,
-      bookmarkId: publishPreferredBookmarkId,
-      provider: createMockProvider("Published artifact context"),
-    });
-
-    expect(result.bookmarkId).toBe(publishPreferredBookmarkId);
-    expect(result.eventId).toBe(publishPreferredEventId);
-    expect(validateSummary(result.content).ok).toBe(true);
-  });
-
-  test("unwraps legacy string-encoded publish payloads", async () => {
-    const db = getSql();
-    const context = await loadExtractContext(db, orgId, {
-      bookmarkId: publishPreferredBookmarkId,
-      eventId: publishPreferredEventId,
-    });
-
-    expect(context.publishedRevisions?.[0]?.description).toBe(
-      "Published artifact context",
-    );
-    expect(context.publishedRevisions?.[0]?.patch).toContain("+published context");
   });
 
   test("returns 404 when bookmark missing", async () => {
