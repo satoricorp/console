@@ -1,36 +1,35 @@
 const STEPS = [
   {
     step: "01",
-    verb: "Capture",
-    title: "The session travels with the diff.",
+    verb: "Generate",
+    title: "Generate Review Stacks based on sessions.",
     detail:
-      "GX attaches the prompt, tool calls, and test output to the code — not just the patch at the end.",
+      "GX captures your coding sessions and creates organized branches and commits to improve review. We leverage your existing codebase and metadata from past pull requests to identify issues.",
     visual: "capture",
   },
   {
     step: "02",
-    verb: "Verify",
-    title: "GPT 5.5 and Opus 4.8 on every review.",
+    verb: "Review Loop",
+    title: "Review Loop.",
     detail:
-      "Both models review the same change against REVIEW.md and your repo context. When they agree, you ship with confidence. When they disagree, you know where to look.",
+      "GX uses 92 independent resources to make sure we review your code correctly, reducing bugs. GX verifies its findings through Review Loop, where OpenAI and Anthropic face-off to determine the best fixes for every issue.",
     visual: "verify",
   },
   {
     step: "03",
-    verb: "Ship",
-    title: "You get a Review Stack you can trust.",
+    verb: "Focus",
+    title: "Review the most important changes.",
     detail:
-      "Session evidence, model signals, and repo rules in one place — ready to merge.",
+      "End up with the most important lines of code to review manually, reducing your review time drastically.",
     visual: "review",
   },
 ] as const;
 
 function CaptureMockup() {
-  const signals = [
-    "Agent prompt",
-    "Files read + commands run",
-    "Test output",
-    "Diff attached",
+  const items = [
+    "Coding Sessions",
+    "Indexed Codebase",
+    "Previous PR Changes & Comments",
   ] as const;
 
   return (
@@ -40,26 +39,43 @@ function CaptureMockup() {
     >
       <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Session captured
+          Review Stack
         </p>
       </div>
-      <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-        {signals.map((signal) => (
-          <li key={signal} className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
-            {signal}
-          </li>
-        ))}
-      </ul>
+      <div className="space-y-0 px-4 py-3 pl-6 font-mono text-xs leading-6">
+        {items.map((item, index) => {
+          const isLast = index === items.length - 1;
+          const branch = isLast ? "└──" : "├──";
+
+          return (
+            <div
+              key={item}
+              className="flex min-w-0 items-center text-zinc-700 dark:text-zinc-300"
+            >
+              <span aria-hidden className="mr-2 shrink-0 text-zinc-400">
+                {branch}
+              </span>
+              <span className="truncate">{item}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 function VerifyMockup() {
   const models = [
-    { name: "GPT 5.5", signal: "auth bypass risk", tone: "warn" },
-    { name: "Opus 4.8", signal: "auth bypass risk", tone: "warn" },
-    { name: "REVIEW.md", signal: "require session tests", tone: "rule" },
+    { name: "OpenAI", signal: "5 issues found", tone: "error" },
+    { name: "Anthropic", signal: "2 issues found", tone: "warn" },
+    { name: "Review Loop", signal: "3 fixes surfaced", tone: "success" },
   ] as const;
+
+  const signalToneClass = {
+    error: "text-red-600 dark:text-red-400",
+    warn: "text-amber-600 dark:text-amber-400",
+    success: "text-emerald-600 dark:text-emerald-400",
+  } as const;
 
   return (
     <div
@@ -68,7 +84,7 @@ function VerifyMockup() {
     >
       <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Model verification
+          Review Loop
         </p>
       </div>
       <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -79,11 +95,7 @@ function VerifyMockup() {
           >
             <span className="font-mono text-zinc-500">{model.name}</span>
             <span
-              className={`truncate text-right ${
-                model.tone === "warn"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-zinc-700 dark:text-zinc-300"
-              }`}
+              className={`truncate text-right ${signalToneClass[model.tone]}`}
             >
               {model.signal}
             </span>
@@ -96,8 +108,9 @@ function VerifyMockup() {
 
 function ReviewMockup() {
   const reviews = [
-    { title: "Auth middleware", status: "verified", tone: "ready" },
-    { title: "Session cookies", status: "needs fix", tone: "active" },
+    { title: "api.ts:42 — missing validation", status: "flagged", tone: "active" },
+    { title: "handler.ts:18 — untested path", status: "flagged", tone: "active" },
+    { title: "+847 other lines", status: "skipped", tone: "ready" },
   ] as const;
 
   return (
@@ -107,7 +120,7 @@ function ReviewMockup() {
     >
       <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Review Stack
+          Lines to review
         </p>
       </div>
       <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -148,13 +161,22 @@ export function HowItWorksSection() {
       className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
     >
       <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-14 max-w-lg">
+        <div className="mb-14 max-w-2xl space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
             How it works
           </p>
-          <h2 className="mt-3 text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
-            Capture. Verify. Ship.
+          <h2 className="text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
+            Use your codebase and coding sessions to improve review.
           </h2>
+          <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            Commits were built for humans. They don&apos;t contain session
+            context to provide the &apos;why&apos;, which helps review pull
+            requests generated by agents.
+          </p>
+          <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            Just like using a linter, use GX to improve quality and verify
+            changes without reading your pull requests line by line.
+          </p>
         </div>
 
         <ol className="flex flex-col gap-20 sm:gap-24">

@@ -5,33 +5,26 @@ import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { GetStartedButton } from "@/components/get-started-button";
 import { SignInLink } from "@/components/sign-in-link";
 
-const STORY_POINTS = [
-  "The agent prompt and what it was trying to do",
-  "Files read, commands run, and tests that passed",
-  "The final diff",
-  "GPT 5.5 and Opus 4.8 review signals",
-] as const;
-
 const FAQ_ITEMS = [
   {
-    question: "What models can I use to review code?",
+    question: "What models can I use to review?",
     answer:
-      "GPT 5.5 and Opus 4.8. GX runs both on every review and surfaces where they agree and where they do not.",
+      "GPT 5.5 and Opus 4.8 are two of many models you can use to review code changes. Add any valid model ID from models.dev to your REVIEW.md file to tell GX which models to use.",
   },
   {
-    question: "What are the 92 review resources?",
+    question: "What are the independent resources used for review?",
     answer:
-      "Built-in checks and reference materials — architecture, security, testing, and more — applied automatically on each review.",
+      "These are 92 resources maintained independently that help ensure best coding practices and provide reference context to ensure architecture, security, testing, and more are applied to every review.",
   },
   {
-    question: "Do I need to change how I code?",
+    question: "Do I need to change how I code to use GX?",
     answer:
-      "No. Keep your editor and agent workflow. GX captures sessions and organizes stacks in the background.",
+      "No. Keep using your favorite codegen tools just as you currently do. The recommended way to use GX is through the local MCP server (if you have the CLI installed, you have the MCP server installed), and you have the option to use the CLI. Both the MCP and CLI will generate organized commits and branches on your behalf, making review simpler for you to grok when you review.",
   },
   {
     question: "Do I still use GitHub?",
     answer:
-      "Yes. GitHub stays your source of truth. Sign in with GitHub, publish stacks as PRs, and @gx on any PR to ask questions about the change.",
+      "Yes. GitHub will continue to be your git forge, and you can use GitHub independently of GX if needed. Sign in with GitHub, publish stacks as PRs, and @gx on any PR to ask questions about the change.",
   },
 ] as const;
 
@@ -48,19 +41,18 @@ export function SignedOutLanding() {
           <div className="flex w-full min-w-0 flex-col items-center gap-8">
             <div className="w-full max-w-2xl space-y-4">
               <h1 className="text-pretty text-3xl font-medium leading-[1.12] tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-5xl">
-                The Quality Layer for Agents
+                The Essential Quality Layer for Agents
               </h1>
               <p className="text-pretty text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
-                Turn every agent session into a small review stack with
-                attributions so you can trust changes without reading the entire
-                diff.
+                Give every coding session the tools to generate robust and
+                verified changes without reading pull requests line for line.
               </p>
             </div>
 
             <div className="flex w-full max-w-lg flex-col items-stretch gap-3">
               <GetStartedButton className="h-12 w-full px-12 text-base" />
               <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="font-medium text-[var(--footer-link-hover)]">
                   2 weeks free.
                 </span>{" "}
                 Already have an account?{" "}
@@ -76,32 +68,23 @@ export function SignedOutLanding() {
         className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
       >
         <div className="mx-auto w-full max-w-5xl">
-          <div className="mb-10 max-w-xl">
+          <div className="max-w-2xl space-y-4">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
               The problem
             </p>
-            <h2 className="mt-3 text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
-              Agent code is fast. Trust is not.
+            <h2 className="text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
+              Pull requests are slowing you down.
             </h2>
-            <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Most tools review the diff. GX reviews the full story:
+            <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Agents generate code quickly, but the time it takes to review your
+              agents&apos; pull requests is growing. This slows developers
+              down, creating a costly bottleneck.
+            </p>
+            <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              You don&apos;t have to slow down to read every change Claude
+              makes, with GX you can just keep shipping fast.
             </p>
           </div>
-
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {STORY_POINTS.map((point) => (
-              <li
-                key={point}
-                className="flex gap-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400"
-              >
-                <span
-                  aria-hidden
-                  className="mt-2 size-1 shrink-0 rounded-full bg-zinc-400 dark:bg-zinc-600"
-                />
-                {point}
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
