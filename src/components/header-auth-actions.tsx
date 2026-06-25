@@ -27,7 +27,9 @@ export function HeaderAuthActions() {
   return (
     <>
       <SignInLink className={`${navLinkClassName} hidden sm:inline`} />
-      <GetStartedButton className="ml-1 px-3.5 py-1.5 text-xs sm:ml-2 sm:px-4 sm:py-2" />
+      <div className="hidden sm:block">
+        <GetStartedButton className="ml-1 px-3.5 py-1.5 text-xs sm:ml-2 sm:px-4 sm:py-2" />
+      </div>
     </>
   );
 }

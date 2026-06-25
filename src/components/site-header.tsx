@@ -2,14 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Menu } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
 import { AppSupportLinks } from "@/components/app-support-links";
+import { GetStartedButton } from "@/components/get-started-button";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
 import { NavSeparator } from "@/components/nav-separator";
+import { SignInLink } from "@/components/sign-in-link";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { UserMenu } from "@/components/user-menu";
 import { authClient } from "@/lib/auth-client";
 import { DISCORD_URL, GITHUB_REPO_URL, NAV_LINKS } from "@/lib/site-links";
@@ -58,17 +68,40 @@ function SocialIconCluster({ className }: { className?: string }) {
   );
 }
 
+const HEADER_SCROLL_OFFSET = 60;
+
 function scrollToHash(hash: string) {
   const id = hash.replace(/^#/, "");
   const target = document.getElementById(id);
   if (!target) return false;
 
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  const top =
+    target.getBoundingClientRect().top + window.scrollY - HEADER_SCROLL_OFFSET;
+
+  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
   window.history.pushState(null, "", hash);
   return true;
 }
 
-function NavAnchorLink({ href, label }: { href: string; label: string }) {
+function scrollToHashAfterUnlock(hash: string) {
+  window.setTimeout(() => {
+    scrollToHash(hash);
+  }, 300);
+}
+
+function NavAnchorLink({
+  href,
+  label,
+  className,
+  onNavigate,
+  deferScroll,
+}: {
+  href: string;
+  label: string;
+  className?: string;
+  onNavigate?: () => void;
+  deferScroll?: boolean;
+}) {
   const pathname = usePathname();
   const hashIndex = href.indexOf("#");
   const hash = hashIndex >= 0 ? href.slice(hashIndex) : null;
@@ -77,17 +110,100 @@ function NavAnchorLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className={navLinkClassName}
+      className={cn(navLinkClassName, className)}
       onClick={(event) => {
-        if (!hash || pathname !== path) return;
-
-        if (scrollToHash(hash)) {
+        if (hash && pathname === path) {
           event.preventDefault();
+
+          if (deferScroll) {
+            onNavigate?.();
+            return;
+          }
+
+          scrollToHash(hash);
+          onNavigate?.();
+          return;
         }
+
+        onNavigate?.();
       }}
     >
       {label}
     </Link>
+  );
+}
+
+function MobileNavMenu() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const pendingHashRef = useRef<string | null>(null);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+
+    if (!nextOpen && pendingHashRef.current) {
+      const hash = pendingHashRef.current;
+      pendingHashRef.current = null;
+      scrollToHashAfterUnlock(hash);
+    }
+  };
+
+  const queueSectionScroll = (href: string) => {
+    const hashIndex = href.indexOf("#");
+    const hash = hashIndex >= 0 ? href.slice(hashIndex) : null;
+    const path = hash ? href.slice(0, hashIndex) || "/" : href;
+
+    if (hash && pathname === path) {
+      pendingHashRef.current = hash;
+    }
+  };
+
+  const closeMenu = (href: string) => {
+    queueSectionScroll(href);
+    handleOpenChange(false);
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 sm:hidden"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </SheetTrigger>
+      <SheetContent className="flex w-full max-w-xs flex-col border-zinc-200 p-0 dark:border-zinc-800 sm:max-w-xs">
+        <SheetHeader>
+          <SheetTitle className="text-base font-medium">Menu</SheetTitle>
+        </SheetHeader>
+        <nav
+          aria-label="Mobile primary"
+          className="flex flex-col gap-1 px-6 pb-6"
+        >
+          {NAV_LINKS.map((link) => (
+            <NavAnchorLink
+              key={link.href}
+              href={link.href}
+              label={link.label}
+              className="py-2.5 text-base"
+              deferScroll
+              onNavigate={() => closeMenu(link.href)}
+            />
+          ))}
+        </nav>
+        <div className="mt-auto border-t border-zinc-200 px-6 py-6 dark:border-zinc-800">
+          <div className="flex items-center gap-1">
+            <SocialIconLinks />
+          </div>
+          <div className="mt-6 space-y-4">
+            <SignInLink className="block text-sm text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100" />
+            <GetStartedButton className="w-full px-4 py-2.5 text-sm" />
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -173,7 +289,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-background/95 py-3 backdrop-blur-sm dark:border-zinc-800">
-      <div className="relative flex w-full items-center pl-0.5 pr-5 sm:pr-10">
+      <div className="relative flex w-full items-center gap-2 pl-0.5 pr-5 sm:pr-10">
         <Link
           href="/"
           aria-label="GX home"
@@ -191,21 +307,17 @@ export function SiteHeader() {
 
         <nav
           aria-label="Primary"
-          className="absolute left-1/2 flex -translate-x-1/2 items-center gap-6 sm:gap-8"
+          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 sm:flex sm:gap-8"
         >
           {NAV_LINKS.map((link) => (
             <NavAnchorLink key={link.href} href={link.href} label={link.label} />
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3 sm:gap-4">
+        <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
           <SocialIconCluster className="hidden sm:flex" />
-
-          <div className="flex items-center gap-1 sm:hidden">
-            <SocialIconLinks />
-          </div>
-
           <HeaderAuthActions />
+          <MobileNavMenu />
         </div>
       </div>
     </header>

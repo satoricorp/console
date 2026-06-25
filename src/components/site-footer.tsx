@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { DiscordIcon } from "@/components/discord-icon";
 import { GxLogo } from "@/components/gx-logo";
+import { GitHubIcon } from "@/components/github-icon";
 import { SatoriLogo } from "@/components/satori-logo";
 import { authClient } from "@/lib/auth-client";
 import {
   DISCORD_URL,
   GITHUB_REPO_URL,
   NAV_LINKS,
-  SUPPORT_EMAIL,
   SUPPORT_EMAIL_URL,
 } from "@/lib/site-links";
 
@@ -29,11 +30,11 @@ export function SiteFooter() {
     <footer className="mt-auto border-t border-zinc-200 bg-white text-zinc-950 dark:border-zinc-800 dark:bg-white dark:text-zinc-950">
       <div className="mx-auto max-w-6xl px-5 pt-10 pb-8 sm:px-8 sm:pt-12">
         <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
-          <div className="flex w-fit max-w-xs flex-col items-start gap-2.5 text-left">
-            <GxLogo variant="footer" tone="graphite" />
+          <div className="flex w-fit max-w-xs flex-col items-start gap-4 text-left">
             <p className="max-w-[16rem] text-sm leading-6 text-zinc-600">
-              The Quality Layer for Agents
+              The Essential Quality Layer for Agents
             </p>
+            <GxLogo variant="footer" />
           </div>
 
           <nav
@@ -51,11 +52,6 @@ export function SiteFooter() {
                       </Link>
                     </li>
                   ))}
-                  <li>
-                    <Link href="/download" className={linkClassName}>
-                      Download
-                    </Link>
-                  </li>
                 </ul>
               </div>
 
@@ -67,8 +63,9 @@ export function SiteFooter() {
                       href={GITHUB_REPO_URL}
                       target="_blank"
                       rel="noreferrer"
-                      className={linkClassName}
+                      className={`inline-flex items-center gap-2 ${linkClassName}`}
                     >
+                      <GitHubIcon className="h-3.5 w-3.5 shrink-0" />
                       GitHub
                     </a>
                   </li>
@@ -77,8 +74,9 @@ export function SiteFooter() {
                       href={DISCORD_URL}
                       target="_blank"
                       rel="noreferrer"
-                      className={linkClassName}
+                      className={`inline-flex items-center gap-2 ${linkClassName}`}
                     >
+                      <DiscordIcon className="h-3.5 w-3.5 shrink-0" />
                       Discord
                     </a>
                   </li>
@@ -96,12 +94,12 @@ export function SiteFooter() {
                     rel="noreferrer"
                     className={linkClassName}
                   >
-                    https://satori.sh
+                    Website
                   </a>
                 </li>
                 <li>
                   <a href={SUPPORT_EMAIL_URL} className={linkClassName}>
-                    {SUPPORT_EMAIL}
+                    Say hi, email us
                   </a>
                 </li>
               </ul>
