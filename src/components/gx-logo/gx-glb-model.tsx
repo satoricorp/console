@@ -46,9 +46,10 @@ function createChromeMaterial(tone: LogoTone = "chrome") {
 type GxGlbModelProps = {
   config: LogoVariantConfig;
   tone?: LogoTone;
+  onReady?: () => void;
 };
 
-export function GxGlbModel({ config, tone = "chrome" }: GxGlbModelProps) {
+export function GxGlbModel({ config, tone = "chrome", onReady }: GxGlbModelProps) {
   const { scene } = useGLTF(config.meshPath);
   const { model, scale } = useMemo(() => {
     const clone = scene.clone(true);
@@ -109,7 +110,23 @@ export function GxGlbModel({ config, tone = "chrome" }: GxGlbModelProps) {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
     });
-  }, [model, tone]);
+
+    if (!onReady) {
+      return;
+    }
+
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      if (!cancelled) {
+        onReady();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [model, tone, onReady]);
 
   const content = <primitive object={model} scale={scale} />;
 

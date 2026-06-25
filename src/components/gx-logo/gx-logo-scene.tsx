@@ -17,7 +17,7 @@ import {
   type Mesh,
   type WebGLRenderer,
 } from "three";
-import { Box3, Vector3, type Group } from "three";
+import { Box3, Vector3, type Camera, type Group, type Object3D } from "three";
 
 import {
   getLogoConfig,
@@ -52,9 +52,82 @@ type GxLogoSceneProps = {
   hoverDrivenMotion?: boolean;
   /** HDR cubemap face size — lower for icon export to save GPU memory. */
   environmentResolution?: number;
+  /** Fires once the 3D mark is loaded and painted. */
+  onReady?: () => void;
 };
 
 const MOTION_EPS = 0.002;
+
+const _pivotBox = new Box3();
+const _pivotCenter = new Vector3();
+const _projectVec = new Vector3();
+
+function clampPointer(value: number) {
+  return Math.max(-1, Math.min(1, value));
+}
+
+/** Screen-space bounds of a 3D object — used for footer pointer normalization. */
+function projectObjectBounds(
+  object: Object3D,
+  camera: Camera,
+  canvas: HTMLCanvasElement,
+) {
+  _pivotBox.setFromObject(object);
+  const rect = canvas.getBoundingClientRect();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  const { min, max } = _pivotBox;
+  const corners: [number, number, number][] = [
+    [min.x, min.y, min.z],
+    [max.x, min.y, min.z],
+    [min.x, max.y, min.z],
+    [max.x, max.y, min.z],
+    [min.x, min.y, max.z],
+    [max.x, min.y, max.z],
+    [min.x, max.y, max.z],
+    [max.x, max.y, max.z],
+  ];
+
+  for (const [x, y, z] of corners) {
+    _projectVec.set(x, y, z).project(camera);
+    const sx = rect.left + (_projectVec.x * 0.5 + 0.5) * rect.width;
+    const sy = rect.top + (-_projectVec.y * 0.5 + 0.5) * rect.height;
+    minX = Math.min(minX, sx);
+    maxX = Math.max(maxX, sx);
+    minY = Math.min(minY, sy);
+    maxY = Math.max(maxY, sy);
+  }
+
+  return {
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
+    halfW: Math.max((maxX - minX) / 2, 1),
+    halfH: Math.max((maxY - minY) / 2, 1),
+  };
+}
+
+function syncLogoCenterPivot(
+  group: Group,
+  content: Group,
+  pivotReady: { current: boolean },
+) {
+  if (pivotReady.current) return true;
+
+  _pivotBox.setFromObject(content);
+  if (_pivotBox.isEmpty()) return false;
+
+  _pivotBox.getCenter(_pivotCenter);
+  _pivotBox.getSize(_projectVec);
+  if (_projectVec.lengthSq() < 1e-6) return false;
+
+  group.position.copy(_pivotCenter);
+  content.position.copy(_pivotCenter).multiplyScalar(-1);
+  pivotReady.current = true;
+  return true;
+}
 
 function SplineChrome({ tone = "chrome" }: { tone?: LogoTone }) {
   if (tone === "graphite") {
@@ -229,6 +302,9 @@ function MouseLook({
   hoverDrivenMotion?: boolean;
 }) {
   const groupRef = useRef<Group>(null);
+  const contentRef = useRef<Group>(null);
+  const pivotReady = useRef(false);
+  const lastPointer = useRef<PointerEvent | null>(null);
   const smoothPointer = useRef({ x: 0, y: 0 });
   const rotation = useRef({ x: 0, y: 0 });
   const globalPointer = useRef({ x: 0, y: 0 });
@@ -240,11 +316,18 @@ function MouseLook({
   const settings = MOUSE_SMOOTHING[variant];
   const trackGlobally =
     variant === "hero" || variant === "header" || variant === "footer";
+  const useLogoCenterPivot = variant === "footer";
+  const trackRelativeToLogo = variant === "footer";
 
   useEffect(() => {
     if (!trackGlobally) return;
 
     const updatePointer = (event: PointerEvent) => {
+      if (trackRelativeToLogo) {
+        lastPointer.current = event;
+        return;
+      }
+
       globalPointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
       globalPointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
     };
@@ -280,11 +363,30 @@ function MouseLook({
         window.removeEventListener("pointercancel", onPointerUp);
       }
     };
-  }, [trackGlobally, touchDragOnly, hoverDrivenMotion]);
+  }, [trackGlobally, trackRelativeToLogo, touchDragOnly, hoverDrivenMotion]);
 
   useFrame((state, delta) => {
     const group = groupRef.current;
-    if (!group) return;
+    const content = contentRef.current;
+    if (!group || !content) return;
+
+    if (
+      useLogoCenterPivot &&
+      syncLogoCenterPivot(group, content, pivotReady)
+    ) {
+      invalidate();
+    }
+
+    if (trackRelativeToLogo && lastPointer.current && pivotReady.current) {
+      const { cx, cy, halfW, halfH } = projectObjectBounds(
+        content,
+        state.camera,
+        state.gl.domElement,
+      );
+      const event = lastPointer.current;
+      globalPointer.current.x = clampPointer((event.clientX - cx) / halfW);
+      globalPointer.current.y = clampPointer(-((event.clientY - cy) / halfH));
+    }
 
     const dt = Math.min(delta, 0.05);
     const { pointer } = state;
@@ -364,7 +466,7 @@ function MouseLook({
         },
       })}
     >
-      {children}
+      <group ref={contentRef}>{children}</group>
     </group>
   );
 }
@@ -376,9 +478,11 @@ function roundTextGeometry(geometry: BufferGeometry, passes: number) {
 function GxTextMark({
   config,
   tone = "chrome",
+  onReady,
 }: {
   config: LogoVariantConfig;
   tone?: LogoTone;
+  onReady?: () => void;
 }) {
   const meshRef = useRef<Mesh>(null);
   const fitRef = useRef<Group>(null);
@@ -407,6 +511,24 @@ function GxTextMark({
     );
     fit.scale.setScalar(scale);
   }, [config]);
+
+  useLayoutEffect(() => {
+    if (!onReady) {
+      return;
+    }
+
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      if (!cancelled) {
+        onReady();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [onReady]);
 
   const text = (
     <Text3D
@@ -446,14 +568,16 @@ function GxTextMark({
 function GxLogoMark({
   config,
   tone = "chrome",
+  onReady,
 }: {
   config: LogoVariantConfig;
   tone?: LogoTone;
+  onReady?: () => void;
 }) {
   const mark = USE_GX_LOGO_MESH ? (
-    <GxGlbModel config={config} tone={tone} />
+    <GxGlbModel config={config} tone={tone} onReady={onReady} />
   ) : (
-    <GxTextMark config={config} tone={tone} />
+    <GxTextMark config={config} tone={tone} onReady={onReady} />
   );
 
   if (config.markAlign === "start") {
@@ -490,12 +614,13 @@ export function GxLogoScene({
   touchDragOnly = false,
   hoverDrivenMotion = false,
   environmentResolution,
+  onReady,
 }: GxLogoSceneProps) {
   const config = getLogoConfig(variant);
   const isHero = variant === "hero";
   const envResolution =
     environmentResolution ?? defaultEnvironmentResolution(variant);
-  const mark = <GxLogoMark config={config} tone={tone} />;
+  const mark = <GxLogoMark config={config} tone={tone} onReady={onReady} />;
 
   const content =
     interactive && heroFloat && isHero ? (

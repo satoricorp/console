@@ -90,14 +90,15 @@ export const LOGO_VARIANTS = {
   ),
   footer: defineVariant(
     {
-      widthRem: 7,
-      heightRem: 2.55,
+      widthRem: 16,
+      heightRem: 4.5,
       markAlign: "start",
-      markSceneOffsetX: 0.12,
+      markSceneOffsetX: 0.75,
+      markInsetXRem: -2.75,
     },
     { position: [0, 0, 2.55], fov: 28 },
-    1.22,
-    1.88,
+    1.35,
+    2.05,
     GX_HEADER_MESH_PATH,
   ),
   /** Square export — full gx mark with padding so letters are not clipped. */

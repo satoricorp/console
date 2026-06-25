@@ -29,6 +29,8 @@ export type GxLogoProps = {
   /** Override frameloop (icon capture uses `always` until SceneCaptureBridge finishes). */
   frameloop?: "always" | "demand" | "never";
   onGlReady?: (gl: WebGLRenderer) => void;
+  /** Fires once the 3D mark is loaded and painted. */
+  onReady?: () => void;
 };
 
 export function GxLogo({
@@ -41,6 +43,7 @@ export function GxLogo({
   environmentResolution,
   frameloop: frameloopProp,
   onGlReady,
+  onReady,
   children,
 }: GxLogoProps) {
   const config = getLogoConfig(variant);
@@ -127,6 +130,7 @@ export function GxLogo({
             touchDragOnly={touchTrackingEnabled && isHero}
             hoverDrivenMotion={hoverDrivenMotion}
             environmentResolution={environmentResolution}
+            onReady={onReady}
           />
           {children}
         </Suspense>
