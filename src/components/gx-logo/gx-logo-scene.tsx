@@ -44,7 +44,11 @@ type GxLogoSceneProps = {
   tone?: LogoTone;
   /** When false, no mouse parallax or float — used for icon PNG export. */
   interactive?: boolean;
-  /** Header: repaint on hover / ease-out only (demand frameloop). */
+  /** Hero bob on desktop — off on touch-only tracking. */
+  heroFloat?: boolean;
+  /** Touch: track finger only while pointer is down. */
+  touchDragOnly?: boolean;
+  /** Header / touch: repaint on interaction only (demand frameloop). */
   hoverDrivenMotion?: boolean;
   /** HDR cubemap face size — lower for icon export to save GPU memory. */
   environmentResolution?: number;
@@ -216,32 +220,67 @@ function StaticLogoSync() {
 function MouseLook({
   children,
   variant,
+  touchDragOnly = false,
   hoverDrivenMotion = false,
 }: {
   children: React.ReactNode;
   variant: LogoVariant;
+  touchDragOnly?: boolean;
   hoverDrivenMotion?: boolean;
 }) {
   const groupRef = useRef<Group>(null);
   const smoothPointer = useRef({ x: 0, y: 0 });
   const rotation = useRef({ x: 0, y: 0 });
   const globalPointer = useRef({ x: 0, y: 0 });
+  const dragging = useRef(false);
   const [hovered, setHovered] = useState(false);
   const invalidate = useThree((state) => state.invalidate);
+  const invalidateRef = useRef(invalidate);
+  invalidateRef.current = invalidate;
   const settings = MOUSE_SMOOTHING[variant];
-  const trackGlobally = variant === "hero";
+  const trackGlobally =
+    variant === "hero" || variant === "header" || variant === "footer";
 
   useEffect(() => {
     if (!trackGlobally) return;
 
-    const onPointerMove = (event: PointerEvent) => {
+    const updatePointer = (event: PointerEvent) => {
       globalPointer.current.x = (event.clientX / window.innerWidth) * 2 - 1;
       globalPointer.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
     };
 
+    const onPointerMove = (event: PointerEvent) => {
+      if (touchDragOnly && !dragging.current) return;
+      updatePointer(event);
+      if (hoverDrivenMotion) invalidateRef.current();
+    };
+
+    const onPointerDown = () => {
+      dragging.current = true;
+      if (hoverDrivenMotion) invalidateRef.current();
+    };
+
+    const onPointerUp = () => {
+      dragging.current = false;
+      if (hoverDrivenMotion) invalidateRef.current();
+    };
+
     window.addEventListener("pointermove", onPointerMove);
-    return () => window.removeEventListener("pointermove", onPointerMove);
-  }, [trackGlobally]);
+    if (touchDragOnly) {
+      window.addEventListener("pointerdown", onPointerDown);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    }
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      if (touchDragOnly) {
+        window.removeEventListener("pointerdown", onPointerDown);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+      }
+    };
+  }, [trackGlobally, touchDragOnly, hoverDrivenMotion]);
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -249,14 +288,19 @@ function MouseLook({
 
     const dt = Math.min(delta, 0.05);
     const { pointer } = state;
+    const dragActive = !touchDragOnly || dragging.current;
 
     const pointerTargetX = trackGlobally
-      ? globalPointer.current.x
+      ? dragActive
+        ? globalPointer.current.x
+        : 0
       : hovered
         ? pointer.x
         : 0;
     const pointerTargetY = trackGlobally
-      ? globalPointer.current.y
+      ? dragActive
+        ? globalPointer.current.y
+        : 0
       : hovered
         ? pointer.y
         : 0;
@@ -296,7 +340,7 @@ function MouseLook({
     if (!hoverDrivenMotion) return;
 
     const animating =
-      hovered ||
+      (!trackGlobally && hovered) ||
       Math.abs(rotation.current.x) > MOTION_EPS ||
       Math.abs(rotation.current.y) > MOTION_EPS ||
       Math.abs(smoothPointer.current.x) > MOTION_EPS ||
@@ -442,6 +486,8 @@ export function GxLogoScene({
   variant = "header",
   tone = "chrome",
   interactive = true,
+  heroFloat = false,
+  touchDragOnly = false,
   hoverDrivenMotion = false,
   environmentResolution,
 }: GxLogoSceneProps) {
@@ -452,7 +498,7 @@ export function GxLogoScene({
   const mark = <GxLogoMark config={config} tone={tone} />;
 
   const content =
-    interactive && isHero ? (
+    interactive && heroFloat && isHero ? (
       <Float speed={1.4} rotationIntensity={0.015} floatIntensity={0.04}>
         {mark}
       </Float>
@@ -469,8 +515,12 @@ export function GxLogoScene({
       />
       {interactive ? (
         <>
-          <PauseWhenHidden continuous={isHero} />
-          <MouseLook variant={variant} hoverDrivenMotion={hoverDrivenMotion}>
+          <PauseWhenHidden continuous={isHero && !touchDragOnly} />
+          <MouseLook
+            variant={variant}
+            touchDragOnly={touchDragOnly}
+            hoverDrivenMotion={hoverDrivenMotion}
+          >
             {content}
           </MouseLook>
         </>

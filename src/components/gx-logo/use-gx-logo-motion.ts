@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { WebGLRenderer } from "three";
 
 function isSoftwareWebGlRenderer(gl: WebGLRenderer): boolean {
@@ -15,17 +15,17 @@ function isSoftwareWebGlRenderer(gl: WebGLRenderer): boolean {
   );
 }
 
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /** Heuristic device check before enabling logo mouse motion. */
 export function assessGxLogoMotionCapability(): boolean {
   if (typeof window === "undefined") return false;
 
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return false;
-  }
-
-  if (window.matchMedia("(hover: none)").matches) {
-    return false;
-  }
+  if (prefersReducedMotion()) return false;
+  if (window.matchMedia("(hover: none)").matches) return false;
 
   const cores = navigator.hardwareConcurrency ?? 4;
   if (cores < 4) return false;
@@ -36,17 +36,31 @@ export function assessGxLogoMotionCapability(): boolean {
   return true;
 }
 
+/** Touch devices: hero logo follows finger while dragging (lighter than full motion). */
+export function assessGxLogoTouchTracking(): boolean {
+  if (typeof window === "undefined") return false;
+  if (prefersReducedMotion()) return false;
+  return window.matchMedia("(hover: none)").matches;
+}
+
 export function useGxLogoMotion(requested: boolean) {
   const [motionEnabled, setMotionEnabled] = useState(
     () => requested && assessGxLogoMotionCapability(),
   );
-  const gpuBlocked = useRef(false);
+  const [gpuBlocked, setGpuBlocked] = useState(false);
 
   const disableMotion = useCallback((gl: WebGLRenderer) => {
     if (!isSoftwareWebGlRenderer(gl)) return;
-    gpuBlocked.current = true;
+    setGpuBlocked(true);
     setMotionEnabled(false);
   }, []);
 
-  return { motionEnabled: requested && motionEnabled, disableMotion };
+  const touchTrackingEnabled =
+    requested && !gpuBlocked && assessGxLogoTouchTracking();
+
+  return {
+    motionEnabled: requested && motionEnabled && !gpuBlocked,
+    touchTrackingEnabled,
+    disableMotion,
+  };
 }

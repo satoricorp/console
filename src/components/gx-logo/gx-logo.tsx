@@ -45,7 +45,9 @@ export function GxLogo({
 }: GxLogoProps) {
   const config = getLogoConfig(variant);
   const isHero = variant === "hero";
-  const { motionEnabled, disableMotion } = useGxLogoMotion(interactive);
+  const { motionEnabled, touchTrackingEnabled, disableMotion } =
+    useGxLogoMotion(interactive);
+  const pointerTrackingEnabled = motionEnabled || (isHero && touchTrackingEnabled);
   const isSquare =
     variant === "icon" || variant === "iconX" || pixelSize != null;
   const ariaLabel = variant === "iconX" ? "x" : "gx";
@@ -60,11 +62,12 @@ export function GxLogo({
           ? 2
           : 1;
   const antialias = isHeader || isHero || motionEnabled;
-  /** Header: parallax on hover only, demand frameloop (no 60fps beside the hero). */
-  const hoverDrivenMotion = isHeader && motionEnabled;
+  /** Header/footer: global pointer + demand frameloop. Hero desktop: always; touch: demand. */
+  const hoverDrivenMotion =
+    (isHeader && motionEnabled) || (isHero && touchTrackingEnabled);
   const canvasFrameloop =
     frameloopProp ??
-    (motionEnabled ? (hoverDrivenMotion ? "demand" : "always") : "demand");
+    (motionEnabled && !hoverDrivenMotion ? "always" : "demand");
 
   return (
     <div
@@ -73,7 +76,7 @@ export function GxLogo({
       className={[
         "block shrink-0",
         config.markAlign === "start" ? "overflow-visible" : "",
-        motionEnabled ? "cursor-pointer" : "",
+        pointerTrackingEnabled ? "cursor-pointer" : "",
         className,
       ]
         .filter(Boolean)
@@ -119,7 +122,9 @@ export function GxLogo({
           <GxLogoScene
             variant={variant}
             tone={tone}
-            interactive={motionEnabled}
+            interactive={pointerTrackingEnabled}
+            heroFloat={motionEnabled && isHero}
+            touchDragOnly={touchTrackingEnabled && isHero}
             hoverDrivenMotion={hoverDrivenMotion}
             environmentResolution={environmentResolution}
           />
