@@ -7,7 +7,7 @@ import {
   parseGxChatModelReply,
   validCitationIds,
 } from "../src/gx-mention/citations";
-import { handleGxMention } from "../src/gx-mention/handler";
+import { handleGxMention, shouldLoadGitHubPrFiles } from "../src/gx-mention/handler";
 import { buildGxChatUserPrompt } from "../src/llm/prompts/gx-chat";
 import type { ExtractContext } from "../src/summary/generate";
 
@@ -96,6 +96,9 @@ describe("gx mention citations", () => {
           additions: 1,
           deletions: 0,
           patch: "@@ -1 +1,2 @@\n # Music\n+GX smoke test",
+          lineStart: 1,
+          lineEnd: 2,
+          url: "https://github.com/acme/music/pull/1/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1",
         },
       ],
       recentComments: [],
@@ -106,10 +109,114 @@ describe("gx mention citations", () => {
         id: "S1",
         kind: "github_pr_file",
         file: "README.md",
+        lineStart: 1,
+        lineEnd: 2,
+        url: "https://github.com/acme/music/pull/1/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1",
       },
     ]);
-    expect(result.promptText).toContain("[S1] github_pr_file: README.md modified +1 -0");
+    expect(result.promptText).toContain("[S1] github_pr_file: README.md:1-2 modified +1 -0");
+    expect(result.promptText).toContain(
+      "url: https://github.com/acme/music/pull/1/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1",
+    );
     expect(result.promptText).toContain("+GX smoke test");
+  });
+
+  test("prefers exact PR line citations over broad published revision citations", () => {
+    const citationContext = buildGxCitationContext({
+      latestSummary: null,
+      context: makeContext({
+        publishedRevisions: [
+          {
+            branchName: "bug/fix-github-pr-summary",
+            baseBranchName: "main",
+            description: "refresh stored PR bodies on publish",
+            files: ["internal/vcs/service.go"],
+            patch: "+body := githubPullRequestBody(stack, pushed)",
+            githubPrUrl: "https://github.com/satoricorp/gx/pull/11",
+          },
+        ],
+      }),
+      gitBlameContext: null,
+      githubPrFiles: [
+        {
+          filename: "internal/vcs/service.go",
+          status: "modified",
+          additions: 60,
+          deletions: 2,
+          patch: "@@ -2470,7 +2470,7 @@\n-body := githubPullRequestBody(pushed)\n+body := githubPullRequestBody(stack, pushed)",
+          lineStart: 2470,
+          lineEnd: 2470,
+          url: "https://github.com/satoricorp/gx/pull/11/files#diff-7dd1ac17bcaa7252a9b4b1610ed0a2e5acdd351174bd98cf8b31266440136bd3R2470",
+        },
+      ],
+      recentComments: [],
+    });
+
+    expect(citationContext.citations.map((citation) => citation.kind)).toEqual([
+      "github_pr_file",
+      "published_revision",
+    ]);
+
+    const reply = formatGxCitedReply(
+      "The risky change is the PR body rewrite path. [S1]",
+      ["S1"],
+      citationContext.citations,
+    );
+
+    expect(reply).toContain(
+      "[internal/vcs/service.go:2470-2470](https://github.com/satoricorp/gx/pull/11/files#diff-7dd1ac17bcaa7252a9b4b1610ed0a2e5acdd351174bd98cf8b31266440136bd3R2470)",
+    );
+    expect(reply).not.toContain("published revision");
+  });
+
+  test("loads GitHub PR files when linked GX context has no line-linked hunks", () => {
+    expect(shouldLoadGitHubPrFiles(null)).toBe(true);
+    expect(
+      shouldLoadGitHubPrFiles(
+        makeContext({
+          publishedRevisions: [
+            {
+              branchName: "bug/fix-github-pr-summary",
+              baseBranchName: "main",
+              description: "refresh stored PR bodies on publish",
+              files: ["internal/vcs/service.go"],
+              patch: null,
+              githubPrUrl: "https://github.com/satoricorp/gx/pull/11",
+            },
+          ],
+          hunkLinks: [],
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldLoadGitHubPrFiles(
+        makeContext({
+          publishedRevisions: [
+            {
+              branchName: "bug/fix-github-pr-summary",
+              baseBranchName: "main",
+              description: "refresh stored PR bodies on publish",
+              files: ["internal/vcs/service.go"],
+              patch: null,
+              githubPrUrl: "https://github.com/satoricorp/gx/pull/11",
+            },
+          ],
+          hunkLinks: [
+            {
+              file: "internal/vcs/service.go",
+              lineStart: 2470,
+              lineEnd: 2470,
+              sessionId: "session-one",
+              matchTier: 1,
+              confidence: 0.98,
+              authorship: "agent",
+              tool: "codex",
+              model: "gpt-5",
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
   });
 
   test("formats validated JSON replies and strips invented inline citation IDs", () => {

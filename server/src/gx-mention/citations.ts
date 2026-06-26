@@ -1,4 +1,5 @@
 import type { GitBlameContext } from "../github/git-blame";
+import { githubPullFileLineUrl } from "../github/line-links";
 import type { GitHubPrFileContext, RecentComment } from "../llm/prompts/gx-chat";
 import type { ExtractContext } from "../summary/generate";
 
@@ -16,6 +17,8 @@ export type GxCitation = {
   label: string;
   text: string;
   file?: string;
+  lineStart?: number;
+  lineEnd?: number;
   url?: string;
 };
 
@@ -39,7 +42,28 @@ export function buildGxCitationContext(input: {
     citations.push({ ...citation, id: `S${citations.length + 1}` });
   };
 
+  for (const file of input.githubPrFiles.slice(0, 20)) {
+    const status = file.status ?? "changed";
+    const additions = typeof file.additions === "number" ? file.additions : 0;
+    const deletions = typeof file.deletions === "number" ? file.deletions : 0;
+    const range =
+      typeof file.lineStart === "number" && typeof file.lineEnd === "number"
+        ? `:${file.lineStart}-${file.lineEnd}`
+        : "";
+    push({
+      kind: "github_pr_file",
+      file: file.filename,
+      lineStart: file.lineStart,
+      lineEnd: file.lineEnd,
+      url: file.url,
+      label: `github_pr_file: ${file.filename}${range} ${status} +${additions} -${deletions}`,
+      text: file.patch ?? "",
+    });
+  }
+
   if (input.context) {
+    const githubPrUrl = contextGithubPrUrl(input.context);
+
     for (const revision of (input.context.publishedRevisions ?? []).slice(0, 12)) {
       const files = revision.files.filter(Boolean);
       const fileLabel = files.length ? files.join(", ") : "unknown files";
@@ -61,6 +85,9 @@ export function buildGxCitationContext(input: {
       push({
         kind: "hunk_link",
         file: hunk.file,
+        lineStart: hunk.lineStart,
+        lineEnd: hunk.lineEnd,
+        url: githubPullFileLineUrl(githubPrUrl, hunk.file, hunk.lineStart) ?? undefined,
         label: `hunk_link: ${hunk.file}:${hunk.lineStart}-${hunk.lineEnd} ${hunk.authorship} hunk`,
         text: [
           `session: ${hunk.sessionId}`,
@@ -92,20 +119,6 @@ export function buildGxCitationContext(input: {
         kind: "index_snippet",
         label: `index_snippet: ${source} ${snippet.id}${score}`,
         text: snippet.text,
-      });
-    }
-  }
-
-  if (!input.context) {
-    for (const file of input.githubPrFiles.slice(0, 20)) {
-      const status = file.status ?? "changed";
-      const additions = typeof file.additions === "number" ? file.additions : 0;
-      const deletions = typeof file.deletions === "number" ? file.deletions : 0;
-      push({
-        kind: "github_pr_file",
-        file: file.filename,
-        label: `github_pr_file: ${file.filename} ${status} +${additions} -${deletions}`,
-        text: file.patch ?? "",
       });
     }
   }
@@ -203,20 +216,39 @@ function formatCitationPrompt(citations: GxCitation[]): string {
 }
 
 function idDescription(citation: GxCitation): string {
+  const target = citation.file ? formatFileTarget(citation) : "evidence";
   switch (citation.kind) {
     case "published_revision":
-      return `[${citation.id}] published revision ${citation.file ? `\`${citation.file}\`` : "evidence"}.`;
+      return `[${citation.id}] published revision ${target}.`;
     case "hunk_link":
-      return `[${citation.id}] hunk ${citation.file ? `\`${citation.file}\`` : "evidence"}.`;
+      return `[${citation.id}] hunk ${target}.`;
     case "session_event":
-      return `[${citation.id}] session event ${citation.file ? `\`${citation.file}\`` : "evidence"}.`;
+      return `[${citation.id}] session event ${target}.`;
     case "index_snippet":
       return `[${citation.id}] indexed context.`;
     case "github_pr_file":
-      return `[${citation.id}] GitHub PR file ${citation.file ? `\`${citation.file}\`` : "diff"}.`;
+      return `[${citation.id}] GitHub PR file ${target}.`;
     case "git_blame":
-      return `[${citation.id}] git blame ${citation.file ? `\`${citation.file}\`` : "evidence"}.`;
+      return `[${citation.id}] git blame ${target}.`;
   }
+}
+
+function formatFileTarget(citation: GxCitation): string {
+  const range =
+    typeof citation.lineStart === "number" && typeof citation.lineEnd === "number"
+      ? `:${citation.lineStart}-${citation.lineEnd}`
+      : typeof citation.lineStart === "number"
+        ? `:${citation.lineStart}`
+        : "";
+  const label = `${citation.file}${range}`;
+  return citation.url ? `[${label}](${citation.url})` : `\`${label}\``;
+}
+
+function contextGithubPrUrl(context: ExtractContext): string | null {
+  return (
+    context.publishedRevisions?.find((revision) => revision.githubPrUrl)
+      ?.githubPrUrl ?? null
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

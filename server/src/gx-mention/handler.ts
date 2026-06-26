@@ -1,6 +1,7 @@
 import type postgres from "postgres";
 import { getInstallationAccessToken } from "../github/app";
-import { loadGitBlameContext, type GitBlameContext } from "../github/git-blame";
+import { loadGitBlameContext, parsePatchHunks, type GitBlameContext } from "../github/git-blame";
+import { githubPullFileLineUrl } from "../github/line-links";
 import { createReviewProviders } from "../llm/provider";
 import {
   buildGxChatUserPrompt,
@@ -137,7 +138,7 @@ export async function handleGxMention(
   const context = await loadMentionContext(db, input.orgId, input.bookmarkId);
   const recentComments = await loadRecentComments(db, input.orgId, input.bookmarkId, input.commentId);
   const githubPrFiles =
-    input.github && !context ? await loadGitHubPrFiles(input.github) : [];
+    input.github && shouldLoadGitHubPrFiles(context) ? await loadGitHubPrFiles(input.github) : [];
   const gitBlameContext =
     input.github && context
       ? await loadGitBlameContext(db, {
@@ -280,21 +281,34 @@ async function loadGitHubPrFiles(
       deletions?: unknown;
       patch?: unknown;
     }>;
+    const prUrl = `https://github.com/${input.repoFullName}/pull/${input.pullNumber}`;
 
     return files
       .flatMap((file) => {
         if (typeof file.filename !== "string" || !file.filename) return [];
-        return [
-          {
-            filename: file.filename,
-            status: typeof file.status === "string" ? file.status : null,
-            additions:
-              typeof file.additions === "number" ? file.additions : null,
-            deletions:
-              typeof file.deletions === "number" ? file.deletions : null,
-            patch: typeof file.patch === "string" ? file.patch : null,
-          },
-        ];
+        const filename = file.filename;
+        const patch = typeof file.patch === "string" ? file.patch : null;
+        const base = {
+          filename,
+          status: typeof file.status === "string" ? file.status : null,
+          additions:
+            typeof file.additions === "number" ? file.additions : null,
+          deletions:
+            typeof file.deletions === "number" ? file.deletions : null,
+          patch,
+        };
+        const hunks = parsePatchHunks(patch)
+          .filter((hunk) => typeof hunk.newEnd === "number")
+          .slice(0, 3);
+        if (hunks.length === 0) {
+          return [base];
+        }
+        return hunks.map((hunk) => ({
+          ...base,
+          lineStart: hunk.newStart,
+          lineEnd: hunk.newEnd ?? hunk.newStart,
+          url: githubPullFileLineUrl(prUrl, filename, hunk.newStart) ?? undefined,
+        }));
       })
       .slice(0, 20);
   } catch (error) {
@@ -305,6 +319,17 @@ async function loadGitHubPrFiles(
     });
     return [];
   }
+}
+
+export function shouldLoadGitHubPrFiles(context: ExtractContext | null): boolean {
+  if (!context) return true;
+  const githubPrUrl =
+    context.publishedRevisions?.find((revision) => revision.githubPrUrl)
+      ?.githubPrUrl ?? null;
+  if (!githubPrUrl) return true;
+  return !context.hunkLinks.some((hunk) =>
+    Boolean(githubPullFileLineUrl(githubPrUrl, hunk.file, hunk.lineStart)),
+  );
 }
 
 async function generateGxChatReply(input: {

@@ -14,6 +14,9 @@ export type GitHubPrFileContext = {
   additions: number | null;
   deletions: number | null;
   patch: string | null;
+  lineStart?: number;
+  lineEnd?: number;
+  url?: string;
 };
 
 export type GxChatPromptInput = {
@@ -32,6 +35,7 @@ export const GX_CHAT_SYSTEM_PROMPT = [
   "Answer factual questions using only the listed Available sources.",
   "The PR summary, changed hunks, session evidence, changed symbols, GitHub PR file diff fallback, recent comments, indexed codebase context, and git_blame sections are orientation and compatibility context; cite Available source IDs for factual claims.",
   "For questions about what changed, GX published revision diffs and changed hunks are authoritative when they appear in Available sources. Recent comments are conversation history only, and prior GX bot replies must not override current diff or publish evidence.",
+  "Prefer exact line-linked hunk or PR diff sources over broad published revision sources when answering what changed or what needs review.",
   "Treat git_blame context as previous GitHub/git work. Use it only when it has a listed Available source ID. Treat GX provenance as evidence that GX captured the commit/session in Postgres.",
   "When making a factual claim, cite the source IDs that support it inline, for example [S1].",
   "Do not cite a source ID that was not listed under Available sources.",
