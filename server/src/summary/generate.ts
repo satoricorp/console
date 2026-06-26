@@ -54,6 +54,23 @@ export type IndexSnippetRow = {
   sourceKind?: string;
 };
 
+export type PublishedRevisionRow = {
+  branchName: string | null;
+  baseBranchName: string | null;
+  description: string | null;
+  files: string[];
+  patch: string | null;
+  githubPrUrl: string | null;
+};
+
+export type PublishedSessionRow = {
+  sessionId: string;
+  command: string | null;
+  cwd: string | null;
+  requestCount: number;
+  responseCount: number;
+};
+
 export type ExtractContext = {
   eventId: string;
   bookmarkId: string;
@@ -70,6 +87,8 @@ export type ExtractContext = {
   changedSymbols?: ChangedSymbolRow[];
   fileSurfaces?: FileSurfaceRow[];
   indexSnippets?: IndexSnippetRow[];
+  publishedRevisions?: PublishedRevisionRow[];
+  publishedSessions?: PublishedSessionRow[];
 };
 
 export type GenerateSummaryInput = {

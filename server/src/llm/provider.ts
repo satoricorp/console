@@ -38,13 +38,20 @@ export function createMockProvider(contextHint?: string): LLMProvider {
     label: "Mock",
     async complete(system: string, user: string): Promise<LLMCompletion> {
       if (/GitHub pull request comment thread/i.test(system)) {
-        void user;
+        if (/Available sources:\s*\(none\)/i.test(user)) {
+          return {
+            text: JSON.stringify({
+              answer: "I couldn't answer from the available review context because no citeable sources were provided.",
+              citations: [],
+            }),
+            model: "mock",
+          };
+        }
         return {
-          text: [
-            "GX: Start with the changed runtime file and the test assertion it depends on.",
-            "- The highest-signal surface is the hunk-linked file from the latest PR summary.",
-            "- Ask for a narrower follow-up if you want risk, test, or provenance detail.",
-          ].join("\n"),
+          text: JSON.stringify({
+            answer: "Start with the changed runtime file and the test assertion it depends on. [S1]",
+            citations: ["S1"],
+          }),
           model: "mock",
         };
       }
@@ -199,9 +206,18 @@ async function openAIComplete(system: string, user: string): Promise<LLMCompleti
 }
 
 export function createLLMProvider(contextHint?: string): LLMProvider {
-  const apiKey = process.env.GX_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim();
+  const gxOpenAIKey = process.env.GX_OPENAI_API_KEY?.trim();
+  const plainOpenAIKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = gxOpenAIKey || plainOpenAIKey;
   if (!apiKey || apiKey === "mock") {
     return createMockProvider(contextHint);
+  }
+  if (!gxOpenAIKey && bedrockConfigured()) {
+    return {
+      name: "anthropic",
+      label: "Anthropic",
+      complete: bedrockAnthropicComplete,
+    };
   }
 
   return {
