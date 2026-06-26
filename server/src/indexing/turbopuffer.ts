@@ -48,6 +48,35 @@ export type PublishArtifactIndexInput = {
   payload: PushBundle;
 };
 
+export type CodeReviewHistoryIndexInput = {
+  orgId: string;
+  repoFullName: string;
+  runId: string;
+  summaryId: string;
+  branchName?: string;
+  headSha?: string;
+  prompt?: string;
+  scope?: string;
+  mode?: string;
+  reviewer?: string;
+  summaryText: string;
+  findings: Array<{
+    id: string;
+    fingerprint: string;
+    outcome: string;
+    category: string;
+    language?: string;
+    filePath?: string;
+    lineStart?: number;
+    lineEnd?: number;
+    title: string;
+    summary: string;
+    recommendation?: string;
+    confidence?: number;
+    severity?: string;
+  }>;
+};
+
 type FetchFn = typeof fetch;
 
 let fetchOverride: FetchFn | null = null;
@@ -125,6 +154,35 @@ export async function indexPublishedArtifact(
   }
 }
 
+export async function indexCodeReviewHistory(
+  input: CodeReviewHistoryIndexInput,
+): Promise<IndexJobResult> {
+  const cfg = indexingConfig();
+  if (!cfg) {
+    return { status: "disabled", chunks: 0 };
+  }
+
+  try {
+    const chunks = buildCodeReviewHistoryChunks(input);
+    if (chunks.length === 0) {
+      return { status: "empty", chunks: 0 };
+    }
+    const namespace = namespaceForOrgRepo(input.orgId, input.repoFullName);
+    for (let start = 0; start < chunks.length; start += 64) {
+      const batch = chunks.slice(start, start + 64);
+      const embeddings = await embedTexts(cfg, batch.map((chunk) => chunk.text));
+      await upsertTurboPufferRows(cfg, namespace, batch, embeddings);
+    }
+    return { status: "indexed", chunks: chunks.length };
+  } catch (error) {
+    return {
+      status: "failed",
+      chunks: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function searchIndex(args: {
   orgId: string;
   repoFullName: string;
@@ -174,6 +232,111 @@ export async function searchIndex(args: {
       attributes,
     }];
   });
+}
+
+export async function searchCodeReviewHistory(args: {
+  orgId: string;
+  repoFullName: string;
+  query: string;
+  limit?: number;
+}): Promise<IndexSearchResult[]> {
+  const rows = await searchIndex({
+    orgId: args.orgId,
+    repoFullName: args.repoFullName,
+    query: args.query,
+    limit: Math.min(Math.max(args.limit ?? 8, 1), 50),
+  });
+  return rows.filter((row) => {
+    const kind = typeof row.attributes.source_kind === "string" ? row.attributes.source_kind : "";
+    return kind === "code_review_history" || kind === "code_review_summary";
+  });
+}
+
+function buildCodeReviewHistoryChunks(input: CodeReviewHistoryIndexInput): IndexChunk[] {
+  const chunks: IndexChunk[] = [];
+  const common = {
+    org_id: input.orgId,
+    repo_full_name: input.repoFullName,
+    branch_name: input.branchName ?? "",
+    head_sha: input.headSha ?? "",
+    event_id: input.runId,
+    session_id: "",
+    indexed_reason: "code_review_history",
+  };
+
+  const summaryText = limitBytes(
+    [
+      "GX code review summary.",
+      `Repo: ${input.repoFullName}`,
+      input.branchName ? `Branch: ${input.branchName}` : "",
+      input.headSha ? `Head: ${input.headSha}` : "",
+      input.scope ? `Scope: ${input.scope}` : "",
+      input.mode ? `Mode: ${input.mode}` : "",
+      input.reviewer ? `Reviewer: ${input.reviewer}` : "",
+      input.prompt ? `Intent: ${input.prompt}` : "",
+      input.summaryText,
+    ].filter(Boolean).join("\n"),
+    maxChunkBytes,
+  );
+  if (summaryText.trim()) {
+    chunks.push(
+      chunk("code-review-summary", [input.orgId, input.runId, input.summaryId], summaryText, {
+        ...common,
+        source_kind: "code_review_summary",
+        file: "",
+        review_run_id: input.runId,
+        review_summary_id: input.summaryId,
+        review_scope: input.scope ?? "",
+        review_mode: input.mode ?? "",
+        text: summaryText,
+      }),
+    );
+  }
+
+  for (const finding of input.findings) {
+    const text = limitBytes(
+      [
+        "GX code review finding history.",
+        `Repo: ${input.repoFullName}`,
+        input.branchName ? `Branch: ${input.branchName}` : "",
+        input.headSha ? `Head: ${input.headSha}` : "",
+        `Outcome: ${finding.outcome}`,
+        `Category: ${finding.category}`,
+        finding.language ? `Language: ${finding.language}` : "",
+        finding.filePath ? `File: ${finding.filePath}` : "",
+        finding.lineStart ? `Line: ${finding.lineStart}` : "",
+        finding.severity ? `Severity: ${finding.severity}` : "",
+        typeof finding.confidence === "number" ? `Confidence: ${finding.confidence}` : "",
+        `Title: ${finding.title}`,
+        `Summary: ${finding.summary}`,
+        finding.recommendation ? `Recommendation: ${finding.recommendation}` : "",
+      ].filter(Boolean).join("\n"),
+      maxChunkBytes,
+    );
+    chunks.push(
+      chunk(
+        "code-review-finding",
+        [input.orgId, input.runId, finding.id || finding.fingerprint || finding.title],
+        text,
+        {
+          ...common,
+          source_kind: "code_review_history",
+          file: finding.filePath ?? "",
+          review_run_id: input.runId,
+          review_finding_id: finding.id,
+          review_fingerprint: finding.fingerprint,
+          review_outcome: finding.outcome,
+          review_category: finding.category,
+          review_language: finding.language ?? "",
+          line_start: finding.lineStart ?? 0,
+          line_end: finding.lineEnd ?? finding.lineStart ?? 0,
+          text,
+        },
+      ),
+    );
+  }
+
+  return chunks;
 }
 
 function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexChunk[] {

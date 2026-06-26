@@ -9,6 +9,7 @@ import { ingestRoutes } from "./routes/ingest";
 import { openAIRoutes } from "./routes/openai";
 import { publishRoutes } from "./routes/publish";
 import { reviewRoutes } from "./routes/review";
+import { reviewHistoryRoutes } from "./routes/review-history";
 import { summaryRoutes } from "./routes/summary";
 
 const app = new Hono<AppEnv>();
@@ -18,6 +19,7 @@ app.route("/", authRoutes);
 app.route("/", ingestRoutes);
 app.route("/", summaryRoutes);
 app.route("/", reviewRoutes);
+app.route("/", reviewHistoryRoutes);
 app.route("/", activityRoutes);
 app.route("/", bookmarksRoutes);
 app.route("/", publishRoutes);
