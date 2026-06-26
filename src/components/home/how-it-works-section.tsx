@@ -1,3 +1,5 @@
+import { ScrollReveal } from "@/components/scroll-reveal";
+
 const STEPS = [
   {
     step: "01",
@@ -160,7 +162,7 @@ export function HowItWorksSection() {
       id="how-it-works"
       className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
     >
-      <div className="mx-auto w-full max-w-5xl">
+      <ScrollReveal className="mx-auto w-full max-w-5xl">
         <div className="mb-14 max-w-2xl space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
             How it works
@@ -212,7 +214,7 @@ export function HowItWorksSection() {
             );
           })}
         </ol>
-      </div>
+      </ScrollReveal>
     </section>
   );
 }

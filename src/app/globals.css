@@ -6,6 +6,7 @@
   --ascii-muted: #e8e8e8;
   --ascii-gray: #333333;
   --footer-link-hover: #a360a3;
+  --site-header-height: 3.75rem;
 }
 
 @theme inline {
@@ -35,6 +36,21 @@
   }
 }
 
+@keyframes scroll-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.scroll-arrow-bounce {
+  animation: scroll-bounce 1.6s ease-in-out infinite;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -45,11 +61,11 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 3.75rem;
+  scroll-padding-top: var(--site-header-height);
 }
 
 [id] {
-  scroll-margin-top: 3.75rem;
+  scroll-margin-top: var(--site-header-height);
 }
 
 body {

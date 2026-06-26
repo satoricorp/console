@@ -1,9 +1,8 @@
-import { GxLogo } from "@/components/gx-logo";
 import { FaqAccordion } from "@/components/home/faq-accordion";
 import { FeaturesSection } from "@/components/home/features-section";
+import { HeroSection } from "@/components/home/hero-section";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
-import { GetStartedButton } from "@/components/get-started-button";
-import { SignInLink } from "@/components/sign-in-link";
+import { ScrollReveal } from "@/components/scroll-reveal";
 
 const FAQ_ITEMS = [
   {
@@ -31,43 +30,10 @@ const FAQ_ITEMS = [
 export function SignedOutLanding() {
   return (
     <main className="flex flex-1 flex-col">
-      <section
-        id="hero"
-        className="flex flex-1 items-center justify-center px-6 py-16 sm:py-24"
-      >
-        <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-10 text-center">
-          <GxLogo variant="hero" className="mx-auto" />
+      <HeroSection />
 
-          <div className="flex w-full min-w-0 flex-col items-center gap-8">
-            <div className="w-full max-w-2xl space-y-4">
-              <h1 className="text-pretty text-3xl font-medium leading-[1.12] tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-5xl">
-                The Essential Quality Layer for Agents
-              </h1>
-              <p className="text-pretty text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
-                Give every coding session the tools to generate robust and
-                verified changes without reading pull requests line for line.
-              </p>
-            </div>
-
-            <div className="flex w-full max-w-lg flex-col items-stretch gap-3">
-              <GetStartedButton className="h-12 w-full px-12 text-base" />
-              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                <span className="font-medium text-[var(--footer-link-hover)]">
-                  2 weeks free.
-                </span>{" "}
-                Already have an account?{" "}
-                <SignInLink className="text-zinc-700 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-zinc-950 dark:text-zinc-300 dark:decoration-zinc-700 dark:hover:text-zinc-100" />
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="problem"
-        className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
-      >
-        <div className="mx-auto w-full max-w-5xl">
+      <section id="problem" className="px-6 py-16 sm:py-24">
+        <ScrollReveal className="mx-auto w-full max-w-5xl">
           <div className="max-w-2xl space-y-4">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
               The problem
@@ -85,7 +51,7 @@ export function SignedOutLanding() {
               makes, with GX you can just keep shipping fast.
             </p>
           </div>
-        </div>
+        </ScrollReveal>
       </section>
 
       <HowItWorksSection />
@@ -95,7 +61,7 @@ export function SignedOutLanding() {
         id="faq"
         className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
       >
-        <div className="mx-auto w-full max-w-5xl">
+        <ScrollReveal className="mx-auto w-full max-w-5xl">
           <div className="mb-14 max-w-lg">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
               FAQ
@@ -106,7 +72,7 @@ export function SignedOutLanding() {
           </div>
 
           <FaqAccordion items={FAQ_ITEMS} />
-        </div>
+        </ScrollReveal>
       </section>
     </main>
   );
