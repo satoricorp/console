@@ -8,6 +8,7 @@ import { healthRoutes } from "./routes/health";
 import { ingestRoutes } from "./routes/ingest";
 import { openAIRoutes } from "./routes/openai";
 import { publishRoutes } from "./routes/publish";
+import { reportedLogsRoutes } from "./routes/reported-logs";
 import { reviewRoutes } from "./routes/review";
 import { reviewHistoryRoutes } from "./routes/review-history";
 import { summaryRoutes } from "./routes/summary";
@@ -23,6 +24,7 @@ app.route("/", reviewHistoryRoutes);
 app.route("/", activityRoutes);
 app.route("/", bookmarksRoutes);
 app.route("/", publishRoutes);
+app.route("/", reportedLogsRoutes);
 app.route("/gx/openai", openAIRoutes);
 app.route("/", githubWebhookRoutes);
 
