@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
-import { ChevronDown, Terminal } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  ChevronDown,
+  GitBranch,
+  ShieldCheck,
+  Terminal,
+} from "lucide-react";
 import { AppPage } from "@/components/app-page";
 import { AppleIcon } from "@/components/apple-icon";
 import { CopyCommand } from "@/components/copy-command";
@@ -86,6 +93,18 @@ export default function DownloadPage() {
               </a>
               .
             </p>
+            <div className="flex gap-3 border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-400" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-zinc-950 dark:text-zinc-50">
+                  macOS may block the first launch.
+                </p>
+                <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                  Open Apple System Settings, go to Privacy & Security, then
+                  choose Open Anyway for GX.
+                </p>
+              </div>
+            </div>
           </div>
 
           <details className="group border-t border-zinc-200 dark:border-zinc-800">
@@ -107,6 +126,17 @@ export default function DownloadPage() {
         >
           <CopyCommand command={CLI_INSTALL_COMMAND} />
         </PlatformSection>
+
+        <div className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+          <Link
+            href="/onboarding"
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700 sm:w-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            <GitBranch className="h-4 w-4" />
+            Choose repositories
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
     </AppPage>
   );

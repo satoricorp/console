@@ -8,8 +8,8 @@ export const DISCORD_URL =
 export const SUPPORT_EMAIL = "hi@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;
 
-export const POST_SIGN_IN_URL = "/onboarding";
-export const SIGNED_IN_HOME_URL = "/welcome";
+export const POST_SIGN_IN_URL = "/download";
+export const SIGNED_IN_HOME_URL = "/download";
 export const GITHUB_SIGN_IN_URL = "/api/auth/github";
 
 export function githubSignInUrl(callbackURL = POST_SIGN_IN_URL) {

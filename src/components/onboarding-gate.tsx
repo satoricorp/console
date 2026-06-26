@@ -5,12 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
-import { SIGNED_IN_HOME_URL } from "@/lib/site-links";
 
 const ONBOARDING_PATH = "/onboarding";
 
 /** Routes reachable before repo connect. */
-const ONBOARDING_BYPASS_PATHS = ["/billing", "/repositories"];
+const ONBOARDING_BYPASS_PATHS = ["/billing", "/download", "/repositories"];
 
 function bypassesOnboarding(pathname: string) {
   return ONBOARDING_BYPASS_PATHS.some(
@@ -59,10 +58,6 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     ) {
       router.replace(ONBOARDING_PATH);
       return;
-    }
-
-    if (onboardingStatus.hasConnectedRepos && isOnboardingRoute) {
-      router.replace(SIGNED_IN_HOME_URL);
     }
   }, [
     authReady,

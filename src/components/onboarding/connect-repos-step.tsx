@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
@@ -25,6 +27,7 @@ export function ConnectReposStep({
   eyebrow?: string;
   title?: string;
 }) {
+  const router = useRouter();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const listAvailableRepos = useAction(api.repoActions.listAvailableRepos);
@@ -111,6 +114,8 @@ export function ConnectReposStep({
   }, [availableRepos, search, orgFilter]);
 
   const selectedCount = selected.size;
+  const connectedRepoCount = connectedRepos?.length ?? 0;
+  const canSkip = connectedRepoCount > 0;
   const newlySelectedCount = [...selected].filter(
     (fullName) => !connectedFullNames.has(fullName),
   ).length;
@@ -139,6 +144,7 @@ export function ConnectReposStep({
     setError(null);
     try {
       await connectRepos({ repos: reposToConnect });
+      router.push("/repositories");
     } catch (connectError) {
       setError(
         connectError instanceof Error
@@ -260,17 +266,27 @@ export function ConnectReposStep({
             ? "Select at least one repository to continue."
             : `${selectedCount} selected${connectedFullNames.size > 0 ? ` · ${connectedFullNames.size} already connected` : ""}`}
         </p>
-        <Button
-          onClick={() => void handleConnect()}
-          disabled={connecting || newlySelectedCount === 0}
-          className="py-2.5"
-        >
-          {connecting
-            ? "Connecting..."
-            : newlySelectedCount === 0
-              ? "Connect repositories"
-              : `Connect ${newlySelectedCount} ${newlySelectedCount === 1 ? "repository" : "repositories"}`}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {canSkip ? (
+            <Link
+              href="/repositories"
+              className="inline-flex items-center justify-center py-2.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+            >
+              Skip
+            </Link>
+          ) : null}
+          <Button
+            onClick={() => void handleConnect()}
+            disabled={connecting || newlySelectedCount === 0}
+            className="py-2.5"
+          >
+            {connecting
+              ? "Connecting..."
+              : newlySelectedCount === 0
+                ? "Connect repositories"
+                : `Connect ${newlySelectedCount} ${newlySelectedCount === 1 ? "repository" : "repositories"}`}
+          </Button>
+        </div>
       </div>
     </div>
   );

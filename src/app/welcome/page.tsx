@@ -2,16 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useConvexAuth, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useConvexAuth } from "convex/react";
 
 export default function WelcomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const appState = useQuery(
-    api.userAppState.getMyAppState,
-    isAuthenticated ? {} : "skip",
-  );
 
   useEffect(() => {
     if (isLoading) return;
@@ -21,12 +16,8 @@ export default function WelcomePage() {
       return;
     }
 
-    if (appState === undefined) return;
-
-    router.replace(
-      appState?.downloadScreenCompleted === true ? "/repositories" : "/download",
-    );
-  }, [appState, isAuthenticated, isLoading, router]);
+    router.replace("/download");
+  }, [isAuthenticated, isLoading, router]);
 
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-24">
