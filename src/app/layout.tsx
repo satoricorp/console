@@ -6,6 +6,7 @@ import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { OnboardingGate } from "@/components/onboarding-gate";
+import { PostHogIdentifier } from "@/components/posthog-identifier";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -41,6 +42,7 @@ export default function RootLayout({
           <GoogleAnalytics />
         </Suspense>
         <ConvexClientProvider>
+          <PostHogIdentifier />
           <SiteHeader />
           <OnboardingGate>{children}</OnboardingGate>
           <SiteFooter />
