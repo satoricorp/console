@@ -108,6 +108,20 @@ export const createCliSession = internalMutation({
   },
   handler: async (ctx, args) => {
     const tokenHash = await hashToken(args.token);
+    const now = Date.now();
+    const existingSessions = await ctx.db
+      .query("gxCliSessions")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const session of existingSessions) {
+      const active =
+        !session.revokedAt && session.expiresAt && session.expiresAt > now;
+      if (active && session.machineId === args.machineId) {
+        await ctx.db.patch(session._id, { revokedAt: now });
+      }
+    }
+
     await ctx.db.insert("gxCliSessions", {
       tokenHash,
       userId: args.userId,
@@ -116,7 +130,7 @@ export const createCliSession = internalMutation({
       machineId: args.machineId,
       machineName: args.machineName,
       gxVersion: args.gxVersion,
-      createdAt: Date.now(),
+      createdAt: now,
       expiresAt: args.expiresAt,
     });
   },

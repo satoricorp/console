@@ -10,17 +10,17 @@ const originalClientSecret = process.env.GITHUB_CLIENT_SECRET;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  if (originalClientId === undefined) {
-    delete process.env.GITHUB_CLIENT_ID;
-  } else {
-    process.env.GITHUB_CLIENT_ID = originalClientId;
-  }
-  if (originalClientSecret === undefined) {
-    delete process.env.GITHUB_CLIENT_SECRET;
-  } else {
-    process.env.GITHUB_CLIENT_SECRET = originalClientSecret;
-  }
+  restoreEnv("GITHUB_CLIENT_ID", originalClientId);
+  restoreEnv("GITHUB_CLIENT_SECRET", originalClientSecret);
 });
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
+}
 
 function mockCtx(account: Record<string, unknown>) {
   const mutations: unknown[] = [];
@@ -110,5 +110,26 @@ describe("getGithubAccessToken", () => {
         },
       },
     });
+  });
+
+  test("normalizes expired refresh token responses to a re-auth message", async () => {
+    process.env.GITHUB_CLIENT_ID = "client-id";
+    process.env.GITHUB_CLIENT_SECRET = "client-secret";
+    const { ctx, mutations } = mockCtx({
+      accessToken: "ghu_old",
+      accessTokenExpiresAt: Date.now() - 1,
+      refreshToken: "ghr_expired",
+    });
+
+    globalThis.fetch = (async () =>
+      Response.json({
+        error: "bad_refresh_token",
+        error_description: "The refresh token passed is incorrect or expired.",
+      })) as typeof fetch;
+
+    await expect(getGithubAccessToken(ctx as never, "user_123")).rejects.toThrow(
+      "GitHub session expired. Sign out and sign in again to grant repository access.",
+    );
+    expect(mutations).toEqual([]);
   });
 });

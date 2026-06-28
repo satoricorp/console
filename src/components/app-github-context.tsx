@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { GitHubIcon } from "@/components/github-icon";
 import { api } from "../../convex/_generated/api";
@@ -22,7 +21,13 @@ function defaultGithubContext(
   return firstPresent(topOwner, profile.user.displayUsername, profile.user.username);
 }
 
-export function AppGithubContext() {
+export function AppGithubContext({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
   const { isAuthenticated } = useConvexAuth();
   const profile = useQuery(
     api.profile.getMyProfile,
@@ -37,15 +42,17 @@ export function AppGithubContext() {
   return (
     <div className="mx-auto flex w-full max-w-5xl items-center pb-5">
       <Link
-        href="/repositories"
+        href={href}
         className="inline-flex min-w-0 items-center gap-2 text-sm text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
       >
         <GitHubIcon className="h-4 w-4 shrink-0" />
         <span className="truncate font-medium text-zinc-950 dark:text-zinc-100">
           {contextName}
         </span>
-        <ArrowRight className="h-4 w-4 shrink-0" />
-        repositories
+        <span className="mx-[3px] shrink-0 text-zinc-400 dark:text-zinc-600">
+          /
+        </span>
+        {label}
       </Link>
     </div>
   );

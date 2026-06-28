@@ -3,7 +3,7 @@ import { ProfileHome } from "@/components/profile/profile-home";
 
 export default function ProfilePage() {
   return (
-    <AppPage>
+    <AppPage githubContext={{ href: "/profile", label: "profile" }}>
       <ProfileHome />
     </AppPage>
   );

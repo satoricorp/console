@@ -5,14 +5,16 @@ import { useState } from "react";
 
 type CopyCommandProps = {
   command: string;
+  onCopy?: () => void;
 };
 
-export function CopyCommand({ command }: CopyCommandProps) {
+export function CopyCommand({ command, onCopy }: CopyCommandProps) {
   const [copied, setCopied] = useState(false);
 
   async function copyCommand() {
     await navigator.clipboard.writeText(command);
     setCopied(true);
+    onCopy?.();
     window.setTimeout(() => setCopied(false), 1500);
   }
 

@@ -3,7 +3,7 @@ import { RepositoryIndexList } from "@/components/repositories/repository-index-
 
 export default function RepositoriesPage() {
   return (
-    <AppPage>
+    <AppPage githubContext={{ href: "/repositories", label: "repositories" }}>
       <RepositoryIndexList />
     </AppPage>
   );

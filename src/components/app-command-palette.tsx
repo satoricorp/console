@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Download, GitBranch, Mail, UserRound, X } from "lucide-react";
-import { DiscordIcon } from "@/components/discord-icon";
 import {
   Command,
   CommandEmpty,
@@ -12,11 +11,40 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
+import { authClient } from "@/lib/auth-client";
 import { DISCORD_URL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
 
 const commandItemClass =
-  "text-zinc-100 data-[selected=true]:bg-zinc-900 data-[selected=true]:text-white";
+  "justify-between gap-4 text-zinc-100 data-[selected=true]:bg-zinc-900 data-[selected=true]:text-white";
+
+function CommandShortcut({ children }: { children: string }) {
+  return (
+    <kbd className="ml-auto shrink-0 font-mono text-xs text-zinc-500 dark:text-zinc-500">
+      {children}
+    </kbd>
+  );
+}
+
+function handlePaletteNavigation(event: ReactKeyboardEvent) {
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+  if (event.key !== "j" && event.key !== "k") return;
+  if (
+    event.target instanceof HTMLInputElement &&
+    event.target.value.trim() !== ""
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  event.currentTarget.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: event.key === "j" ? "ArrowDown" : "ArrowUp",
+      bubbles: true,
+    }),
+  );
+}
 
 export function AppCommandPalette() {
   const router = useRouter();
@@ -34,12 +62,12 @@ export function AppCommandPalette() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  function runCommand(path: string) {
+  const runCommand = useCallback((path: string) => {
     setOpen(false);
     router.push(path);
-  }
+  }, [router]);
 
-  function runExternal(url: string) {
+  const runExternal = useCallback((url: string) => {
     setOpen(false);
     if (url.startsWith("mailto:")) {
       window.location.href = url;
@@ -47,7 +75,39 @@ export function AppCommandPalette() {
     }
 
     window.open(url, "_blank", "noopener,noreferrer");
-  }
+  }, []);
+
+  const runSignOut = useCallback(async () => {
+    setOpen(false);
+    await authClient.signOut();
+    router.replace("/");
+    router.refresh();
+  }, [router]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleCommandShortcut(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "d") {
+        event.preventDefault();
+        runCommand("/download");
+      }
+      if (key === "j") {
+        event.preventDefault();
+        runExternal(DISCORD_URL);
+      }
+      if (key === "e") {
+        event.preventDefault();
+        runExternal(SUPPORT_EMAIL_URL);
+      }
+    }
+
+    window.addEventListener("keydown", handleCommandShortcut);
+    return () => window.removeEventListener("keydown", handleCommandShortcut);
+  }, [open, runCommand, runExternal]);
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -64,11 +124,14 @@ export function AppCommandPalette() {
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-zinc-950/[0.85]" />
-        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden bg-zinc-950 shadow-2xl outline-none">
+        <DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-zinc-900 bg-zinc-950 shadow-2xl outline-none">
           <DialogPrimitive.Title className="sr-only">
             Command palette
           </DialogPrimitive.Title>
-          <Command className="bg-zinc-950 text-zinc-50">
+          <Command
+            className="bg-zinc-950 text-zinc-50"
+            onKeyDown={handlePaletteNavigation}
+          >
             <CommandInput
               placeholder="Search commands..."
               autoFocus
@@ -78,54 +141,71 @@ export function AppCommandPalette() {
             />
             <CommandList>
               <CommandEmpty>No command found.</CommandEmpty>
-              <CommandGroup className="text-zinc-50">
+              <CommandGroup heading="Workspace" className="text-zinc-50">
                 <CommandItem
                   value="repositories github repos"
                   onSelect={() => runCommand("/repositories")}
                   className={commandItemClass}
                 >
-                  <GitBranch className="h-4 w-4" />
                   <span>Repositories</span>
                 </CommandItem>
                 <CommandItem
-                  value="profile account settings"
-                  onSelect={() => runCommand("/profile")}
+                  value="devices cli signed in machines"
+                  onSelect={() => runCommand("/devices")}
                   className={commandItemClass}
                 >
-                  <UserRound className="h-4 w-4" />
-                  <span>Profile</span>
+                  <span>Devices</span>
                 </CommandItem>
+              </CommandGroup>
+              <CommandSeparator className="bg-zinc-900" />
+              <CommandGroup heading="Setup" className="text-zinc-50">
                 <CommandItem
                   value="download gx"
                   onSelect={() => runCommand("/download")}
                   className={commandItemClass}
                 >
-                  <Download className="h-4 w-4" />
-                  <span>Download GX</span>
+                  <span>Download</span>
+                  <CommandShortcut>⌘D</CommandShortcut>
                 </CommandItem>
+              </CommandGroup>
+              <CommandSeparator className="bg-zinc-900" />
+              <CommandGroup heading="Support" className="text-zinc-50">
                 <CommandItem
                   value="discord community support"
                   onSelect={() => runExternal(DISCORD_URL)}
                   className={commandItemClass}
                 >
-                  <DiscordIcon className="h-4 w-4" />
-                  <span>Discord</span>
+                  <span>Join Discord</span>
+                  <CommandShortcut>⌘J</CommandShortcut>
                 </CommandItem>
                 <CommandItem
                   value="email contact support hi satori"
                   onSelect={() => runExternal(SUPPORT_EMAIL_URL)}
                   className={commandItemClass}
                 >
-                  <Mail className="h-4 w-4" />
-                  <span>Email support</span>
+                  <span>Email Us</span>
+                  <CommandShortcut>⌘E</CommandShortcut>
+                </CommandItem>
+              </CommandGroup>
+              <CommandSeparator className="bg-zinc-900" />
+              <CommandGroup heading="Account" className="text-zinc-50">
+                <CommandItem
+                  value="profile account settings"
+                  onSelect={() => runCommand("/profile")}
+                  className={commandItemClass}
+                >
+                  <span>Profile</span>
+                </CommandItem>
+                <CommandItem
+                  value="sign out logout account"
+                  onSelect={() => void runSignOut()}
+                  className={commandItemClass}
+                >
+                  <span>Sign Out</span>
                 </CommandItem>
               </CommandGroup>
             </CommandList>
           </Command>
-          <DialogPrimitive.Close className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center text-zinc-500 transition-colors hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-600">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

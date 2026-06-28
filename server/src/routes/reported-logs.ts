@@ -17,11 +17,14 @@ reportedLogsRoutes.post("/v1/reported-logs", async (c) => {
   const db = getSql();
   const [row] = await db<{ id: string }[]>`
     INSERT INTO reported_logs (
-      org_id, user_id, gx_version, os, arch, repo_root, repo_full_name,
+      org_id, user_id, reported_user_id, login, machine_id, gx_version, os, arch, repo_root, repo_full_name,
       cloud_url, error, status_error, log_count, logs, created_at_ms
     ) VALUES (
       ${auth.orgId},
       ${auth.userId},
+      ${nullableString(body.user_id)},
+      ${nullableString(body.login)},
+      ${nullableString(body.machine_id)},
       ${nullableString(body.gx_version)},
       ${nullableString(body.os)},
       ${nullableString(body.arch)},

@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { GitBranch, Lock, Unlock } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  GitBranch,
+  Lock,
+  Unlock,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { SignInLink } from "@/components/sign-in-link";
@@ -14,6 +21,8 @@ type IndexedRepo = {
   defaultBranch?: string;
   indexStatus: string | null;
 };
+
+const REPOS_PER_PAGE = 9;
 
 function formatIndexStatus(status: string | null) {
   if (!status) return "Not indexed";
@@ -47,7 +56,9 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
           )}
         </div>
         <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-          {repo.defaultBranch ? `${repo.defaultBranch} branch` : "Default branch unavailable"}
+          {repo.defaultBranch
+            ? `${repo.defaultBranch} branch`
+            : "Default branch unavailable"}
         </p>
       </div>
       <span
@@ -64,10 +75,19 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
 
 export function RepositoryIndexList() {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const [page, setPage] = useState(1);
   const repos = useQuery(
     api.repos.getMyConnectedRepos,
     isAuthenticated ? {} : "skip",
   );
+  const pageCount = repos ? Math.ceil(repos.length / REPOS_PER_PAGE) : 1;
+  const showPagination = pageCount > 1;
+  const currentPage = Math.min(page, Math.max(pageCount, 1));
+  const paginatedRepos = useMemo(() => {
+    if (!repos) return [];
+    const start = (currentPage - 1) * REPOS_PER_PAGE;
+    return repos.slice(start, start + REPOS_PER_PAGE);
+  }, [currentPage, repos]);
 
   if (!isLoading && !isAuthenticated) {
     return (
@@ -96,15 +116,51 @@ export function RepositoryIndexList() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Repositories
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-            Indexed repositories
-          </h1>
+      {repos.length === 0 ? (
+        <div className="border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+          No repositories indexed yet.
         </div>
+      ) : (
+        <div className="border border-zinc-200 dark:border-zinc-800">
+          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            {paginatedRepos.map((repo) => (
+              <RepositoryRow key={repo.id} repo={repo} />
+            ))}
+          </ul>
+
+          {showPagination ? (
+            <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Page {currentPage} of {pageCount}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setPage((current) => Math.max(current - 1, 1))}
+                  className="inline-flex h-8 w-8 items-center justify-center border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+                  aria-label="Previous repositories page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={currentPage === pageCount}
+                  onClick={() =>
+                    setPage((current) => Math.min(current + 1, pageCount))
+                  }
+                  className="inline-flex h-8 w-8 items-center justify-center border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+                  aria-label="Next repositories page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <div className="flex justify-end">
         <Link
           href="/onboarding"
           className="inline-flex items-center justify-center gap-2 border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
@@ -113,18 +169,6 @@ export function RepositoryIndexList() {
           Add repositories
         </Link>
       </div>
-
-      {repos.length === 0 ? (
-        <div className="border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
-          No repositories indexed yet.
-        </div>
-      ) : (
-        <ul className="divide-y divide-zinc-200 border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-          {repos.map((repo) => (
-            <RepositoryRow key={repo.id} repo={repo} />
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

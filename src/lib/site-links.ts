@@ -3,7 +3,7 @@ export const GITHUB_REPO_URL =
   "https://github.com/satoricorp/gx";
 
 export const DISCORD_URL =
-  process.env.NEXT_PUBLIC_DISCORD_URL ?? "https://discord.gg/satori";
+  process.env.NEXT_PUBLIC_DISCORD_URL ?? "https://discord.gg/NJ2aGugtj";
 
 export const SUPPORT_EMAIL = "hi@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;

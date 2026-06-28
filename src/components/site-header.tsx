@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
-import { AppSupportLinks } from "@/components/app-support-links";
 import { GetStartedButton } from "@/components/get-started-button";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
@@ -275,15 +274,12 @@ export function SiteHeader() {
 
   if (session?.user) {
     return (
-      <>
-        <header className="fixed right-5 top-4 z-50 sm:right-10">
-          <div className="flex justify-end gap-2">
-            <AppCommandPalette />
-            <UserMenu user={session.user} />
-          </div>
-        </header>
-        <AppSupportLinks />
-      </>
+      <header className="fixed right-5 top-4 z-50 sm:right-10">
+        <div className="flex justify-end gap-2">
+          <AppCommandPalette />
+          <UserMenu user={session.user} />
+        </div>
+      </header>
     );
   }
 

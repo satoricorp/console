@@ -5,6 +5,10 @@ import { components } from "./_generated/api";
 
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const TOKEN_REFRESH_SKEW_MS = 60_000;
+const GITHUB_REAUTH_INSTRUCTION =
+  "Sign out and sign in again to grant repository access.";
+const GITHUB_REAUTH_MESSAGE =
+  `GitHub session expired. ${GITHUB_REAUTH_INSTRUCTION}`;
 
 // GitHub App permissions required by GX merge/status flows:
 // - contents: read/write
@@ -31,6 +35,22 @@ type GitHubRefreshTokenResponse = {
   error?: string;
   error_description?: string;
 };
+
+function githubReauthError() {
+  return new Error(GITHUB_REAUTH_MESSAGE);
+}
+
+function isExpiredRefreshTokenResponse(body: GitHubRefreshTokenResponse) {
+  const text =
+    `${body.error ?? ""} ${body.error_description ?? ""}`.toLowerCase();
+  return (
+    text.includes("refresh token") &&
+    (text.includes("expired") ||
+      text.includes("incorrect") ||
+      text.includes("invalid") ||
+      text.includes("bad"))
+  );
+}
 
 async function findGithubAccount(ctx: ActionCtx, userId: string) {
   const account = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
@@ -60,18 +80,14 @@ async function refreshGithubAccessToken(
 ) {
   const refreshToken = account.refreshToken?.trim();
   if (!refreshToken) {
-    throw new Error(
-      "GitHub session expired. Sign out and sign in again to grant repository access.",
-    );
+    throw githubReauthError();
   }
 
   if (
     account.refreshTokenExpiresAt &&
     account.refreshTokenExpiresAt <= Date.now()
   ) {
-    throw new Error(
-      "GitHub session expired. Sign out and sign in again to grant repository access.",
-    );
+    throw githubReauthError();
   }
 
   const clientId = process.env.GITHUB_CLIENT_ID?.trim();
@@ -101,6 +117,10 @@ async function refreshGithubAccessToken(
 
   const body = (await response.json()) as GitHubRefreshTokenResponse;
   if (body.error) {
+    if (isExpiredRefreshTokenResponse(body)) {
+      throw githubReauthError();
+    }
+
     throw new Error(
       body.error_description || body.error || "GitHub OAuth refresh failed",
     );
@@ -158,9 +178,7 @@ export async function getGithubAccessToken(
 
   const accessToken = account?.accessToken;
   if (!account || !accessToken) {
-    throw new Error(
-      "GitHub access is missing. Sign out and sign in again to grant repository access.",
-    );
+    throw new Error(`GitHub access is missing. ${GITHUB_REAUTH_INSTRUCTION}`);
   }
 
   if (options.forceRefresh || shouldRefreshGithubAccessToken(account)) {
@@ -192,8 +210,7 @@ export async function verifyGithubRepoAccessWithToken(
     return {
       ok: false,
       status: 401,
-      message:
-        "GitHub session expired. Sign out and sign in again to grant repository access.",
+      message: GITHUB_REAUTH_MESSAGE,
     };
   }
 
