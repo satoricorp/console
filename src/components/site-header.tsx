@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { UserMenu } from "@/components/user-menu";
 import { authClient } from "@/lib/auth-client";
-import { DISCORD_URL, GITHUB_REPO_URL, NAV_LINKS } from "@/lib/site-links";
+import { DISCORD_URL, GITHUB_REPO_URL, NAV_LINKS, type NavLink } from "@/lib/site-links";
 import { cn } from "@/lib/utils";
 
 const navLinkClassName =
@@ -132,6 +132,40 @@ function NavAnchorLink({
   );
 }
 
+function HeaderNavLink({
+  link,
+  className,
+  onNavigate,
+  deferScroll,
+}: {
+  link: NavLink;
+  className?: string;
+  onNavigate?: () => void;
+  deferScroll?: boolean;
+}) {
+  if (link.external) {
+    return (
+      <a
+        href={link.href}
+        className={cn(navLinkClassName, className)}
+        onClick={onNavigate}
+      >
+        {link.label}
+      </a>
+    );
+  }
+
+  return (
+    <NavAnchorLink
+      href={link.href}
+      label={link.label}
+      className={className}
+      deferScroll={deferScroll}
+      onNavigate={onNavigate}
+    />
+  );
+}
+
 function MobileNavMenu() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -182,10 +216,9 @@ function MobileNavMenu() {
           className="flex flex-col gap-1 px-6 pb-6"
         >
           {NAV_LINKS.map((link) => (
-            <NavAnchorLink
+            <HeaderNavLink
               key={link.href}
-              href={link.href}
-              label={link.label}
+              link={link}
               className="py-2.5 text-base"
               deferScroll
               onNavigate={() => closeMenu(link.href)}
@@ -306,7 +339,7 @@ export function SiteHeader() {
           className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 sm:flex sm:gap-8"
         >
           {NAV_LINKS.map((link) => (
-            <NavAnchorLink key={link.href} href={link.href} label={link.label} />
+            <HeaderNavLink key={link.href} link={link} />
           ))}
         </nav>
 

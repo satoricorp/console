@@ -63,7 +63,7 @@ export function HeroSection() {
               <GetStartedButton className="h-12 w-full px-12 text-base" />
               <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                 <span className="font-medium text-[var(--footer-link-hover)]">
-                  2 weeks free.
+                  1 week free.
                 </span>{" "}
                 Already have an account?{" "}
                 <SignInLink className="text-zinc-700 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-zinc-950 dark:text-zinc-300 dark:decoration-zinc-700 dark:hover:text-zinc-100" />

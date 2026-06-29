@@ -13,7 +13,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { authClient } from "@/lib/auth-client";
+import { signOutToHome } from "@/lib/auth-client";
 import { DISCORD_URL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
 
 const commandItemClass =
@@ -79,10 +79,8 @@ export function AppCommandPalette() {
 
   const runSignOut = useCallback(async () => {
     setOpen(false);
-    await authClient.signOut();
-    router.replace("/");
-    router.refresh();
-  }, [router]);
+    await signOutToHome();
+  }, []);
 
   useEffect(() => {
     if (!open) return;

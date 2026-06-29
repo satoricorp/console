@@ -17,8 +17,20 @@ export function githubSignInUrl(callbackURL = POST_SIGN_IN_URL) {
   return `${GITHUB_SIGN_IN_URL}?${params.toString()}`;
 }
 
-export const NAV_LINKS = [
+export const DOCS_URL =
+  process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.gx.run";
+
+export const HOW_IT_WORKS_DOCS_URL = `${DOCS_URL}/how-it-works/overview`;
+
+export type NavLink = {
+  label: string;
+  href: string;
+  external?: boolean;
+};
+
+export const NAV_LINKS: NavLink[] = [
   { label: "How it works", href: "/#how-it-works" },
   { label: "Features", href: "/#features" },
   { label: "FAQ", href: "/#faq" },
-] as const;
+  { label: "Documentation", href: DOCS_URL, external: true },
+];

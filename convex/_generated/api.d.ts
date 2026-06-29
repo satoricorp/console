@@ -31,6 +31,7 @@ import type * as lib_gxPrPayload from "../lib/gxPrPayload.js";
 import type * as lib_gxStack from "../lib/gxStack.js";
 import type * as lib_prChat_generateChatResponse from "../lib/prChat/generateChatResponse.js";
 import type * as lib_prChatContext from "../lib/prChatContext.js";
+import type * as lib_trialDays from "../lib/trialDays.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   "lib/gxStack": typeof lib_gxStack;
   "lib/prChat/generateChatResponse": typeof lib_prChat_generateChatResponse;
   "lib/prChatContext": typeof lib_prChatContext;
+  "lib/trialDays": typeof lib_trialDays;
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;

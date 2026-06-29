@@ -24,11 +24,11 @@ const MACOS_PRIVACY_SECURITY_SETTINGS_URL =
 function ChooseRepositoriesLink() {
   return (
     <Link
-      href="/onboarding"
+      href="/community"
       className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700 sm:w-fit dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
     >
       <GitBranch className="h-4 w-4" />
-      Choose Repositories Next
+      Continue
       <ArrowRight className="h-4 w-4" />
     </Link>
   );

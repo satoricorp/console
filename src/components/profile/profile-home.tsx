@@ -2,13 +2,12 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { Mail } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { GitHubIcon } from "@/components/github-icon";
-import { authClient } from "@/lib/auth-client";
+import { signOutToHome } from "@/lib/auth-client";
 
 type Profile = {
   user: {
@@ -65,7 +64,6 @@ function UserAvatar({
 }
 
 function ProfileContent({ profile }: { profile: Profile }) {
-  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const username = firstPresent(
     profile.user.username,
@@ -77,10 +75,8 @@ function ProfileContent({ profile }: { profile: Profile }) {
   async function handleSignOut() {
     setSigningOut(true);
     try {
-      await authClient.signOut();
-      router.replace("/");
-      router.refresh();
-    } finally {
+      await signOutToHome();
+    } catch {
       setSigningOut(false);
     }
   }

@@ -8,12 +8,35 @@ import { getBetterAuthGitHubUserInfo } from "./githubProfile";
 
 const siteUrl = process.env.SITE_URL!;
 
+function trustedOriginsFromRequest(request: Request | undefined): string[] {
+  if (!request) {
+    return [];
+  }
+
+  const host =
+    request.headers.get("x-better-auth-forwarded-host") ??
+    request.headers.get("x-forwarded-host");
+  const proto =
+    request.headers.get("x-better-auth-forwarded-proto") ??
+    request.headers.get("x-forwarded-proto");
+
+  if (!host || !proto) {
+    return [];
+  }
+
+  return [`${proto}://${host}`];
+}
+
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) =>
   betterAuth({
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: siteUrl,
+    trustedOrigins: async (request) => [
+      siteUrl,
+      ...trustedOriginsFromRequest(request),
+    ],
     database: authComponent.adapter(ctx),
     socialProviders: {
       github: {

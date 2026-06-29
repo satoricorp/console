@@ -1,0 +1,50 @@
+---
+title: "Overview"
+description: "GX is the quality layer for agent-written code: capture coding sessions, organize changes into reviewable stacks, and publish richer review context."
+---
+
+GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
+
+The open-source `gx` CLI captures coding sessions, turns messy working-copy changes into ordered revisions and stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add PR summaries and `@gx` chat inside GitHub pull requests.
+
+## Start here
+
+- [Get started](/get-started/overview): install GX, sign in, and publish your first stack.
+- [How it works](/how-it-works/overview): why GX stores more context than Git and why GX says stacks and revisions.
+- [gx](/gx/overview): CLI commands, shortcuts, and the MCP Setup path.
+- [Pull Requests](/github/overview): PR Summaries, `@gx` chat, and paid GitHub review features.
+
+## Core workflow
+
+Most users and agents should start with:
+
+```bash
+gx generate
+gx status
+gx push
+```
+
+The shortcuts are:
+
+```bash
+gxg # gx generate
+gxs # gx status
+gxr # gx review
+```
+
+## Product model
+
+GX uses a few terms consistently:
+
+- **Session**: captured coding context from an agent, editor, or shell.
+- **Revision**: one reviewable logical change, including the code diff and the context that explains how it was produced.
+- **Stack**: an ordered line of revisions that should be reviewed together.
+- **Review bundle**: the published payload that joins code changes, sessions, metadata, and review evidence.
+
+GX still outputs normal Git branches, commits, and pull requests. The GX terms describe the product model before it is exported to Git.
+
+A Git commit is a durable snapshot plus a short message. That is still useful, but it is often too thin for AI-generated work: the commit does not know which agent session produced it, which prompt or shell commands mattered, whether the change was split out of a larger messy workspace, or how it relates to nearby generated work.
+
+A GX revision is the review unit. It can become a Git commit, but it carries richer review context around that commit: session provenance, generated summary, file-level intent, and its position in the stack. Calling it a revision keeps the focus on reviewable evolution of the work, not only on the final Git object.
+
+A Git branch is a pointer in a repository. A GX stack is the product shape of the work: ordered revisions, their dependencies, and the context needed to understand them. GX exports stacks to branches because GitHub and Git still expect branches, but agents and reviewers work better with stacks because they can see the sequence of intent instead of only the final branch state.

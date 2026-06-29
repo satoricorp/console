@@ -1,0 +1,295 @@
+---
+title: "API"
+description: "Call GX Cloud APIs with a GitHub token or CLI session token."
+---
+
+GX Cloud APIs use bearer-token authentication.
+
+For most user-facing integrations, use a GitHub token:
+
+```bash
+gh auth status || gh auth login
+export GITHUB_TOKEN="$(gh auth token)"
+export GX_API_URL="https://api.gx.run"
+```
+
+The `gh auth token` command returns the token from your local GitHub CLI login. If you need to refresh scopes for private repositories, run:
+
+```bash
+gh auth refresh -s read:user -s repo
+export GITHUB_TOKEN="$(gh auth token)"
+```
+
+Attach the token to requests:
+
+```bash
+-H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+GX validates GitHub tokens against the GitHub user API and maps the caller to `github:<id>`. You can optionally add `X-Org-Id: $GX_ORG_ID`; otherwise GX resolves a default org.
+
+## GET /health
+
+Check that the API and database are reachable.
+
+```bash
+curl "$GX_API_URL/health"
+```
+
+## GET /v1/auth/me
+
+Inspect the authenticated user, org, token label, CLI session, and machine when available.
+
+```bash
+curl "$GX_API_URL/v1/auth/me" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+With an explicit org:
+
+```bash
+curl "$GX_API_URL/v1/auth/me" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-Org-Id: $GX_ORG_ID"
+```
+
+## POST /v1/publish
+
+Publish a GX review bundle. This is what `gx push` sends after it has produced Git branches, commits, sessions, and review metadata.
+
+```bash
+curl "$GX_API_URL/v1/publish" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "gx.pr",
+    "created_at": 1760000000000,
+    "gx_version": "0.0.0",
+    "repo": {
+      "root_path": "/repo",
+      "backend": "jj",
+      "remote_url": "https://github.com/org/repo.git"
+    },
+    "push": {
+      "branch_name": "feature/example",
+      "head_commit_id": "abc123",
+      "github_pull_request_url": "https://github.com/org/repo/pull/123"
+    },
+    "stack": [],
+    "sessions": []
+  }'
+```
+
+The server stores the publish event, upserts a bookmark, indexes artifacts when configured, and returns review/bookmark metadata.
+
+## GET /bookmarks
+
+List bookmark metadata for sync and review surfaces.
+
+```bash
+curl "$GX_API_URL/bookmarks?merge_status=open" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+Filter to one repository:
+
+```bash
+curl "$GX_API_URL/bookmarks?repo_full_name=org/repo&merge_status=open" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+## GET /v1/review/context
+
+Fetch review context for a repo/ref range. The response can include rules, collision hints, hunk links, and indexed snippets.
+
+```bash
+curl --get "$GX_API_URL/v1/review/context" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  --data-urlencode "repoRoot=/repo" \
+  --data-urlencode "base=main" \
+  --data-urlencode "head=HEAD"
+```
+
+## POST /v1/summaries/generate
+
+Generate a PR Summary for a bookmark or event.
+
+```bash
+curl "$GX_API_URL/v1/summaries/generate" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bookmarkId":"..."}'
+```
+
+Or generate from an event:
+
+```bash
+curl "$GX_API_URL/v1/summaries/generate" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"eventId":"..."}'
+```
+
+PR Summary and GitHub PR chat features are paid GX Cloud features.
+
+## POST /v1/extracts
+
+Ingest hunk links and push metadata.
+
+```bash
+curl "$GX_API_URL/v1/extracts" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoRoot": "/repo",
+    "refRange": "main..HEAD",
+    "headCommit": "abc123",
+    "gxVersion": "0.0.0",
+    "hunkLinks": [
+      {
+        "hunkID": "src/app.ts:10-20",
+        "file": "src/app.ts",
+        "lineStart": 10,
+        "lineEnd": 20,
+        "tier": 1,
+        "confidence": 0.91,
+        "authorship": "agent",
+        "tool": "codex",
+        "model": "gpt-5"
+      }
+    ]
+  }'
+```
+
+## POST /v1/sessions
+
+Ingest raw captured session content.
+
+```bash
+curl "$GX_API_URL/v1/sessions" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "session-123",
+    "tool": "codex",
+    "model": "gpt-5",
+    "content": "redacted transcript text",
+    "capturedAtMs": 1760000000000
+  }'
+```
+
+## GET /v1/activity
+
+Read recent summaries, sessions, and learned rules.
+
+```bash
+curl "$GX_API_URL/v1/activity?limit=20" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+With pagination:
+
+```bash
+curl "$GX_API_URL/v1/activity?limit=20&cursor=$CURSOR" \
+  -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+## POST /v1/code-review-history/record
+
+Record review findings so future reviews can retrieve previous decisions and patterns.
+
+```bash
+curl "$GX_API_URL/v1/code-review-history/record" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoFullName": "org/repo",
+    "repoRootPath": "/repo",
+    "branchName": "feature/example",
+    "headCommitId": "abc123",
+    "sourceKind": "manual",
+    "prompt": "review auth changes",
+    "summaryText": "Auth review completed",
+    "findings": [
+      {
+        "title": "Missing validation",
+        "summary": "The handler accepts an unchecked token.",
+        "filePath": "src/auth.ts",
+        "lineStart": 42,
+        "severity": "medium",
+        "confidence": 0.8
+      }
+    ]
+  }'
+```
+
+## POST /v1/code-review-history/search
+
+Search prior review findings for a repo.
+
+```bash
+curl "$GX_API_URL/v1/code-review-history/search" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoFullName": "org/repo",
+    "query": "auth validation",
+    "filePaths": ["src/auth.ts"],
+    "limit": 5
+  }'
+```
+
+## POST /v1/reported-logs
+
+Upload reported CLI logs for support.
+
+```bash
+curl "$GX_API_URL/v1/reported-logs" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gx_version": "0.0.0",
+    "os": "darwin",
+    "arch": "arm64",
+    "repo_root": "/repo",
+    "repo_full_name": "org/repo",
+    "error": "publish failed",
+    "logs": [
+      {
+        "path": "publish.log",
+        "content": "redacted log content"
+      }
+    ]
+  }'
+```
+
+## POST /gx/openai/responses
+
+Proxy a valid OpenAI Responses API request through GX Cloud.
+
+```bash
+curl "$GX_API_URL/gx/openai/responses" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5",
+    "instructions": "Be concise.",
+    "input": "Summarize this change."
+  }'
+```
+
+## POST /gx/openai/chat-completions
+
+Proxy a valid OpenAI Chat Completions request through GX Cloud.
+
+```bash
+curl "$GX_API_URL/gx/openai/chat-completions" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [
+      { "role": "user", "content": "Summarize this change." }
+    ]
+  }'
+```

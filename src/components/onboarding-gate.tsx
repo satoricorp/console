@@ -9,7 +9,13 @@ import { authClient } from "@/lib/auth-client";
 const ONBOARDING_PATH = "/onboarding";
 
 /** Routes reachable before repo connect. */
-const ONBOARDING_BYPASS_PATHS = ["/billing", "/download", "/repositories"];
+const ONBOARDING_BYPASS_PATHS = [
+  "/billing",
+  "/community",
+  "/design",
+  "/download",
+  "/repositories",
+];
 
 function bypassesOnboarding(pathname: string) {
   return ONBOARDING_BYPASS_PATHS.some(
@@ -70,7 +76,11 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     router,
   ]);
 
-  if (sessionPending || convexAuthLoading) {
+  if (sessionPending) {
+    return <OnboardingGateFallback />;
+  }
+
+  if (session?.user && convexAuthLoading) {
     return <OnboardingGateFallback />;
   }
 

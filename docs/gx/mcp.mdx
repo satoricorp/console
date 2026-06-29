@@ -1,0 +1,73 @@
+---
+title: "MCP Setup"
+description: "Configure the GX MCP server so coding agents can generate, inspect, review, sync, and push stacks through the local CLI."
+---
+
+The GX MCP server is installed with the CLI. It shells out to your local `gx` binary, so repo state stays on your machine.
+
+## Install GX first
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+gx auth login
+```
+
+The installer places `gx-mcp` next to `gx` in `~/.local/bin`.
+
+## Register the MCP server
+
+The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use.
+
+### Cursor
+
+```bash
+cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Claude Code
+
+```bash
+claude mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Codex CLI and Codex app
+
+For Codex CLI:
+
+```bash
+codex mcp add gx --env GX_BINARY=$HOME/.local/bin/gx -- $HOME/.local/bin/gx-mcp
+```
+
+Codex CLI and the Codex app both read MCP servers from `~/.codex/config.toml`. You can also add the server manually with absolute paths:
+
+```toml
+[mcp_servers.gx]
+command = "/Users/YOU/.local/bin/gx-mcp"
+
+[mcp_servers.gx.env]
+GX_BINARY = "/Users/YOU/.local/bin/gx"
+```
+
+On Linux, use `/home/YOU/.local/bin/gx-mcp` and `/home/YOU/.local/bin/gx`.
+
+### Other MCP clients
+
+Other clients use the same stdio command shape:
+
+```bash
+env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+## Agent workflow
+
+Agents should use GX tools instead of hand-writing Git commands.
+
+| Tool | CLI command | Purpose |
+| --- | --- | --- |
+| `gx_sync` | `gx sync` | Reflect remote GitHub and GX state locally |
+| `gx_generate` | `gx generate --json` | Generate revisions from a session-isolated workspace |
+| `gx_status` | `gx status --json` | Inspect unstaged work, stacks, revisions, and remote state |
+| `gx_push` | `gx push [stack]` | Push generated branches, commits, sessions, and metadata |
+| `gx_review` | `gx review [prompt]` | Review changes using local and cloud context |
+
+The normal flow is `gx_generate`, then `gx_status`, then `gx_push`. Use `gx_sync` first when the agent needs fresh remote state or when a push reports remote divergence.

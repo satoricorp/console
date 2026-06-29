@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   LogOut,
   UserRound,
@@ -17,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { authClient } from "@/lib/auth-client";
+import { signOutToHome } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 export type UserMenuUser = {
@@ -79,7 +78,6 @@ function UserAvatar({
 }
 
 export function UserMenu({ user }: { user: UserMenuUser }) {
-  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const username = firstPresent(user.username, user.displayUsername);
   const displayName = firstPresent(user.name, username, user.email) ?? "User";
@@ -88,10 +86,8 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
   async function handleSignOut() {
     setSigningOut(true);
     try {
-      await authClient.signOut();
-      router.replace("/");
-      router.refresh();
-    } finally {
+      await signOutToHome();
+    } catch {
       setSigningOut(false);
     }
   }

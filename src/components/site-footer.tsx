@@ -47,9 +47,15 @@ export function SiteFooter() {
                 <ul className="space-y-2">
                   {NAV_LINKS.map((link) => (
                     <li key={link.href}>
-                      <Link href={link.href} className={linkClassName}>
-                        {link.label}
-                      </Link>
+                      {link.external ? (
+                        <a href={link.href} className={linkClassName}>
+                          {link.label}
+                        </a>
+                      ) : (
+                        <Link href={link.href} className={linkClassName}>
+                          {link.label}
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>

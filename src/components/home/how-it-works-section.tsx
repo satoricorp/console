@@ -1,4 +1,5 @@
 import { ScrollReveal } from "@/components/scroll-reveal";
+import { HOW_IT_WORKS_DOCS_URL } from "@/lib/site-links";
 
 const STEPS = [
   {
@@ -179,6 +180,12 @@ export function HowItWorksSection() {
             Just like using a linter, use GX to improve quality and verify
             changes without reading your pull requests line by line.
           </p>
+          <a
+            href={HOW_IT_WORKS_DOCS_URL}
+            className="inline-block text-sm text-zinc-700 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-zinc-950 dark:text-zinc-300 dark:decoration-zinc-700 dark:hover:text-zinc-100"
+          >
+            Read how it works in the docs
+          </a>
         </div>
 
         <ol className="flex flex-col gap-20 sm:gap-24">

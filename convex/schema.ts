@@ -41,6 +41,9 @@ export default defineSchema({
     userId: v.string(),
     createdAt: v.number(),
     downloadScreenCompletedAt: v.optional(v.number()),
+    communityScreenCompletedAt: v.optional(v.number()),
+    githubStarBonusClaimedAt: v.optional(v.number()),
+    discordBonusClaimedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
