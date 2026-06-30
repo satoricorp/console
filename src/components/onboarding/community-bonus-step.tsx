@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, CheckCircle2, ExternalLink } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -81,7 +81,6 @@ function BonusCard({
 }
 
 export function CommunityBonusStep() {
-  const router = useRouter();
   const appState = useQuery(api.userAppState.getMyAppState);
   const claimGithubStarBonus = useMutation(api.userAppState.claimGithubStarBonus);
   const claimDiscordBonus = useMutation(api.userAppState.claimDiscordBonus);
@@ -93,9 +92,10 @@ export function CommunityBonusStep() {
   const githubStarBonusDays = appState?.githubStarBonusDays ?? 3;
   const discordBonusDays = appState?.discordBonusDays ?? 3;
 
-  async function continueToRepositories() {
-    await completeCommunityScreen({});
-    router.push("/onboarding");
+  function markCommunityScreenComplete() {
+    void completeCommunityScreen({}).catch((error: unknown) => {
+      console.error("Failed to complete community screen", error);
+    });
   }
 
   if (appState === undefined || appState === null) {
@@ -157,16 +157,14 @@ export function CommunityBonusStep() {
         <p className="max-w-xs text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:mr-auto">
           Bonuses are optional. Continue when you&apos;re ready to connect repos.
         </p>
-        <button
-          type="button"
-          onClick={() => {
-            void continueToRepositories();
-          }}
+        <Link
+          href="/onboarding"
+          onClick={markCommunityScreenComplete}
           className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-none bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           Connect repositories
           <ArrowRight className="h-4 w-4" />
-        </button>
+        </Link>
       </div>
     </div>
   );
