@@ -93,6 +93,13 @@ describeDb("GitHub webhook", () => {
         );
       }
 
+      if (url.includes("/pulls/comments/") && url.endsWith("/replies")) {
+        return new Response(
+          JSON.stringify({ id: 9002, html_url: "https://github.com/acme/gx/pull/17#discussion_r9002" }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       return new Response("not found", { status: 404 });
     }) as unknown as typeof fetch;
 
@@ -352,6 +359,44 @@ describeDb("GitHub webhook", () => {
     `;
     expect(rules[0]?.strength).toBe("binding");
     expect(rules[0]?.rule_text).toContain("use var");
+  });
+
+  test("@gx review comment triggers handler and posts threaded reply", async () => {
+    const reviewCommentId = 55503 + Math.floor(Math.random() * 100000);
+    const res = await postWebhook("pull_request_review_comment", {
+      action: "created",
+      installation: { id: INSTALLATION_ID },
+      repository: { full_name: REPO_FULL_NAME, owner: { login: "acme" } },
+      pull_request: {
+        number: PR_NUMBER,
+        head: { ref: "feat/webhook" },
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER}`,
+      },
+      comment: {
+        id: reviewCommentId,
+        user: { login: "alice" },
+        body: "@gx explain this webhook handler change",
+        path: "server/src/github/webhook.ts",
+        line: 12,
+      },
+    });
+
+    expect(res.status).toBe(200);
+
+    const db = getSql();
+    const comments = await db<{ is_gx_mention: boolean }[]>`
+      SELECT is_gx_mention FROM pr_comments
+      WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
+    `;
+    expect(comments[0]?.is_gx_mention).toBe(true);
+    expect(
+      fetchCalls.some((c) =>
+        c.url.includes(`/pulls/comments/${reviewCommentId}/replies`),
+      ),
+    ).toBe(true);
+    expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(
+      false,
+    );
   });
 
   test("@gx issue comment triggers handler and posts reply", async () => {

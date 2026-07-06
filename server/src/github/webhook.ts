@@ -432,6 +432,11 @@ async function handlePullRequestReviewComment(
   db: postgres.Sql,
   payload: WebhookPayload,
 ) {
+  const action = payload.action ?? "";
+  if (!shouldProcessCommentWebhook(action)) {
+    return;
+  }
+
   const comment = payload.comment;
   const pr = payload.pull_request;
   const repo = payload.repository;
@@ -442,6 +447,9 @@ async function handlePullRequestReviewComment(
     !repo?.full_name ||
     typeof pr?.number !== "number"
   ) {
+    return;
+  }
+  if (isGithubBot(comment.user?.login)) {
     return;
   }
 
@@ -462,6 +470,11 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
+  const action = payload.action ?? "";
+  if (!shouldProcessCommentWebhook(action)) {
+    return;
+  }
+
   const comment = payload.comment;
   const pr = payload.pull_request;
   const repo = payload.repository;
@@ -473,6 +486,9 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     !repo?.full_name ||
     typeof issueNumber !== "number"
   ) {
+    return;
+  }
+  if (isGithubBot(comment.user?.login)) {
     return;
   }
 
@@ -531,6 +547,19 @@ async function ingestLineComment(
 ) {
   const orgId = await resolveOrgIdForInstallation(db, input.installationId);
   if (!orgId) return;
+
+  if (typeof input.comment.id === "number") {
+    const [existing] = await db<{ id: string }[]>`
+      SELECT id
+      FROM pr_comments
+      WHERE org_id = ${orgId}
+        AND github_comment_id = ${input.comment.id}
+      LIMIT 1
+    `;
+    if (existing) {
+      return;
+    }
+  }
 
   const bookmark = await findOrCreateBookmark(db, {
     orgId,
@@ -916,6 +945,16 @@ function parseGitHubTimestamp(value?: string | null): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function shouldProcessCommentWebhook(action: string): boolean {
+  return action === "created" || action === "edited";
+}
+
+function isGithubBot(login?: string | null): boolean {
+  const normalized = (login ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.endsWith("[bot]") || normalized === "gx";
 }
 
 async function distinctIdForWebhook(
