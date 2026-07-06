@@ -63,7 +63,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
 
   const now = Date.now();
   const repoFullName = repoFullNameFromPayload(payload, auth.githubUserLogin);
-  const branchName = payload.push.branch_name ?? payload.repo.branch_name ?? "unknown";
+  const branchName = inferPublishBranchName(payload);
   const githubPrUrl = payload.push.github_pull_request_url ?? null;
   const githubPrNumber = parseGithubPrNumber(githubPrUrl);
   const title = inferBookmarkTitle(payload, branchName);
@@ -149,11 +149,19 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       });
     }
 
-    await postMissingPrSummaryAfterPublish(db, {
-      orgId,
-      userId: auth.userId,
-      bookmark: result.bookmark,
-    });
+    try {
+      await postMissingPrSummaryAfterPublish(db, {
+        orgId,
+        userId: auth.userId,
+        bookmark: result.bookmark,
+      });
+    } catch (error) {
+      console.error("PR Summary after publish failed", {
+        orgId,
+        bookmarkId: result.bookmark.id,
+        error,
+      });
+    }
 
     capturePublishArtifact(payload, result.bookmark, {
       orgId,
@@ -468,6 +476,7 @@ async function upsertBookmark(
     const [existingPrBookmark] = await tx<BookmarkRow[]>`
       UPDATE bookmarks
       SET
+        org_id = ${args.orgId},
         branch_name = ${args.branchName},
         title = COALESCE(bookmarks.title, ${args.title}),
         revision = bookmarks.revision + 1,
@@ -484,7 +493,7 @@ async function upsertBookmark(
           WHEN bookmarks.merge_status = 'closed' THEN NULL
           ELSE bookmarks.merged_at_ms
         END
-      WHERE org_id = ${args.orgId}
+      WHERE user_id = ${args.userId}
         AND repo_full_name = ${args.repoFullName}
         AND github_pr_number = ${args.githubPrNumber}
       RETURNING *
@@ -627,6 +636,27 @@ function repoFullNameFromPayload(payload: PushBundle, githubLogin?: string): str
   }
   const repoName = payload.repo.root_path.split("/").filter(Boolean).at(-1) ?? "repo";
   return `${githubLogin || "unknown"}/${repoName}`;
+}
+
+function inferPublishBranchName(payload: PushBundle): string {
+  const defaultBranch = payload.repo.default_branch?.trim() || "main";
+  const pushBranch = payload.push.branch_name?.trim();
+  const repoBranch = payload.repo.branch_name?.trim();
+
+  for (const entry of payload.stack ?? []) {
+    const stackBranch = entry.branch_name?.trim();
+    if (stackBranch && stackBranch !== defaultBranch) {
+      return stackBranch;
+    }
+  }
+
+  if (pushBranch && pushBranch !== defaultBranch) {
+    return pushBranch;
+  }
+  if (repoBranch && repoBranch !== defaultBranch) {
+    return repoBranch;
+  }
+  return pushBranch || repoBranch || "unknown";
 }
 
 function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
