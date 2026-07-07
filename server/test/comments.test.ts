@@ -74,7 +74,7 @@ describe("GitHub comment helpers", () => {
     );
 
     expect(fetchCalls[0]?.url).toBe(
-      "https://api.github.com/repos/acme/gx/pulls/comments/55501/replies",
+      "https://api.github.com/repos/acme/gx/pulls/17/comments/55501/replies",
     );
     expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
       body: "GX: threaded reply",
