@@ -462,6 +462,7 @@ async function handlePullRequestReviewComment(
     headSha: pr.head?.sha ?? null,
     comment,
     reviewState: null as ClassifyInput["reviewState"],
+    webhookAction: action,
   });
 }
 
@@ -501,6 +502,7 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     headSha: pr?.head?.sha ?? null,
     comment,
     reviewState: null as ClassifyInput["reviewState"],
+    webhookAction: action,
   });
 }
 
@@ -543,20 +545,41 @@ async function ingestLineComment(
     headSha: string | null;
     comment: GitHubComment;
     reviewState: ClassifyInput["reviewState"];
+    webhookAction: string;
   },
 ) {
   const orgId = await resolveOrgIdForInstallation(db, input.installationId);
   if (!orgId) return;
 
+  const body = input.comment.body?.trim() ?? "";
+  const author = input.comment.user?.login ?? "unknown";
+  const isGx = containsGxMention(body);
+
   if (typeof input.comment.id === "number") {
-    const [existing] = await db<{ id: string }[]>`
-      SELECT id
+    const [existing] = await db<{ id: string; bookmark_id: string; author: string }[]>`
+      SELECT id, bookmark_id, author
       FROM pr_comments
       WHERE org_id = ${orgId}
         AND github_comment_id = ${input.comment.id}
       LIMIT 1
     `;
     if (existing) {
+      if (input.webhookAction === "edited" && isGx) {
+        await processGxMention(db, {
+          orgId,
+          bookmarkId: existing.bookmark_id,
+          commentId: existing.id,
+          author: existing.author,
+          body,
+          file: input.comment.path ?? null,
+          line: input.comment.line ?? null,
+          installationId: input.installationId,
+          repoFullName: input.repoFullName,
+          pullNumber: input.pullNumber,
+          githubCommentId: input.comment.id,
+          replyMode: input.comment.path ? "review" : "issue",
+        });
+      }
       return;
     }
   }
@@ -570,9 +593,6 @@ async function ingestLineComment(
     headSha: input.headSha,
   });
 
-  const body = input.comment.body?.trim() ?? "";
-  const author = input.comment.user?.login ?? "unknown";
-  const isGx = containsGxMention(body);
   const now = Date.now();
 
   const [row] = await db<{ id: string }[]>`

@@ -86,14 +86,14 @@ describeDb("GitHub webhook", () => {
         );
       }
 
-      if (url.includes("/pulls/") && url.includes("/comments")) {
+      if (url.includes("/pulls/comments/") && url.endsWith("/replies")) {
         return new Response(
           JSON.stringify({ id: 9002, html_url: "https://github.com/acme/gx/pull/17#discussion_r9002" }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         );
       }
 
-      if (url.includes("/pulls/comments/") && url.endsWith("/replies")) {
+      if (url.match(/\/pulls\/\d+\/comments\/\d+\/replies$/)) {
         return new Response(
           JSON.stringify({ id: 9002, html_url: "https://github.com/acme/gx/pull/17#discussion_r9002" }),
           { status: 201, headers: { "Content-Type": "application/json" } },
@@ -391,7 +391,7 @@ describeDb("GitHub webhook", () => {
     expect(comments[0]?.is_gx_mention).toBe(true);
     expect(
       fetchCalls.some((c) =>
-        c.url.includes(`/pulls/comments/${reviewCommentId}/replies`),
+        c.url.includes(`/pulls/${PR_NUMBER}/comments/${reviewCommentId}/replies`),
       ),
     ).toBe(true);
     expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(

@@ -106,12 +106,12 @@ export async function postIssueComment(
 export async function postPullRequestReviewReply(
   accessToken: string,
   repoFullName: string,
-  _pullNumber: number,
+  pullNumber: number,
   body: string,
   inReplyToCommentId: number,
 ): Promise<PostedComment> {
   const response = await fetch(
-    `https://api.github.com/repos/${repoFullName}/pulls/comments/${inReplyToCommentId}/replies`,
+    `https://api.github.com/repos/${repoFullName}/pulls/${pullNumber}/comments/${inReplyToCommentId}/replies`,
     {
       method: "POST",
       headers: {
