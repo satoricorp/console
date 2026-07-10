@@ -142,3 +142,70 @@ export function headCommitIdFromPayload(payload: unknown): string | null {
 
   return null;
 }
+
+export type RevisionEntry = {
+  changeId: string;
+  commitId?: string;
+  message: string;
+  branchName?: string;
+  baseBranchName?: string;
+  pullRequestUrl?: string;
+  stackIndex: number;
+};
+
+/** Extract per-revision rows from a push bundle's `stack` entries. */
+export function revisionEntriesFromPayload(payload: unknown): RevisionEntry[] {
+  const record = asRecord(payload);
+  if (!record || !Array.isArray(record.stack)) return [];
+
+  const entries: RevisionEntry[] = [];
+  record.stack.forEach((entry, stackIndex) => {
+    const stackEntry = asRecord(entry);
+    if (!stackEntry) return;
+    const change = asRecord(stackEntry.change);
+    if (!change || typeof change.jj_change_id !== "string" || !change.jj_change_id) {
+      return;
+    }
+    entries.push({
+      changeId: change.jj_change_id,
+      commitId:
+        typeof change.current_commit_id === "string" && change.current_commit_id
+          ? change.current_commit_id
+          : undefined,
+      message: typeof change.description === "string" ? change.description : "",
+      branchName:
+        typeof stackEntry.branch_name === "string" && stackEntry.branch_name
+          ? stackEntry.branch_name
+          : undefined,
+      baseBranchName:
+        typeof stackEntry.base_branch_name === "string" && stackEntry.base_branch_name
+          ? stackEntry.base_branch_name
+          : undefined,
+      pullRequestUrl:
+        typeof stackEntry.github_pull_request_url === "string" &&
+        stackEntry.github_pull_request_url.includes("/pull/")
+          ? stackEntry.github_pull_request_url
+          : undefined,
+      stackIndex,
+    });
+  });
+  return entries;
+}
+
+/** Pull one revision's patch text out of a push bundle by change id. */
+export function patchFromPayload(
+  payload: unknown,
+  changeId: string,
+): string | null {
+  const record = asRecord(payload);
+  if (!record || !Array.isArray(record.stack)) return null;
+
+  for (const entry of record.stack) {
+    const stackEntry = asRecord(entry);
+    if (!stackEntry) continue;
+    const change = asRecord(stackEntry.change);
+    if (!change || change.jj_change_id !== changeId) continue;
+    return typeof stackEntry.patch === "string" ? stackEntry.patch : null;
+  }
+  return null;
+}

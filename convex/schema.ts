@@ -98,6 +98,23 @@ export default defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_sessionId", ["sessionId"]),
 
+  gxRevisions: defineTable({
+    userId: v.string(),
+    pushId: v.id("gxPrPushes"),
+    changeId: v.string(),
+    commitId: v.optional(v.string()),
+    repoFullName: v.optional(v.string()),
+    message: v.string(),
+    branchName: v.optional(v.string()),
+    baseBranchName: v.optional(v.string()),
+    pullRequestUrl: v.optional(v.string()),
+    stackIndex: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_changeId", ["changeId"])
+    .index("by_repoFullName", ["repoFullName"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
+
   gxReviewArtifacts: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),

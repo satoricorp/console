@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { DiscordIcon } from "@/components/discord-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { GitHubIcon } from "@/components/github-icon";
@@ -20,7 +21,13 @@ const sectionLabelClassName =
   "text-xs font-medium uppercase tracking-[0.08em] text-zinc-500";
 
 export function SiteFooter() {
+  const pathname = usePathname();
   const { data: session, isPending } = authClient.useSession();
+
+  // Revision evidence pages stand alone — no marketing footer.
+  if (pathname?.startsWith("/r/")) {
+    return null;
+  }
 
   if (isPending || session?.user) {
     return null;

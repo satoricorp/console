@@ -4,9 +4,48 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
-import { repoFullNameFromPayload } from "./lib/gxPrPayload";
+import {
+  repoFullNameFromPayload,
+  revisionEntriesFromPayload,
+} from "./lib/gxPrPayload";
+
+async function insertPushWithRevisions(
+  ctx: MutationCtx,
+  {
+    userId,
+    sessionId,
+    payload,
+  }: { userId: string; sessionId?: string; payload: unknown },
+) {
+  const repoFullName = repoFullNameFromPayload(payload);
+  const createdAt = Date.now();
+  const pushId = await ctx.db.insert("gxPrPushes", {
+    userId,
+    sessionId,
+    repoFullName,
+    payload,
+    createdAt,
+  });
+  for (const entry of revisionEntriesFromPayload(payload)) {
+    await ctx.db.insert("gxRevisions", {
+      userId,
+      pushId,
+      changeId: entry.changeId,
+      commitId: entry.commitId,
+      repoFullName,
+      message: entry.message,
+      branchName: entry.branchName,
+      baseBranchName: entry.baseBranchName,
+      pullRequestUrl: entry.pullRequestUrl,
+      stackIndex: entry.stackIndex,
+      createdAt,
+    });
+  }
+  return pushId;
+}
 
 export const ingestPush = internalMutation({
   args: {
@@ -15,13 +54,7 @@ export const ingestPush = internalMutation({
     payload: v.any(),
   },
   handler: async (ctx, { userId, sessionId, payload }) => {
-    await ctx.db.insert("gxPrPushes", {
-      userId,
-      sessionId,
-      repoFullName: repoFullNameFromPayload(payload),
-      payload,
-      createdAt: Date.now(),
-    });
+    await insertPushWithRevisions(ctx, { userId, sessionId, payload });
   },
 });
 
@@ -38,13 +71,7 @@ export const ingestDevPush = mutation({
     if (!expected || devSecret !== expected) {
       throw new Error("Unauthorized");
     }
-    await ctx.db.insert("gxPrPushes", {
-      userId,
-      sessionId,
-      repoFullName: repoFullNameFromPayload(payload),
-      payload,
-      createdAt: Date.now(),
-    });
+    await insertPushWithRevisions(ctx, { userId, sessionId, payload });
   },
 });
 
