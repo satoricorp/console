@@ -8,7 +8,7 @@ import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
 import { GetStartedButton } from "@/components/get-started-button";
 import { GitHubIcon } from "@/components/github-icon";
-import { GxLogo } from "@/components/gx-logo";
+import { GxWordmark } from "@/components/gx-wordmark";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
 import { NavSeparator } from "@/components/nav-separator";
 import { SignInLink } from "@/components/sign-in-link";
@@ -327,11 +327,11 @@ export function SiteHeader() {
           className={cn(
             "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity] duration-500 ease-out",
             showNavLogo
-              ? "max-w-[8.25rem] opacity-100"
+              ? "max-w-[5rem] opacity-100"
               : "pointer-events-none max-w-0 opacity-0",
           )}
         >
-          <GxLogo variant="header" />
+          <GxWordmark size="nav" className="px-3 sm:px-4" />
         </Link>
 
         <nav
