@@ -9,18 +9,13 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function remap(
-  value: number,
-  inMin: number,
-  inMax: number,
-  outMin = 0,
-  outMax = 1,
-) {
-  if (inMax === inMin) return outMin;
-  return (
-    outMin +
-    ((clamp(value, inMin, inMax) - inMin) / (inMax - inMin)) * (outMax - outMin)
-  );
+/**
+ * Scroll progress as an element's top moves from `fromTop` → `toTop`
+ * (typically high → low as the user scrolls down).
+ */
+function approachProgress(top: number, fromTop: number, toTop: number) {
+  if (fromTop === toTop) return 0;
+  return clamp((fromTop - top) / (fromTop - toTop), 0, 1);
 }
 
 function mixRgb(t: number) {
@@ -36,8 +31,8 @@ type LandingBgFadeProps = {
 
 /**
  * Scroll-linked page background: dark through hero + git→gx,
- * fades to white for How it works, back to black for Features+.
- * Uses the same window scroll + rAF pattern as GitToGxSection (Lenis-friendly).
+ * fades black→white entering How it works, white→black into Features.
+ * Same window scroll + rAF pattern as GitToGxSection (Lenis-friendly).
  */
 export function LandingBgFade({ children }: LandingBgFadeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -46,28 +41,32 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
     const root = rootRef.current;
     if (!root) return;
 
-    const how = () => document.getElementById("how-it-works");
-    const features = () => document.getElementById("features");
-
     let frame = 0;
 
     const update = () => {
       frame = 0;
-      const howEl = how();
-      const featuresEl = features();
+      const howEl = document.getElementById("how-it-works");
+      const featuresEl = document.getElementById("features");
       if (!howEl || !featuresEl) {
         root.style.backgroundColor = mixRgb(0);
         return;
       }
 
       const vh = window.innerHeight;
-      // Enter white as How it works approaches the upper viewport
-      const toWhite = remap(howEl.getBoundingClientRect().top, vh * 0.92, vh * 0.28);
-      // Return to black as Features approaches
-      const toBlack = remap(
+      const fromTop = vh * 0.9;
+      const toTop = vh * 0.3;
+
+      // 0→1 as How it works enters; stays 1 while it fills the viewport
+      const toWhite = approachProgress(
+        howEl.getBoundingClientRect().top,
+        fromTop,
+        toTop,
+      );
+      // 0→1 as Features enters — pulls bg back to black
+      const toBlack = approachProgress(
         featuresEl.getBoundingClientRect().top,
-        vh * 0.92,
-        vh * 0.28,
+        fromTop,
+        toTop,
       );
       const t = toWhite * (1 - toBlack);
       root.style.backgroundColor = mixRgb(t);

@@ -3,17 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-const DESCRIPTION_GIT =
-  "git was built for humans. While it's an incredible tool for traditional development, AI coding tools generate new data that describes 'how' and 'why' changes were made, which is discarded when you commit.";
-
 /** Xer0 "gx" rendered smaller than the surrounding phrase. */
 const GX_SCALE = 0.76;
 /**
  * Bottom-align visible gx ink with commit's letter bottoms.
- * After CSS `bottom: 0` / `items-end`, Xer0 still sits slightly high
- * in its em-box — push down by this amount (ink-sampled).
+ * Positive = down. Viewport max-ink sample vs commit: 0.04em → delta 0.
  */
-const GX_BOTTOM_NUDGE = "0.05em";
+const GX_BOTTOM_NUDGE = "0.04em";
 /** Extra gap so Xer0 sidebearings don't crowd "commit". */
 const GX_GAP_COMPENSATION = "0.04em";
 
@@ -303,7 +299,13 @@ export function GitToGxSection() {
               }}
               aria-hidden={descGitOpacity < 0.5}
             >
-              {DESCRIPTION_GIT}
+              <span className="font-medium text-[var(--footer-link-hover)]">
+                git was built for humans
+              </span>
+              . While it&apos;s an incredible tool for traditional development,
+              AI coding tools generate new data that describes &apos;how&apos;
+              and &apos;why&apos; changes were made, which is discarded when you
+              commit.
             </p>
             <p
               className="absolute inset-x-0 top-0 text-center text-sm leading-6 text-zinc-600 will-change-opacity dark:text-zinc-400 sm:text-base"
