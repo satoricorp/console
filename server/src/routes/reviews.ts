@@ -46,10 +46,16 @@ type BookmarkAccessRow = {
   app_token_count: number | string | null;
 };
 
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function loadAccessibleBookmark(
   bookmarkId: string,
   auth: { userId: string; orgId: string },
 ): Promise<BookmarkAccessRow | null> {
+  if (!uuidPattern.test(bookmarkId)) {
+    return null;
+  }
   const db = getSql();
   const [row] = await db<BookmarkAccessRow[]>`
     SELECT

@@ -17,6 +17,9 @@ Rules:
 - Mention binding rules only when violated
 - Under Provenance, cite GX capture (hunk_links, session_events) when available`;
 
+const maxPatchCharsPerRevision = 3000;
+const maxPatchCharsTotal = 12000;
+
 export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
   const lines: string[] = [
     `Repository root: ${ctx.repoRootPath ?? "unknown"}`,
@@ -30,6 +33,44 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
 
   if (ctx.intentCandidates.length > 0) {
     lines.push(`Intent candidates: ${JSON.stringify(ctx.intentCandidates)}`);
+  }
+
+  const revisions = ctx.publishedRevisions ?? [];
+  if (revisions.length > 0) {
+    lines.push("Published revisions:");
+    let patchBudget = maxPatchCharsTotal;
+    for (const revision of revisions.slice(0, 10)) {
+      const title = revision.description?.split("\n")[0]?.trim() || "(no description)";
+      const branch = revision.branchName ? ` [${revision.branchName}]` : "";
+      lines.push(`- ${title}${branch}`);
+      if (revision.files.length > 0) {
+        lines.push(`  Files: ${revision.files.slice(0, 30).join(", ")}`);
+      }
+      if (revision.patch && patchBudget > 0) {
+        const excerpt = revision.patch.slice(
+          0,
+          Math.min(maxPatchCharsPerRevision, patchBudget),
+        );
+        patchBudget -= excerpt.length;
+        lines.push("  Patch excerpt:");
+        lines.push("```diff");
+        lines.push(excerpt);
+        if (excerpt.length < revision.patch.length) {
+          lines.push("[patch truncated]");
+        }
+        lines.push("```");
+      }
+    }
+  }
+
+  const publishedSessions = ctx.publishedSessions ?? [];
+  if (publishedSessions.length > 0) {
+    lines.push("Captured agent sessions linked to this change:");
+    for (const session of publishedSessions.slice(0, 8)) {
+      lines.push(
+        `- ${session.sessionId || "session"} command=${session.command ?? "?"} requests=${session.requestCount}`,
+      );
+    }
   }
 
   if (ctx.hunkLinks.length > 0) {
