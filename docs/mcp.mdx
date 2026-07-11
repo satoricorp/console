@@ -1,0 +1,90 @@
+---
+title: MCP Setup
+description: Configure the GX MCP server so coding agents can commit, inspect, review, sync, and push stacks through the local CLI.
+---
+
+The GX MCP server is installed with the CLI. It shells out to your local `gx` binary, so repo state stays on your machine.
+
+## Install GX first
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+gx auth login
+```
+
+The installer places `gx-mcp` next to `gx` in `~/.local/bin`.
+
+If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue (using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`).
+
+## Register the MCP server
+
+The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use. `gx init` can also register supported clients for you.
+
+### Cursor
+
+```bash
+cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Claude Code
+
+```bash
+claude mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Codex CLI and Codex app
+
+For Codex CLI:
+
+```bash
+codex mcp add gx --env GX_BINARY=$HOME/.local/bin/gx -- $HOME/.local/bin/gx-mcp
+```
+
+Codex CLI and the Codex app both read MCP servers from `~/.codex/config.toml`. You can also add the server manually with absolute paths:
+
+```toml
+[mcp_servers.gx]
+command = "/Users/YOU/.local/bin/gx-mcp"
+
+[mcp_servers.gx.env]
+GX_BINARY = "/Users/YOU/.local/bin/gx"
+```
+
+On Linux, use `/home/YOU/.local/bin/gx-mcp` and `/home/YOU/.local/bin/gx`.
+
+### Other MCP clients
+
+Other clients use the same stdio command shape:
+
+```bash
+env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+## Tools
+
+| Tool | CLI command | Purpose |
+| --- | --- | --- |
+| `gx_commit` | `gx commit -m "..."` | Record staged Git changes as a GX revision (**default save**) |
+| `gx_status` | `gx status --json` | Inspect unstaged work, features, revisions, and remote state |
+| `gx_push` | `gx push [stack]` | Publish stacks, sessions, and metadata |
+| `gx_sync` | `gx sync` | Reflect remote GitHub and GX state locally |
+| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
+| `gx_review` | `gx review [prompt]` | Review using local and cloud context |
+| `gx_set_base` | `gx base --set <default>` | Return authoring base to the repo default branch |
+
+## Agent workflow
+
+When a user says "save work", "save using gx", or "save with gx", run:
+
+1. Stage with `git add`
+2. `gx_commit`
+3. `gx_status`
+4. `gx_push` for ready stacks (unless they ask to keep work local)
+
+Use `gx_sync` first when remote merges may have landed. Use `gx_generate` only for bulk organization of large working copies.
+
+GX PR summaries are posted for PRs published or adopted through GX push. A PR created only with the GitHub UI will not get a GX summary until that branch is pushed through GX.
+
+### Session workspaces
+
+`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. Pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS`.

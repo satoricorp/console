@@ -108,16 +108,16 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
           <div className="flex items-center gap-3">
             <UserAvatar user={user} displayName={displayName} size="md" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              <p className="truncate text-[13px] font-medium leading-5 text-zinc-900 dark:text-zinc-50">
                 {displayName}
               </p>
               {username ? (
-                <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
+                <p className="truncate text-[13px] leading-5 text-zinc-500 dark:text-zinc-400">
                   @{username}
                 </p>
               ) : null}
               {user.email ? (
-                <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="mt-0.5 truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
                   {user.email}
                 </p>
               ) : null}
@@ -125,7 +125,7 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
           </div>
         </div>
 
-        <DropdownMenuItem asChild className="cursor-pointer gap-2">
+        <DropdownMenuItem asChild className="cursor-pointer gap-2 text-[13px]">
           <Link href="/profile">
             <UserRound className="h-4 w-4" />
             Profile
@@ -133,7 +133,7 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
         </DropdownMenuItem>
 
         {githubUrl ? (
-          <DropdownMenuItem asChild className="cursor-pointer gap-2">
+          <DropdownMenuItem asChild className="cursor-pointer gap-2 text-[13px]">
             <a href={githubUrl} target="_blank" rel="noopener noreferrer">
               <GitHubIcon className="h-4 w-4" />
               View GitHub profile
@@ -149,7 +149,7 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
             event.preventDefault();
             void handleSignOut();
           }}
-          className="cursor-pointer gap-2"
+          className="cursor-pointer gap-2 text-[13px]"
         >
           <LogOut className="h-4 w-4" />
           {signingOut ? "Signing out..." : "Sign out"}

@@ -22,7 +22,7 @@ function requireEnv(name: string) {
   return value;
 }
 
-const FREE_REVIEW_LIMIT = 3;
+const FREE_TRIAL_DAYS = 7;
 
 function assertStripeSignupEnabled() {
   if (process.env.STRIPE_SIGNUP_ENABLED !== "true") {
@@ -166,7 +166,7 @@ export const getBillingDetails = action({
       }
     }
 
-    return { plan, paymentMethod, freeReviewLimit: FREE_REVIEW_LIMIT };
+    return { plan, paymentMethod, freeTrialDays: FREE_TRIAL_DAYS };
   },
 });
 
@@ -185,7 +185,7 @@ export const getStripeElementsConfig = action({
 
     return {
       currency: price.currency,
-      freeReviewLimit: FREE_REVIEW_LIMIT,
+      freeTrialDays: FREE_TRIAL_DAYS,
     };
   },
 });

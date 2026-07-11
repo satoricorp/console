@@ -6,36 +6,124 @@ export type QuotaCheckResult = {
   used: number;
   limit: number;
   upgradeUrl: string;
+  trialEndsAt?: number | null;
+  reason?: string;
 };
 
 export class QuotaExceededError extends Error {
   readonly used: number;
   readonly limit: number;
   readonly upgradeUrl: string;
+  readonly trialEndsAt?: number | null;
 
   constructor(result: QuotaCheckResult) {
-    super(`PR Summary quota exceeded (${result.used}/${result.limit})`);
+    super(
+      result.reason === "trial_expired"
+        ? "GX free trial has ended"
+        : `PR Summary quota exceeded (${result.used}/${result.limit})`,
+    );
     this.name = "QuotaExceededError";
     this.used = result.used;
     this.limit = result.limit;
     this.upgradeUrl = result.upgradeUrl;
+    this.trialEndsAt = result.trialEndsAt;
   }
 }
 
-export const FREE_PR_SUMMARY_LIMIT = 3;
+/** Free trial length when Convex entitlement is unavailable. */
+export const BASE_TRIAL_DAYS = 7;
+export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** Count org-scoped review_usage rows (one per bookmark / PR Summary). */
+type TrialEntitlement = {
+  allowed: boolean;
+  reason?: string;
+  trialDaysTotal?: number | null;
+  trialEndsAt?: number | null;
+  startedAt?: number | null;
+};
+
+function convexSiteURL(): string {
+  return process.env.CONVEX_SITE_URL?.trim() || "";
+}
+
+function looksLikeConvexUserId(userId: string | undefined): userId is string {
+  if (!userId) return false;
+  if (userId === "github-webhook" || userId === "local-user") return false;
+  if (userId.startsWith("github:")) return false;
+  return true;
+}
+
+async function fetchTrialEntitlement(
+  userId: string,
+): Promise<TrialEntitlement | null> {
+  const base = convexSiteURL();
+  const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
+  if (!base || !apiKey) {
+    return null;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${base.replace(/\/+$/, "")}/cx/trial/entitlement`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": "gx-cloud",
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+  } catch {
+    return null;
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return (await response.json()) as TrialEntitlement;
+}
+
+async function orgTrialAllowed(
+  db: postgres.Sql,
+  orgId: string,
+): Promise<{ allowed: boolean; trialEndsAt: number; plan: string }> {
+  const [org] = await db<{ created_at_ms: number | string; plan: string }[]>`
+    SELECT created_at_ms, plan
+    FROM orgs
+    WHERE id = ${orgId}::uuid
+  `;
+
+  if (!org) {
+    return { allowed: false, trialEndsAt: 0, plan: "free" };
+  }
+
+  if (org.plan !== "free") {
+    return {
+      allowed: true,
+      trialEndsAt: Number(org.created_at_ms),
+      plan: org.plan,
+    };
+  }
+
+  const trialEndsAt =
+    Number(org.created_at_ms) + BASE_TRIAL_DAYS * MS_PER_DAY;
+  return {
+    allowed: Date.now() < trialEndsAt,
+    trialEndsAt,
+    plan: org.plan,
+  };
+}
+
+/** Allow unlimited PR Summaries during the free trial window. */
 export async function checkPrSummaryQuota(
   db: postgres.Sql,
   orgId: string,
   bookmarkId?: string,
+  userId?: string,
 ): Promise<QuotaCheckResult> {
-  const [row] = await db<{ count: string }[]>`
-    SELECT COUNT(*)::TEXT AS count
-    FROM review_usage
-    WHERE org_id = ${orgId}
-  `;
-  const used = Number.parseInt(row?.count ?? "0", 10);
+  const upgradeUrl = getUpgradeCheckoutUrl(orgId);
 
   let alreadyCounted = false;
   if (bookmarkId) {
@@ -48,12 +136,59 @@ export async function checkPrSummaryQuota(
     alreadyCounted = existing?.exists ?? false;
   }
 
-  const upgradeUrl = getUpgradeCheckoutUrl(orgId);
+  if (alreadyCounted) {
+    return {
+      allowed: true,
+      used: 0,
+      limit: 0,
+      upgradeUrl,
+      reason: "already_counted",
+    };
+  }
+
+  if (looksLikeConvexUserId(userId)) {
+    const entitlement = await fetchTrialEntitlement(userId);
+    if (entitlement) {
+      if (entitlement.allowed) {
+        return {
+          allowed: true,
+          used: 0,
+          limit: 0,
+          upgradeUrl,
+          trialEndsAt: entitlement.trialEndsAt,
+          reason: entitlement.reason ?? "trial",
+        };
+      }
+      return {
+        allowed: false,
+        used: 0,
+        limit: 0,
+        upgradeUrl,
+        trialEndsAt: entitlement.trialEndsAt,
+        reason: "trial_expired",
+      };
+    }
+  }
+
+  const orgTrial = await orgTrialAllowed(db, orgId);
+  if (orgTrial.allowed) {
+    return {
+      allowed: true,
+      used: 0,
+      limit: 0,
+      upgradeUrl,
+      trialEndsAt: orgTrial.trialEndsAt,
+      reason: orgTrial.plan === "free" ? "org_trial" : "paid_plan",
+    };
+  }
+
   return {
-    allowed: used < FREE_PR_SUMMARY_LIMIT || alreadyCounted,
-    used,
-    limit: FREE_PR_SUMMARY_LIMIT,
+    allowed: false,
+    used: 0,
+    limit: 0,
     upgradeUrl,
+    trialEndsAt: orgTrial.trialEndsAt,
+    reason: "trial_expired",
   };
 }
 
@@ -61,8 +196,9 @@ export async function assertPrSummaryQuota(
   db: postgres.Sql,
   orgId: string,
   bookmarkId?: string,
+  userId?: string,
 ): Promise<QuotaCheckResult> {
-  const result = await checkPrSummaryQuota(db, orgId, bookmarkId);
+  const result = await checkPrSummaryQuota(db, orgId, bookmarkId, userId);
   if (!result.allowed) {
     throw new QuotaExceededError(result);
   }
@@ -94,9 +230,16 @@ export async function recordPrSummaryUsage(
 }
 
 export function upgradeMessage(result: QuotaCheckResult): string {
+  if (result.reason === "trial_expired") {
+    return [
+      "GX free trial has ended for this org.",
+      "Unlimited reviews during your trial week — upgrade to keep going.",
+      `Upgrade: ${result.upgradeUrl}`,
+    ].join("\n");
+  }
+
   return [
     "GX PR Summary quota reached for this org.",
-    `Used ${result.used} of ${result.limit} free PR Summaries.`,
     `Upgrade: ${result.upgradeUrl}`,
   ].join("\n");
 }

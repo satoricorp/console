@@ -36,24 +36,24 @@ function DeviceRow({ device }: { device: CliDevice }) {
     <li className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-950 dark:text-zinc-50">
+          <span className="truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
             {device.machineName}
           </span>
           <span
             className={cn(
-              "inline-flex shrink-0 items-center border px-2 py-0.5 text-xs font-medium capitalize",
+              "inline-flex shrink-0 items-center border px-2 py-0.5 text-[11px] font-medium capitalize leading-4",
               statusClass,
             )}
           >
             {device.status}
           </span>
         </div>
-        <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1 truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
           {device.gxVersion ? `GX ${device.gxVersion}` : "GX version unknown"} ·{" "}
           {device.machineId}
         </p>
       </div>
-      <div className="text-left text-xs text-zinc-500 dark:text-zinc-400 sm:text-right">
+      <div className="text-left text-[11px] leading-4 text-zinc-500 dark:text-zinc-400 sm:text-right">
         <p>Last used {formatDate(device.lastUsedAt)}</p>
         <p>Expires {formatDate(device.expiresAt)}</p>
       </div>
@@ -70,7 +70,7 @@ export function DeviceList() {
 
   if (!isLoading && !isAuthenticated) {
     return (
-      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-[13px] leading-5 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
         <SignInLink className="font-medium text-zinc-950 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:decoration-zinc-700 dark:hover:text-zinc-300" />{" "}
         to view CLI devices.
       </div>
@@ -95,7 +95,7 @@ export function DeviceList() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       {devices.length === 0 ? (
-        <div className="border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+        <div className="border border-zinc-200 px-4 py-8 text-[13px] leading-5 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
           No CLI devices signed in.
         </div>
       ) : (

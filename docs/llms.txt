@@ -1,0 +1,22 @@
+# GX
+
+> GX is the quality layer for agent-written code: capture coding sessions, organize changes into reviewable stacks, and publish richer review context.
+
+## Core workflow
+
+```bash
+git add <files>
+gx commit -m "describe this revision"
+gx status
+git push    # or gx push
+```
+
+## Docs
+
+- [Overview](/docs): Product model — sessions, revisions, stacks, review bundles
+- [Get started](/docs/getting-started): Install, auth, first revision
+- [How it works](/docs/how-it-works): Why GX, stacks vs commits
+- [CLI](/docs/cli): gx commit, status, push, sync, review, set key
+- [MCP Setup](/docs/mcp): gx_commit, gx_status, gx_push, and more
+- [GitHub PRs](/docs/github): PR Summaries and @gx chat (paid / trial)
+- [API](/docs/reference/api): GX Cloud HTTP APIs

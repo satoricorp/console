@@ -74,7 +74,7 @@ FROM review_usage
 GROUP BY org_id;
 ```
 
-Supports the "3 free PR Summaries per org" query shape in WP-5.
+Supports free-trial metering (unlimited PR Summaries during the trial window).
 
 ## `session_events` text retrieval (Option A)
 

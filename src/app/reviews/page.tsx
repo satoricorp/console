@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { api } from "../../../convex/_generated/api";
 import { AppPage } from "@/components/app-page";
+import { ReviewsEmptyState } from "@/components/reviews/reviews-empty-state";
 import { SignInLink } from "@/components/sign-in-link";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { gxApiJson } from "@/lib/gx-api-server";
@@ -50,15 +51,23 @@ export default async function ReviewsPage() {
     bookmarks = null;
   }
 
+  const isEmpty = bookmarks !== null && bookmarks.length === 0;
+
   return (
     <AppPage>
-      <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
+      <div
+        className={`mx-auto flex w-full flex-col gap-4 py-4 ${
+          isEmpty ? "max-w-[860px]" : "max-w-xl"
+        }`}
+      >
         <div className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             Reviews
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            Published changes, most recent first.
+            {isEmpty
+              ? "How GX reviews work — and what you'll see after your first PR."
+              : "Published changes, most recent first."}
           </p>
         </div>
 
@@ -66,12 +75,8 @@ export default async function ReviewsPage() {
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
             Couldn&apos;t load reviews. Try again in a moment.
           </p>
-        ) : bookmarks.length === 0 ? (
-          <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            No reviews yet. Publish a change with{" "}
-            <code className="font-mono text-xs">gx pr</code> and it will show
-            up here.
-          </p>
+        ) : isEmpty ? (
+          <ReviewsEmptyState />
         ) : (
           <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
             {bookmarks.map((bookmark) => (

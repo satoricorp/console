@@ -70,7 +70,7 @@ export function OrgMultiSelect({
           aria-expanded={open}
           aria-label="Filter by organization"
           className={cn(
-            "flex w-full items-center justify-between border-0 bg-zinc-50 px-3 py-2.5 text-left text-sm text-zinc-900 outline-none transition-colors hover:bg-zinc-100/80 dark:bg-zinc-900/50 dark:text-zinc-100 dark:hover:bg-zinc-900",
+            "flex w-full items-center justify-between border-0 bg-zinc-50 px-3 py-2.5 text-left text-[13px] leading-5 text-zinc-900 outline-none transition-colors hover:bg-zinc-100/80 dark:bg-zinc-900/50 dark:text-zinc-100 dark:hover:bg-zinc-900",
             className,
           )}
         >

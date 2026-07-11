@@ -1,35 +1,43 @@
 ---
-title: "Overview"
-description: "GX is the quality layer for agent-written code: capture coding sessions, organize changes into reviewable stacks, and publish richer review context."
+title: Overview
+description: GX is the quality layer for agent-written code — capture coding sessions, organize changes into reviewable stacks, and publish richer review context.
 ---
 
 GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
 
-The open-source `gx` CLI captures coding sessions, turns messy working-copy changes into ordered revisions and stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add PR summaries and `@gx` chat inside GitHub pull requests.
+The open-source `gx` CLI captures coding sessions, turns staged changes into reviewable revisions and stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add PR summaries and `@gx` chat inside GitHub pull requests.
 
 ## Start here
 
-- [Get started](/get-started/overview): install GX, sign in, and publish your first stack.
-- [How it works](/how-it-works/overview): why GX stores more context than Git and why GX says stacks and revisions.
-- [gx](/gx/overview): CLI commands, shortcuts, and the MCP Setup path.
-- [Pull Requests](/github/overview): PR Summaries, `@gx` chat, and paid GitHub review features.
+- [Get started](/docs/getting-started): install GX, sign in, and publish your first revision.
+- [How it works](/docs/how-it-works): why GX stores more context than Git and why GX says stacks and revisions.
+- [CLI](/docs/cli): commands, shortcuts, and the [MCP setup](/docs/mcp) path.
+- [Pull Requests](/docs/github): PR Summaries, `@gx` chat, and paid GitHub review features.
 
 ## Core workflow
 
 Most users and agents should start with:
 
 ```bash
-gx generate
-gx status
-gx push
+git add <files>
+gx commit -m "describe this revision"
+gx status   # gxs
+git push    # or gx push — hook publishes sessions and PR metadata
 ```
 
 The shortcuts are:
 
 ```bash
-gxg # gx generate
 gxs # gx status
 gxr # gx review
+```
+
+For a large messy working copy, use the advanced bulk organizer:
+
+```bash
+gx generate   # hidden from gx --help; organizes into smaller revisions
+gx status
+gx push
 ```
 
 ## Product model
@@ -38,7 +46,7 @@ GX uses a few terms consistently:
 
 - **Session**: captured coding context from an agent, editor, or shell.
 - **Revision**: one reviewable logical change, including the code diff and the context that explains how it was produced.
-- **Stack**: an ordered line of revisions that should be reviewed together.
+- **Stack** (also called a **feature** in status output): an ordered line of revisions that should be reviewed together.
 - **Review bundle**: the published payload that joins code changes, sessions, metadata, and review evidence.
 
 GX still outputs normal Git branches, commits, and pull requests. The GX terms describe the product model before it is exported to Git.

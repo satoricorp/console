@@ -1,0 +1,131 @@
+---
+title: Get started
+description: Install GX and publish your first revision.
+---
+
+Start with GX when you want coding agents to produce reviewable work instead of one large undifferentiated diff.
+
+The usual path is:
+
+1. Install GX.
+2. Sign in with GitHub.
+3. Initialize GX in a repository.
+4. Stage, commit with GX, inspect, and push.
+
+## Install
+
+> Windows is not supported yet.
+
+### macOS
+
+Install the [Mac app](/download) if you want the menu-bar app to manage local setup for you. The app installs or updates the CLI, installs the `gxs` and `gxr` shortcuts, and shows local setup status.
+
+### Linux / CLI-only
+
+Install the CLI directly:
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+```
+
+After installation, verify that `gx` is on your path:
+
+```bash
+gx version
+gx doctor
+```
+
+The CLI installer places `gx`, `gx-mcp`, `gxs`, and `gxr` in `~/.local/bin`.
+
+## Sign in
+
+GX uses GitHub for identity. Cloud sign-in is required to push metadata and use GX code review.
+
+```bash
+gx auth login
+gx auth status
+```
+
+The web app sign-in and CLI sign-in are linked through your GitHub account. After signing in from the CLI, you can see signed-in CLI devices in the web app, including machine name, GX version, last-used time, and session expiry.
+
+Log out with:
+
+```bash
+gx auth logout
+```
+
+## Initialize a repo
+
+Run `gx init` from the repository you want GX to manage.
+
+```bash
+gx init
+```
+
+Initialization:
+
+- Configures local GX identity
+- Installs a Git pre-push hook that captures session data and publishes GX metadata
+- Registers the GX MCP server with supported agents when possible
+- Offers to add GX workflow instructions to `AGENTS.md`
+
+## Set an API key
+
+The open-source CLI can use model credentials for local inference (for example bulk organize with `gx generate`).
+
+Prefer the interactive setup:
+
+```bash
+gx set key
+```
+
+GX looks for an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` first. If none is found, choose a provider and paste a key.
+
+You can also export keys in the environment before running inference-heavy commands:
+
+```bash
+export OPENAI_API_KEY="..."
+export ANTHROPIC_API_KEY="..."
+```
+
+Paid pull request features run through GX Cloud, not these local keys.
+
+## First revision
+
+After making changes:
+
+```bash
+git add <files>                 # or git add -p
+gx commit -m "describe this revision"
+gx status                       # gxs
+git push                        # GX pre-push hook captures sessions and publishes metadata
+```
+
+`git add` chooses the scope. `gx commit` records staged changes as a GX revision (JJ-backed, editable later). `gx status` shows unstaged files, local stacks/features, revisions, and remote state. `git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out.
+
+You can also publish explicitly with:
+
+```bash
+gx push
+```
+
+## Agent workflow
+
+Prefer MCP tools over asking agents to run the CLI directly. The expected save flow is:
+
+1. Stage with `git add`
+2. `gx_commit` — record the revision
+3. `gx_status` — inspect before publish
+4. `gx_push` — publish ready stacks (or `git push` when the hook is enough)
+
+Use `gx_sync` first when remote GitHub or GX state may have moved. Use `gx_generate` only to bulk-organize a large messy working copy.
+
+See [MCP setup](/docs/mcp) for client registration.
+
+## Optional: first-run demo
+
+```bash
+gx demo
+```
+
+Walks through how GX works in an interactive scratch session.

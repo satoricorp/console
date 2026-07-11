@@ -1,0 +1,60 @@
+---
+title: How it works
+description: Understand why using GX can improve your workflow.
+---
+
+Many changes that happen during a coding session are otherwise lost. Those details can help teammates and other agents understand the intent and decisions behind the work. Alongside Git history and other resources, GX gives your team a stronger review system for moving faster while maintaining high-quality software.
+
+## The problem
+
+Git was not built for LLMs. Git works great for humans, where you can attach a message to code changes to review later, but with AI we now have additional artifacts, like session context, that can save work in an organized way and supplement your pull requests.
+
+Many changes that happen during a coding session are otherwise lost. Those details can help teammates and other agents understand the intent and decisions behind the work.
+
+The second problem is that code review is becoming more of a bottleneck. The cost to generate code is quickly dropping to zero, while teams still require developers to review code changes manually, reading line by line.
+
+## The benefits of GX
+
+Alongside Git history and other resources, GX gives your team a stronger review system for moving faster while maintaining high-quality software. GX records your session context (alongside other context resources) to supplement both your git record and context for pull requests.
+
+In any coding session, you might request changes to multiple areas of code, and it can be hard to unravel that work into reasonable commits. Many will yolo commits using their codegen, and while this does save your work, we can leverage VCS systems to help create a database to better understand changes for our codebase indefinitely.
+
+In short, GX saves your coding session and organizes your work by creating [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (think of a hunk like several lines of code vs. storing an entire file in a commit). This context is stored in metadata and is saved using GX.
+
+Because work is saved in hunks with clear descriptions alongside the coding session, we can extract the most important parts of the code changes to review, shortening review time. This removes the bottleneck of code review while providing a reliable system of record.
+
+## What are stacks and revisions?
+
+You are likely used to the git mental model of branches and commits. These work great, but become unwieldy if you need to edit a commit, rebase, or do more involved work.
+
+Think of a revision as analogous to a commit. The main difference is that a revision can easily be edited and updated. A collection of revisions are collected in a stack (status output may also say **feature**). Think of a stack as analogous to a branch, but with metadata.
+
+Stacks allow you to easily stack PRs and organize code changes in a way that improves review.
+
+While GX maintains these artifacts, when you push (via `git push` with the GX hook, or `gx push`), GX publishes branches and commits so your git log stays up to date and you can interface with GitHub.
+
+## Replace your git workflow
+
+Instead of manually creating a branch and commit:
+
+```bash
+git checkout -b feature/my-change
+git add .
+git commit -m "update stuff"
+git push
+```
+
+Start with:
+
+```bash
+git add <files>
+gx commit -m "describe this revision"
+gx status   # alias `gxs`
+git push    # or `gx push`
+```
+
+`gx commit` records staged work as a GX revision. `gx status` shows local stacks and remote state. `git push` (with the GX pre-push hook) or `gx push` publishes code plus session data and metadata to GitHub and GX Cloud.
+
+For a large messy working copy, agents can still run `gx generate` to bulk-organize changes into smaller revisions, then inspect with `gx status` and push when ready.
+
+The recommended way to use GX with agents is through the [MCP](/docs/mcp). That lets you generate and save work from your coding tool without touching the terminal.

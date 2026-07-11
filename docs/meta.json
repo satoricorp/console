@@ -1,0 +1,12 @@
+{
+  "title": "GX",
+  "pages": [
+    "index",
+    "getting-started",
+    "how-it-works",
+    "cli",
+    "mcp",
+    "github",
+    "reference"
+  ]
+}

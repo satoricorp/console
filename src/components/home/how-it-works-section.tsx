@@ -151,8 +151,14 @@ export function HowItWorksSection() {
   return (
     <section
       id="how-it-works"
-      className="border-t border-zinc-200 px-6 py-16 sm:py-24"
+      className="relative border-t border-zinc-200 px-6 py-16 sm:py-24"
     >
+      {/* Marks the section top border for the landing bg white stop. */}
+      <div
+        id="how-it-works-rule"
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-0"
+      />
       <ScrollReveal className="mx-auto w-full max-w-5xl">
         <div className="mb-14 max-w-4xl space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">

@@ -13,7 +13,11 @@
     "infra:cdk": "cd infra && bun run cdk",
     "infra:synth": "cd infra && bun run synth",
     "infra:typecheck": "cd infra && bun run typecheck",
-    "test:server": "cd server && bun test"
+    "test:server": "cd server && bun test",
+    "docs:install": "bun install",
+    "docs:dev": "next dev",
+    "docs:build": "next build",
+    "docs:deploy": "vercel deploy"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.2",
@@ -44,7 +48,11 @@
     "react-dom": "19.2.4",
     "stripe": "^22.1.1",
     "tailwind-merge": "^3.6.0",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "fumadocs-core": "^15.0.0",
+    "fumadocs-mdx": "^11.0.0",
+    "fumadocs-ui": "^15.0.0",
+    "tailwindcss": "^4.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -55,7 +63,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@types/mdx": "^2.0.13"
   },
   "ignoreScripts": [
     "sharp",

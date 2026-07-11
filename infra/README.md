@@ -114,8 +114,13 @@ promotion workflow is `.github/workflows/promote-production.yaml`.
        "GITHUB_APP_PRIVATE_KEY": "...",
        "GITHUB_WEBHOOK_SECRET": "...",
        "OPENAI_API_KEY": "...",
-       "TURBOPUFFER_API_KEY": "..."
+       "TURBOPUFFER_API_KEY": "...",
+       "GX_POSTHOG_KEY": "<gx-staging phc_…>",
+       "GX_POSTHOG_HOST": "https://f.gx.run"
      }'
+
+   For production (`/gx/production/server`), use the production PostHog project
+   token and the same `GX_POSTHOG_HOST`.
    ```
 
 4. Promote the same commit to `production` with the `Promote Production`

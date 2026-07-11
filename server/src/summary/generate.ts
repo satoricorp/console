@@ -356,7 +356,12 @@ export async function generateSummary(
 ): Promise<GenerateSummaryResult> {
   const target = await resolveSummaryTarget(db, input.orgId, input);
   if (!input.skipQuotaCheck) {
-    const quota = await checkPrSummaryQuota(db, input.orgId, target.bookmarkId);
+    const quota = await checkPrSummaryQuota(
+      db,
+      input.orgId,
+      target.bookmarkId,
+      input.userId,
+    );
     if (!quota.allowed) {
       capture(
         Events.SummaryQuotaBlocked,

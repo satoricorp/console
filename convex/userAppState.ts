@@ -1,15 +1,19 @@
+import { v } from "convex/values";
 import {
   internalQuery,
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import {
   BASE_TRIAL_DAYS,
   computeTrialDays,
+  computeTrialEndsAt,
   DISCORD_BONUS_DAYS,
   GITHUB_STAR_BONUS_DAYS,
+  TWITTER_BONUS_DAYS,
 } from "./lib/trialDays";
 
 async function getOrCreateUserAppState(ctx: MutationCtx, userId: string) {
@@ -38,10 +42,11 @@ async function getOrCreateUserAppState(ctx: MutationCtx, userId: string) {
 }
 
 function formatAppState(state: {
-  downloadScreenCompletedAt?: number;
-  communityScreenCompletedAt?: number;
   githubStarBonusClaimedAt?: number;
   discordBonusClaimedAt?: number;
+  twitterBonusClaimedAt?: number;
+  downloadScreenCompletedAt?: number;
+  communityScreenCompletedAt?: number;
   windowsCliRequestedAt?: number;
 }) {
   return {
@@ -51,11 +56,56 @@ function formatAppState(state: {
     communityScreenCompletedAt: state.communityScreenCompletedAt ?? null,
     githubStarBonusClaimed: Boolean(state.githubStarBonusClaimedAt),
     discordBonusClaimed: Boolean(state.discordBonusClaimedAt),
+    twitterBonusClaimed: Boolean(state.twitterBonusClaimedAt),
     windowsCliRequested: Boolean(state.windowsCliRequestedAt),
     baseTrialDays: BASE_TRIAL_DAYS,
     githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
     discordBonusDays: DISCORD_BONUS_DAYS,
+    twitterBonusDays: TWITTER_BONUS_DAYS,
     trialDaysTotal: computeTrialDays(state),
+  };
+}
+
+async function trialEntitlementForUser(ctx: QueryCtx, userId: string) {
+  const user = await authComponent.getAnyUserById(ctx, userId);
+  if (!user) {
+    return null;
+  }
+
+  const subscription = await ctx.db
+    .query("subscriptions")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .order("desc")
+    .first();
+
+  if (
+    subscription &&
+    (subscription.status === "active" || subscription.status === "trialing")
+  ) {
+    return {
+      allowed: true,
+      reason: "subscribed" as const,
+      trialDaysTotal: null,
+      trialEndsAt: null,
+      startedAt: user.createdAt ?? null,
+    };
+  }
+
+  const state = await ctx.db
+    .query("userAppStates")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+
+  const startedAt = user.createdAt ?? state?.createdAt ?? Date.now();
+  const trialDaysTotal = computeTrialDays(state ?? {});
+  const trialEndsAt = computeTrialEndsAt(startedAt, state ?? {});
+
+  return {
+    allowed: Date.now() < trialEndsAt,
+    reason: "trial" as const,
+    trialDaysTotal,
+    trialEndsAt,
+    startedAt,
   };
 }
 
@@ -78,15 +128,24 @@ export const getMyAppState = query({
         communityScreenCompletedAt: null,
         githubStarBonusClaimed: false,
         discordBonusClaimed: false,
+        twitterBonusClaimed: false,
         windowsCliRequested: false,
         baseTrialDays: BASE_TRIAL_DAYS,
         githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
         discordBonusDays: DISCORD_BONUS_DAYS,
+        twitterBonusDays: TWITTER_BONUS_DAYS,
         trialDaysTotal: BASE_TRIAL_DAYS,
       };
     }
 
     return formatAppState(state);
+  },
+});
+
+export const getTrialEntitlement = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    return await trialEntitlementForUser(ctx, userId);
   },
 });
 
@@ -200,6 +259,33 @@ export const claimDiscordBonus = mutation({
 
     await ctx.db.patch(existing._id, {
       discordBonusClaimedAt: now,
+      updatedAt: now,
+    });
+
+    const updated = await ctx.db.get("userAppStates", existing._id);
+    if (!updated) {
+      throw new Error("Could not update app state");
+    }
+
+    return formatAppState(updated);
+  },
+});
+
+export const claimTwitterBonus = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Sign in to continue");
+
+    const now = Date.now();
+    const existing = await getOrCreateUserAppState(ctx, user._id);
+
+    if (existing.twitterBonusClaimedAt) {
+      return formatAppState(existing);
+    }
+
+    await ctx.db.patch(existing._id, {
+      twitterBonusClaimedAt: now,
       updatedAt: now,
     });
 

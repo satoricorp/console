@@ -149,6 +149,45 @@ http.route({
 });
 
 http.route({
+  path: "/cx/trial/entitlement",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const expected = process.env.GX_CLOUD_API_KEY?.trim();
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+
+    if (!expected || token !== expected) {
+      return jsonError("Unauthorized", 401);
+    }
+
+    let body: { user_id?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return jsonError("Invalid JSON", 400);
+    }
+
+    const userId = body.user_id?.trim();
+    if (!userId) {
+      return jsonError("Missing user_id", 400);
+    }
+
+    const entitlement = await ctx.runQuery(
+      internal.userAppState.getTrialEntitlement,
+      { userId },
+    );
+
+    if (!entitlement) {
+      return Response.json({ allowed: false, reason: "unknown_user" });
+    }
+
+    return Response.json(entitlement);
+  }),
+});
+
+http.route({
   path: "/cx/auth/desktop/start",
   method: "POST",
   handler: httpAction(async (_ctx, request) => {

@@ -90,7 +90,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
             <h1 className="truncate text-3xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               {displayName}
             </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
               {username ? (
                 <span className="inline-flex min-w-0 items-center gap-1.5">
                   <GitHubIcon className="h-4 w-4 shrink-0" />
@@ -108,7 +108,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
         </div>
       </section>
 
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         {profile.connectedRepoCount} connected{" "}
         {profile.connectedRepoCount === 1 ? "repository" : "repositories"}.
       </p>
@@ -118,7 +118,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
           type="button"
           disabled={signingOut}
           onClick={() => void handleSignOut()}
-          className="inline-flex items-center justify-center border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+          className="inline-flex items-center justify-center border border-zinc-300 px-4 py-2 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
         >
           {signingOut ? "Signing out..." : "Sign out"}
         </button>
@@ -152,7 +152,7 @@ export function ProfileHome() {
 
   if (!profile) {
     return (
-      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-[13px] leading-5 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
         Sign in to view your profile.
       </div>
     );

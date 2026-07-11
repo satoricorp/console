@@ -44,6 +44,7 @@ export default defineSchema({
     communityScreenCompletedAt: v.optional(v.number()),
     githubStarBonusClaimedAt: v.optional(v.number()),
     discordBonusClaimedAt: v.optional(v.number()),
+    twitterBonusClaimedAt: v.optional(v.number()),
     windowsCliRequestedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),

@@ -15,9 +15,9 @@ type LandingBgFadeProps = {
 };
 
 /**
- * Document-space vertical gradient: black→white bridges into How it works.
- * White holds through How it works, then hard-cuts to black at Features
- * (no bottom wipe).
+ * Document-space vertical gradient: black→white starts before How it works
+ * and is fully white by `#how-it-works-rule` (the section’s top border).
+ * White holds through How it works, then hard-cuts to black at Features.
  */
 export function LandingBgFade({ children }: LandingBgFadeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -33,6 +33,7 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
     const paint = () => {
       frame = 0;
       const howEl = document.getElementById("how-it-works");
+      const ruleEl = document.getElementById("how-it-works-rule");
       const featuresEl = document.getElementById("features");
       const height = root.offsetHeight;
       bg.style.height = `${height}px`;
@@ -47,17 +48,17 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
         el.getBoundingClientRect().top + window.scrollY - rootTop;
       const vh = window.innerHeight;
 
-      const howTop = docY(howEl);
+      // Separator = section top border; marker sits at that edge.
+      const ruleTop = ruleEl ? docY(ruleEl) : docY(howEl);
       const featTop = docY(featuresEl);
 
-      // Soft band only at the top seam into How it works.
+      // Fade starts before the rule; fully white at the rule (not after).
       const softIn = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
 
       const toPct = (y: number) => `${clamp((y / height) * 100, 0, 100)}%`;
 
-      const blackHold = toPct(howTop - softIn);
-      const whiteStart = toPct(howTop + softIn * 0.4);
-      // Hard cut to black at Features — no white→black wipe.
+      const blackHold = toPct(ruleTop - softIn);
+      const whiteStart = toPct(ruleTop);
       const whiteEnd = toPct(featTop);
 
       bg.style.background = [
@@ -82,10 +83,10 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
 
     const ro = new ResizeObserver(schedule);
     ro.observe(root);
-    const howEl = document.getElementById("how-it-works");
-    const featuresEl = document.getElementById("features");
-    if (howEl) ro.observe(howEl);
-    if (featuresEl) ro.observe(featuresEl);
+    for (const id of ["how-it-works", "how-it-works-rule", "features"]) {
+      const el = document.getElementById(id);
+      if (el) ro.observe(el);
+    }
 
     let lenis: Lenis | undefined;
     let tries = 0;

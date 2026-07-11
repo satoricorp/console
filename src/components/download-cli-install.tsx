@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Check, GitBranch } from "lucide-react";
+import { ArrowRight, ArrowUpRight, GitBranch } from "lucide-react";
 import { useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -10,6 +10,19 @@ import { CLI_INSTALL_COMMAND } from "@/lib/gx-download";
 import { githubSignInUrl } from "@/lib/site-links";
 
 const AUTH_LOGIN_COMMAND = "gx auth login";
+
+function WindowsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M0 2.275 6.545.75v6.182H0zm7.273-.455L16 0v6.932H7.273zM0 8.91h6.545v6.34L0 13.91zm7.273.113H16V16l-8.727-1.227z" />
+    </svg>
+  );
+}
 
 function WindowsRequest() {
   const { isAuthenticated } = useConvexAuth();
@@ -21,17 +34,20 @@ function WindowsRequest() {
 
   if (requested) {
     return (
-      <p className="flex items-center gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
-        <Check className="h-3 w-3 shrink-0" />
-        Windows build requested — we&apos;ll contact you once it&apos;s live.
+      <p className="text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
+        We&apos;ll reach out to you once we have a live Windows build
       </p>
     );
   }
 
+  const buttonClassName =
+    "group inline-flex cursor-pointer items-center gap-1.5 border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-950 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100";
+
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-      <p className="text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
-        On Windows, run it inside WSL.
+    <div className="flex flex-col items-start gap-2">
+      <p className="flex items-center gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
+        <WindowsIcon className="h-3 w-3 shrink-0 text-zinc-950 dark:text-white" />
+        Run GX inside WSL (for Windows).
       </p>
       {isAuthenticated ? (
         <button
@@ -40,21 +56,17 @@ function WindowsRequest() {
             setRequestedNow(true);
             void requestWindowsCli({});
           }}
-          className="cursor-pointer border border-zinc-200 px-2 py-0.5 text-[11px] font-medium text-zinc-950 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-50 dark:hover:border-zinc-600"
+          className={buttonClassName}
         >
-          Request a native Windows build
+          Click to request a native Windows build
+          <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </button>
       ) : (
-        <a
-          href={githubSignInUrl("/download")}
-          className="border border-zinc-200 px-2 py-0.5 text-[11px] font-medium text-zinc-950 transition-colors hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-50 dark:hover:border-zinc-600"
-        >
-          Sign in to request a native Windows build
+        <a href={githubSignInUrl("/download")} className={buttonClassName}>
+          Click to request a native Windows build
+          <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </a>
       )}
-      <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-        We&apos;ll contact you once it&apos;s live.
-      </p>
     </div>
   );
 }
@@ -85,14 +97,7 @@ export function DownloadCliInstall() {
         <WindowsRequest />
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Link
-          href="/reviews"
-          className="group inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-none bg-zinc-900 px-6 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
-          Go to Reviews
-          <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-        </Link>
+      <div className="flex justify-end">
         {installCommandCopied ? (
           <Link
             href="/community"
@@ -102,7 +107,16 @@ export function DownloadCliInstall() {
             Continue
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
-        ) : null}
+        ) : (
+          <span
+            aria-disabled="true"
+            className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-none bg-zinc-200 px-3.5 py-2 text-[13px] font-medium text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Continue
+            <ArrowRight className="h-3.5 w-3.5" />
+          </span>
+        )}
       </div>
     </div>
   );

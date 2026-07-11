@@ -46,7 +46,7 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
     <li className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate text-sm font-medium text-zinc-950 dark:text-zinc-50">
+          <span className="min-w-0 truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
             {repo.fullName}
           </span>
           {repo.private ? (
@@ -55,7 +55,7 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
             <Unlock className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
           )}
         </div>
-        <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-1 truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
           {repo.defaultBranch
             ? `${repo.defaultBranch} branch`
             : "Default branch unavailable"}
@@ -63,7 +63,7 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
       </div>
       <span
         className={cn(
-          "inline-flex w-fit shrink-0 items-center border px-2 py-1 text-xs font-medium capitalize",
+          "inline-flex w-fit shrink-0 items-center border px-2 py-1 text-[11px] font-medium capitalize leading-4",
           statusClass(repo.indexStatus),
         )}
       >
@@ -91,7 +91,7 @@ export function RepositoryIndexList() {
 
   if (!isLoading && !isAuthenticated) {
     return (
-      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+      <div className="mx-auto w-full max-w-2xl border border-zinc-200 px-4 py-8 text-[13px] leading-5 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
         <SignInLink className="font-medium text-zinc-950 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-700 dark:text-zinc-100 dark:decoration-zinc-700 dark:hover:text-zinc-300" />{" "}
         to view indexed repositories.
       </div>
@@ -117,7 +117,7 @@ export function RepositoryIndexList() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       {repos.length === 0 ? (
-        <div className="border border-zinc-200 px-4 py-8 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+        <div className="border border-zinc-200 px-4 py-8 text-[13px] leading-5 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
           No repositories indexed yet.
         </div>
       ) : (
@@ -130,7 +130,7 @@ export function RepositoryIndexList() {
 
           {showPagination ? (
             <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
                 Page {currentPage} of {pageCount}
               </p>
               <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ export function RepositoryIndexList() {
       <div className="flex justify-end">
         <Link
           href="/onboarding"
-          className="inline-flex items-center justify-center gap-2 border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
+          className="inline-flex items-center justify-center gap-2 border border-zinc-300 px-4 py-2 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
         >
           <GitBranch className="h-4 w-4" />
           Add repositories

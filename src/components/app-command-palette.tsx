@@ -137,6 +137,9 @@ export function AppCommandPalette() {
               wrapperClassName="border-zinc-800 px-4"
               className="text-zinc-50 placeholder:text-zinc-500"
             />
+            <p className="border-b border-zinc-800 px-4 py-2 font-mono text-[11px] text-zinc-500">
+              j/k to navigate · Enter to select
+            </p>
             <CommandList>
               <CommandEmpty>No command found.</CommandEmpty>
               <CommandGroup heading="Workspace" className="text-zinc-50">

@@ -4,7 +4,18 @@ import { CommunityBonusStep } from "@/components/onboarding/community-bonus-step
 export default function CommunityPage() {
   return (
     <AppPage>
-      <CommunityBonusStep />
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
+        <div className="space-y-1">
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+            Community
+          </h1>
+          <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+            Star the repo, join Discord, or follow @jlchnc for +2 days each.
+          </p>
+        </div>
+
+        <CommunityBonusStep />
+      </div>
     </AppPage>
   );
 }

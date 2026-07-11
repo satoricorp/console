@@ -144,7 +144,7 @@ export function ConnectReposStep({
     setError(null);
     try {
       await connectRepos({ repos: reposToConnect });
-      router.push("/repositories");
+      router.push("/reviews");
     } catch (connectError) {
       setError(
         connectError instanceof Error
@@ -159,7 +159,7 @@ export function ConnectReposStep({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div className="space-y-2 text-left">
-        <p className="text-sm font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           {eyebrow}
         </p>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -184,13 +184,13 @@ export function ConnectReposStep({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search repositories"
-            className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100"
+            className="w-full bg-transparent text-[13px] leading-5 text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100"
           />
         </div>
       </div>
 
       {error ? (
-        <p className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <p className="border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-5 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </p>
       ) : null}
@@ -206,7 +206,7 @@ export function ConnectReposStep({
             ))}
           </div>
         ) : filteredRepos.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="px-4 py-8 text-center text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
             {search || orgFilter.size > 0
               ? "No repositories match your filters."
               : "No repositories found on your GitHub account."}
@@ -234,7 +234,7 @@ export function ConnectReposStep({
                         : ""
                     }`}
                   >
-                    <p className="min-w-0 flex-1 truncate text-sm">
+                    <p className="min-w-0 flex-1 truncate text-[13px] leading-5">
                       <span className="text-zinc-500 dark:text-zinc-400">
                         {repo.owner}
                       </span>
@@ -248,7 +248,7 @@ export function ConnectReposStep({
                     </p>
                     <RepoVisibilityIcon isPrivate={repo.private} />
                     {isConnected ? (
-                      <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                      <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium leading-4 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                         Connected
                       </span>
                     ) : null}
@@ -261,7 +261,7 @@ export function ConnectReposStep({
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
           {selectedCount === 0
             ? "Select at least one repository to continue."
             : `${selectedCount} selected${connectedFullNames.size > 0 ? ` · ${connectedFullNames.size} already connected` : ""}`}
@@ -269,8 +269,8 @@ export function ConnectReposStep({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {canSkip ? (
             <Link
-              href="/repositories"
-              className="inline-flex items-center justify-center py-2.5 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+              href="/reviews"
+              className="inline-flex items-center justify-center py-2.5 text-[13px] font-medium text-zinc-500 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
             >
               Skip
             </Link>

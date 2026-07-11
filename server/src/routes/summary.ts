@@ -44,6 +44,7 @@ summaryRoutes.post("/v1/summaries/generate", async (c) => {
           used: err.used,
           limit: err.limit,
           upgradeUrl: err.upgradeUrl,
+          trialEndsAt: err.trialEndsAt ?? null,
         },
         402,
       );

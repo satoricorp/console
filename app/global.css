@@ -1,0 +1,14 @@
+@import "fumadocs-ui/style.css";
+
+.topo-docs-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topo-docs-brand-logo {
+  width: 8rem;
+  height: auto;
+  max-height: 2rem;
+  object-fit: contain;
+}

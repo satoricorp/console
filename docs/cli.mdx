@@ -1,0 +1,171 @@
+---
+title: CLI
+description: Use the open-source gx CLI to record revisions, inspect status, review changes, and publish normal Git output.
+---
+
+`gx` is the local CLI. It is open source and runs on your machine. It adds a quality and workflow layer around your existing repo instead of replacing GitHub.
+
+GX still produces ordinary Git branches and commits as output. The difference is that GX models the work first as reviewable revisions inside ordered stacks, with captured session context attached.
+
+## Core loop
+
+```bash
+git add <files>
+gx commit -m "describe this revision"
+gx status
+git push    # GX pre-push hook captures sessions and publishes metadata
+```
+
+Or publish explicitly with `gx push` instead of `git push`.
+
+## gx init
+
+```bash
+gx init
+```
+
+Prepares the current repository for GX. It configures local identity, installs a Git pre-push hook, registers the MCP server when possible, and can offer to update `AGENTS.md`.
+
+Run it once per repository.
+
+## gx commit
+
+```bash
+git add <files>    # or git add -p
+gx commit -m "describe this revision"
+```
+
+Records **staged** Git changes as a GX revision. Like `git commit`, the revision lands on the current branch. Pass `-b` to create and switch to a new branch first.
+
+Exit codes: `0` success, `1` usage error, `2` no staged changes.
+
+Useful flags:
+
+```bash
+gx commit -m "message" --json
+gx commit -m "message" -b feature/new-branch
+gx commit -m "message" --context-file provenance.json
+```
+
+## gx status
+
+```bash
+gx status
+```
+
+Shows unstaged changes, local stacks/features, revisions, and remote sync status.
+
+```bash
+gx status --json
+gx status --all
+gx status list          # non-merged GX features
+```
+
+Alias: `gxs`.
+
+## gx push
+
+```bash
+gx push
+gx push --all           # every accepted stack
+```
+
+Publishes stacks: normal Git branches and commits, linked sessions, and review metadata. Prints GitHub/Review URLs when available.
+
+With the pre-push hook from `gx init`, plain `git push` also triggers capture and cloud publish for the pushed refs.
+
+## gx sync
+
+```bash
+gx sync
+```
+
+Fetches remote Git and GX state before committing or pushing. Use it when GitHub moved, a branch was merged, or push reports remote divergence.
+
+## gx review
+
+```bash
+gx review
+gx review "check auth rollback risks"
+```
+
+Reviews local changes using codebase context, captured sessions, review resources, and optional prompt guidance.
+
+Alias: `gxr`.
+
+## gx set key
+
+```bash
+gx set key
+```
+
+Stores the API key GX uses for local inference. GX prefers an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` when present.
+
+## gx auth
+
+```bash
+gx auth login
+gx auth status
+gx auth logout
+```
+
+Signs the CLI into GX Cloud through GitHub and shows or clears the current auth state.
+
+## gx doctor
+
+```bash
+gx doctor
+gx doctor --fix
+```
+
+Checks local GX setup and workflow state. `--fix` applies safe repairs.
+
+## gx version
+
+```bash
+gx version
+gx version --json
+```
+
+## gx demo
+
+```bash
+gx demo
+```
+
+Interactive first-run walkthrough.
+
+## Shortcuts
+
+The CLI installer installs:
+
+```bash
+gxs # gx status
+gxr # gx review
+```
+
+They are symlinks to the same `gx` binary.
+
+## Bulk organize (advanced)
+
+`gx generate` is hidden from `gx --help`. Use it when you want GX to organize a large working copy into smaller revisions automatically:
+
+```bash
+gx generate
+gx status
+gx push
+```
+
+For most day-to-day work, prefer `git add` + `gx commit`.
+
+## Diagnostics (advanced)
+
+Hidden utility commands for capture and support:
+
+```bash
+gx report
+gx capture sync
+gx ops diagnose doctor
+```
+
+Prefer the public `gx doctor` and `gx report` unless you need the deeper ops surface.
