@@ -164,6 +164,9 @@ export class GxServerStack extends Stack {
             PGDATABASE: "gx",
             PGSSLMODE: "require",
             PORT: String(containerPort),
+            ...(props.environmentName === "production"
+              ? { GX_SITE_URL: "https://gx.run" }
+              : {}),
           },
           secrets: {
             PGHOST: ecs.Secret.fromSecretsManager(database.secret!, "host"),
@@ -197,6 +200,21 @@ export class GxServerStack extends Stack {
             TURBOPUFFER_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
               "TURBOPUFFER_API_KEY",
+            ),
+            GX_POSTHOG_KEY: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GX_POSTHOG_KEY",
+            ),
+            GX_POSTHOG_HOST: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GX_POSTHOG_HOST",
+            ),
+            // Same key as OPENAI_API_KEY: createLLMProvider prefers Bedrock
+            // whenever AWS creds exist unless GX_OPENAI_API_KEY is set, and
+            // Bedrock invokes currently fail in this account.
+            GX_OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "OPENAI_API_KEY",
             ),
           },
           logDriver: ecs.LogDrivers.awsLogs({
