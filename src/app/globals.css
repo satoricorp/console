@@ -112,6 +112,7 @@
   animation: scroll-bounce 1.6s ease-in-out infinite;
 }
 
+/* works-with carousel marquee (hero) */
 @keyframes works-with-marquee {
   from {
     transform: translateX(0);
@@ -138,6 +139,12 @@
     #000 calc(100% - 1.25rem),
     transparent
   );
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.works-with-mask::-webkit-scrollbar {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -150,7 +157,6 @@
   }
 
   .works-with-mask {
-    overflow-x: auto;
     mask-image: none;
   }
 }

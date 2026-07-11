@@ -1,3 +1,5 @@
+"use client";
+
 type Tool = {
   name: string;
   slug: string;
@@ -62,6 +64,10 @@ function ToolList({ ariaHidden }: { ariaHidden?: boolean }) {
   );
 }
 
+/**
+ * Horizontal marquee of tools. Styles live in globals.css (.works-with-*).
+ * Overflow-x auto + Lenis prevent() lets trackpad/wheel scrub the strip.
+ */
 export function WorksWithCarousel() {
   return (
     <div className="shrink-0 border-t border-zinc-200/80 dark:border-zinc-800/80">
@@ -71,7 +77,7 @@ export function WorksWithCarousel() {
         </p>
 
         <div
-          className="works-with-mask min-w-0 flex-1 overflow-hidden"
+          className="works-with-mask min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
           role="region"
           aria-label="Coding agents and tools GX works with"
         >
