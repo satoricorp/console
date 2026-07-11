@@ -15,11 +15,9 @@ type LandingBgFadeProps = {
 };
 
 /**
- * Document-space vertical gradient behind the landing.
- *
- * `#landing-fade-in` / `#landing-fade-out` are 2×viewport spacers:
- * - first vh: color wipe (black→white / white→black) fills the screen
- * - second vh: solid hold, then section content (How it works / Features)
+ * Document-space vertical gradient that bridges section seams:
+ * black→white spans into How it works; white→black spans into Features.
+ * No separate spacer zones — stops are tied to section tops.
  */
 export function LandingBgFade({ children }: LandingBgFadeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -34,8 +32,6 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
 
     const paint = () => {
       frame = 0;
-      const fadeInEl = document.getElementById("landing-fade-in");
-      const fadeOutEl = document.getElementById("landing-fade-out");
       const howEl = document.getElementById("how-it-works");
       const featuresEl = document.getElementById("features");
       const height = root.offsetHeight;
@@ -51,29 +47,21 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
         el.getBoundingClientRect().top + window.scrollY - rootTop;
       const vh = window.innerHeight;
 
-      // Spacers are 2×vh: wipe across the first vh, solid hold across the second,
-      // then section content. Fall back to 2×vh before the section if markers missing.
-      const fadeInTop = fadeInEl
-        ? docY(fadeInEl)
-        : docY(howEl) - vh * 2;
       const howTop = docY(howEl);
-      const fadeOutTop = fadeOutEl
-        ? docY(fadeOutEl)
-        : docY(featuresEl) - vh * 2;
       const featTop = docY(featuresEl);
 
-      // Wipe completes one viewport before content (midpoint of each 2×vh spacer).
-      const whiteComplete = fadeInEl ? fadeInTop + vh : howTop - vh;
-      const blackComplete = fadeOutEl ? fadeOutTop + vh : featTop - vh;
+      // Soft band ~½–⅔ viewport centered on each seam so the wipe
+      // overlaps the previous section and the incoming section.
+      const softIn = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
+      const softOut = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
 
       const toPct = (y: number) => `${clamp((y / height) * 100, 0, 100)}%`;
 
-      // black → wipe to white (done before how) → white hold →
-      // wipe to black (done before features) → black
-      const blackHold = toPct(fadeInTop);
-      const whiteStart = toPct(whiteComplete);
-      const whiteHold = toPct(fadeOutTop);
-      const blackReturn = toPct(blackComplete);
+      // black … [seam into how] … white … [seam into features] … black
+      const blackHold = toPct(howTop - softIn);
+      const whiteStart = toPct(howTop + softIn * 0.4);
+      const whiteHold = toPct(featTop - softOut * 0.4);
+      const blackReturn = toPct(featTop + softOut);
 
       bg.style.background = [
         "linear-gradient(to bottom,",
@@ -97,15 +85,10 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
 
     const ro = new ResizeObserver(schedule);
     ro.observe(root);
-    for (const id of [
-      "landing-fade-in",
-      "landing-fade-out",
-      "how-it-works",
-      "features",
-    ]) {
-      const el = document.getElementById(id);
-      if (el) ro.observe(el);
-    }
+    const howEl = document.getElementById("how-it-works");
+    const featuresEl = document.getElementById("features");
+    if (howEl) ro.observe(howEl);
+    if (featuresEl) ro.observe(featuresEl);
 
     let lenis: Lenis | undefined;
     let tries = 0;

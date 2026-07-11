@@ -315,6 +315,55 @@ describe("gx mention citations", () => {
     expect(prompt).toContain("Latest PR summary (orientation only; cite Available sources for factual claims)");
   });
 
+  test("denies rule veto from the webhook path when the author lacks write access", async () => {
+    const sqlCalls: string[] = [];
+    const db = (async (strings: TemplateStringsArray) => {
+      sqlCalls.push(strings.join(" "));
+      return [];
+    }) as unknown as postgres.Sql;
+    const originalFetch = globalThis.fetch;
+    const originalConsoleInfo = console.info;
+    console.info = () => {};
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/collaborators/")) {
+        return new Response(JSON.stringify({ permission: "read" }), {
+          status: 200,
+        });
+      }
+      if (url.includes("/app/installations/")) {
+        return new Response(JSON.stringify({ token: "test-token" }), {
+          status: 201,
+        });
+      }
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const result = await handleGxMention(db, {
+        orgId: "org",
+        bookmarkId: "bookmark",
+        commentId: "comment",
+        author: "driveby",
+        body: "@gx please skip rule never use var",
+        github: {
+          installationId: 123,
+          repoFullName: "acme/repo",
+          pullNumber: 7,
+        },
+      });
+
+      expect(result.reply).toBe(
+        "GX: only collaborators with write access can retire rules.",
+      );
+      expect(result.retiredRuleIds).toEqual([]);
+      expect(sqlCalls.some((sql) => sql.includes("UPDATE rules"))).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.info = originalConsoleInfo;
+    }
+  });
+
   test("keeps veto flow ahead of citation chat generation", async () => {
     const sqlCalls: string[] = [];
     const db = (async (strings: TemplateStringsArray) => {

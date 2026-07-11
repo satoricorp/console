@@ -21,6 +21,11 @@ export function LandingLenis({ children }: LandingLenisProps) {
       lerp: 0.1,
       smoothWheel: true,
       syncTouch: false,
+      // Let overflow-x regions (works-with strip) receive horizontal wheel/trackpad.
+      allowNestedScroll: true,
+      prevent: (node) =>
+        node.classList.contains("works-with-mask") ||
+        Boolean(node.closest(".works-with-mask")),
     });
     // Expose so LandingBgFade (and local QA) can subscribe to Lenis scroll.
     (window as Window & { __lenis?: Lenis }).__lenis = lenis;

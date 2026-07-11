@@ -7,7 +7,7 @@ import { checkPrSummaryQuota, upgradeMessage } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
-import { createMockProvider } from "../llm/provider";
+import { createLLMProvider } from "../llm/provider";
 import { capture, Events } from "../telemetry/posthog";
 import {
   getInstallationAccessToken,
@@ -297,7 +297,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     orgId,
     userId: "github-webhook",
     bookmarkId: bookmark.id,
-    provider: createMockProvider(),
+    provider: createLLMProvider(),
   });
 
   let githubCommentId: number | null = null;
@@ -809,6 +809,30 @@ async function findOrCreateBookmark(
   }
 
   const now = Date.now();
+
+  // A CLI publish for this branch creates a bookmark before the PR exists
+  // (and so without a PR number). Claim it rather than minting a second
+  // bookmark, so the PR keeps the publish event evidence.
+  const [claimed] = await db<{ id: string; latest_event_id: string | null }[]>`
+    UPDATE bookmarks
+    SET github_pr_number = ${input.prNumber},
+        github_pr_url = COALESCE(${input.prUrl}, bookmarks.github_pr_url),
+        remote_head_sha = COALESCE(${input.headSha}, bookmarks.remote_head_sha),
+        updated_at_ms = ${now}
+    WHERE id = (
+      SELECT id FROM bookmarks
+      WHERE org_id = ${input.orgId}
+        AND repo_full_name = ${input.repoFullName}
+        AND branch_name = ${input.branchName}
+        AND github_pr_number IS NULL
+      ORDER BY updated_at_ms DESC
+      LIMIT 1
+    )
+    RETURNING id, latest_event_id
+  `;
+  if (claimed) {
+    return claimed;
+  }
   const [created] = await db<{ id: string; latest_event_id: string | null }[]>`
     INSERT INTO bookmarks (
       user_id,

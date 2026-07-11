@@ -117,6 +117,28 @@ type PrEventPayload = {
   humanOverrides?: unknown[];
   fileStats?: unknown;
   toolVersions?: Record<string, string>;
+  // gx.pr artifact shape (see PushBundle)
+  event?: string;
+  stack?: Array<{
+    branch_name?: string;
+    base_branch_name?: string;
+    patch?: string;
+    github_pull_request_url?: string;
+    change?: {
+      description?: string;
+      files?: string[];
+    };
+  }>;
+  change?: {
+    description?: string;
+    files?: string[];
+  };
+  sessions?: Array<{
+    id?: string;
+    command?: string;
+    cwd?: string;
+    requests?: unknown[];
+  }>;
 };
 
 type ResolvedTarget = {
@@ -200,7 +222,7 @@ export async function loadExtractContext(
   }
 
   const payload = event.payload ?? {};
-  const hunkRows = await db<{
+  let hunkRows = await db<{
     file: string;
     line_start: number;
     line_end: number;
@@ -216,6 +238,20 @@ export async function loadExtractContext(
     WHERE org_id = ${orgId} AND event_id = ${target.eventId}
     ORDER BY file, line_start
   `;
+  if (hunkRows.length === 0 && event.head_commit_id) {
+    // gx.pr artifact events carry no hunk_links of their own; the capture
+    // extract for the same head commit is a sibling pr_event.
+    hunkRows = await db<typeof hunkRows>`
+      SELECT hl.file, hl.line_start, hl.line_end, hl.session_id, hl.match_tier,
+             hl.confidence, hl.authorship, hl.tool, hl.model
+      FROM hunk_links hl
+      JOIN pr_events pe ON pe.id = hl.event_id
+      WHERE hl.org_id = ${orgId}
+        AND pe.head_commit_id = ${event.head_commit_id}
+      ORDER BY hl.file, hl.line_start
+      LIMIT 200
+    `;
+  }
 
   const sessionIds = [...new Set(hunkRows.map((row) => row.session_id).filter(Boolean))];
   let sessionEvents: SessionEventRow[] = [];
@@ -268,7 +304,50 @@ export async function loadExtractContext(
       model: row.model,
     })),
     sessionEvents,
+    publishedRevisions: publishedRevisionsFromPayload(payload),
+    publishedSessions: publishedSessionsFromPayload(payload),
   };
+}
+
+function publishedRevisionsFromPayload(
+  payload: PrEventPayload,
+): PublishedRevisionRow[] {
+  const stack = Array.isArray(payload.stack) ? payload.stack : [];
+  const revisions: PublishedRevisionRow[] = stack.map((entry) => ({
+    branchName: entry.branch_name ?? null,
+    baseBranchName: entry.base_branch_name ?? null,
+    description: entry.change?.description ?? null,
+    files: Array.isArray(entry.change?.files) ? entry.change.files : [],
+    patch: typeof entry.patch === "string" && entry.patch ? entry.patch : null,
+    githubPrUrl: entry.github_pull_request_url ?? null,
+  }));
+  if (revisions.length === 0 && payload.change) {
+    revisions.push({
+      branchName: null,
+      baseBranchName: null,
+      description: payload.change.description ?? null,
+      files: Array.isArray(payload.change.files) ? payload.change.files : [],
+      patch: null,
+      githubPrUrl: null,
+    });
+  }
+  return revisions;
+}
+
+function publishedSessionsFromPayload(
+  payload: PrEventPayload,
+): PublishedSessionRow[] {
+  const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+  return sessions.slice(0, 20).flatMap((session) => {
+    if (!session || typeof session !== "object") return [];
+    return [{
+      sessionId: typeof session.id === "string" ? session.id : "",
+      command: typeof session.command === "string" ? session.command : null,
+      cwd: typeof session.cwd === "string" ? session.cwd : null,
+      requestCount: Array.isArray(session.requests) ? session.requests.length : 0,
+      responseCount: 0,
+    }];
+  });
 }
 
 export async function generateSummary(

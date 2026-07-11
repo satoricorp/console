@@ -77,12 +77,25 @@ export async function handleGxMention(
   const retiredRuleIds: string[] = [];
 
   if (vetoTarget) {
+    const allowed = await authorCanVetoRules(input);
+    if (!allowed) {
+      console.info("gx-mention veto denied: author lacks write access", {
+        orgId: input.orgId,
+        bookmarkId: input.bookmarkId,
+        author: input.author,
+      });
+      return {
+        reply: `GX: only collaborators with write access can retire rules.`,
+        vetoedRuleText: null,
+        retiredRuleIds: [],
+      };
+    }
     const rules = await db<{ id: string; rule_text: string }[]>`
       SELECT id, rule_text
       FROM rules
       WHERE org_id = ${input.orgId}
         AND status IN ('inferred', 'enforced')
-        AND rule_text ILIKE ${"%" + vetoTarget + "%"}
+        AND rule_text ILIKE ${"%" + escapeLikePattern(vetoTarget) + "%"}
       ORDER BY created_at_ms DESC
       LIMIT 5
     `;
@@ -434,6 +447,46 @@ function scoreChatReply(text: string): number {
 
 function stripGxMention(body: string): string {
   return body.replace(/@gx\b[:,]?\s*/gi, "").trim();
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/([\\%_])/g, "\\$1");
+}
+
+async function authorCanVetoRules(input: GxMentionInput): Promise<boolean> {
+  if (!input.github) {
+    // No GitHub context means an internal caller, not the public webhook.
+    return true;
+  }
+  const owner = input.github.repoFullName.split("/")[0];
+  if (!owner || !input.author || input.author === "unknown") {
+    return false;
+  }
+  try {
+    const token = await getInstallationAccessToken(input.github.installationId);
+    const response = await fetch(
+      `https://api.github.com/repos/${input.github.repoFullName}/collaborators/${encodeURIComponent(input.author)}/permission`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "User-Agent": "gx-server",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+      },
+    );
+    if (!response.ok) {
+      return false;
+    }
+    const decoded = (await response.json()) as { permission?: string };
+    return (
+      decoded.permission === "admin" ||
+      decoded.permission === "maintain" ||
+      decoded.permission === "write"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function extractVetoTarget(body: string): string | null {
