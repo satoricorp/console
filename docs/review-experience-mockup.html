@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GX Review — /reviews mockup</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #171717;
+    --muted: #666666;
+    --faint: #999999;
+    --line: #eaeaea;
+    --line-soft: #f2f2f2;
+    --panel: #fafafa;
+    --panel-2: #f2f2f2;
+    --accent: #0070f3;          /* vercel blue */
+    --accent-soft: #0070f314;
+    --btn-bg: #171717;          /* vercel primary: inverted */
+    --btn-fg: #ffffff;
+    --agent: #7928ca;           /* agent attribution — vercel violet */
+    --agent-fill: #7928ca;
+    --agent-soft: #7928ca14;
+    --src-codebase: #0070f3;
+    --src-prs: #12a594;
+    --src-docs: #999999;
+    --ok: #15803d;
+    --ok-soft: #15803d12;
+    --warn: #a35200;
+    --warn-soft: #a3520010;
+    --risk: #cb2a2f;
+    --risk-soft: #cb2a2f10;
+    --add-bg: #46a75814;
+    --add-fg: #1a7f37;
+    --del-bg: #e5484d0f;
+    --del-fg: #cb2a2f;
+    --hl: #0070f30f;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.03), 0 6px 20px -12px rgb(0 0 0 / 0.08);
+    --mono: var(--font-geist-mono, "Geist Mono"), ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: var(--font-fk-display, "FK Display Trial"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0a; --fg: #ededed; --muted: #8f8f8f; --faint: #5c5c5c;
+      --line: #262626; --line-soft: #1c1c1c; --panel: #111111; --panel-2: #191919;
+      --accent: #52a8ff; --accent-soft: #52a8ff1c;
+      --btn-bg: #ededed; --btn-fg: #0a0a0a;
+      --agent: #bf7af0; --agent-fill: #bf7af0; --agent-soft: #bf7af01f;
+      --src-codebase: #52a8ff; --src-prs: #2dd4bf; --src-docs: #737373;
+      --ok: #62c073; --ok-soft: #62c07316;
+      --warn: #f5a623; --warn-soft: #f5a62314;
+      --risk: #ff6166; --risk-soft: #e5484d16;
+      --add-bg: #46a7581c; --add-fg: #7ee2a8;
+      --del-bg: #e5484d1a; --del-fg: #ff6166;
+      --hl: #52a8ff14;
+      --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 10px 28px -16px rgb(0 0 0 / 0.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0a0a; --fg: #ededed; --muted: #8f8f8f; --faint: #5c5c5c;
+    --line: #262626; --line-soft: #1c1c1c; --panel: #111111; --panel-2: #191919;
+    --accent: #52a8ff; --accent-soft: #52a8ff1c;
+    --btn-bg: #ededed; --btn-fg: #0a0a0a;
+    --agent: #bf7af0; --agent-fill: #bf7af0; --agent-soft: #bf7af01f;
+    --src-codebase: #52a8ff; --src-prs: #2dd4bf; --src-docs: #737373;
+    --ok: #62c073; --ok-soft: #62c07316;
+    --warn: #f5a623; --warn-soft: #f5a62314;
+    --risk: #ff6166; --risk-soft: #e5484d16;
+    --add-bg: #46a7581c; --add-fg: #7ee2a8;
+    --del-bg: #e5484d1a; --del-fg: #ff6166;
+    --hl: #52a8ff14;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 10px 28px -16px rgb(0 0 0 / 0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --fg: #171717; --muted: #666666; --faint: #999999;
+    --line: #eaeaea; --line-soft: #f2f2f2; --panel: #fafafa; --panel-2: #f2f2f2;
+    --accent: #0070f3; --accent-soft: #0070f314;
+    --btn-bg: #171717; --btn-fg: #ffffff;
+    --agent: #7928ca; --agent-fill: #7928ca; --agent-soft: #7928ca14;
+    --src-codebase: #0070f3; --src-prs: #12a594; --src-docs: #999999;
+    --ok: #15803d; --ok-soft: #15803d12;
+    --warn: #a35200; --warn-soft: #a3520010;
+    --risk: #cb2a2f; --risk-soft: #cb2a2f10;
+    --add-bg: #46a75814; --add-fg: #1a7f37;
+    --del-bg: #e5484d0f; --del-fg: #cb2a2f;
+    --hl: #0070f30f;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.03), 0 6px 20px -12px rgb(0 0 0 / 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--sans); font-size: 15px; line-height: 1.55;
+    margin: 0; padding-bottom: 96px;
+  }
+  a { color: inherit; }
+  button { font: inherit; cursor: pointer; }
+  :is(a, button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  .label {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+  }
+  .mono { font-family: var(--mono); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ── mockup-only controls ─────────────────────────── */
+  .mock-strip {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 20px; border-bottom: 1px dashed var(--line);
+    background: var(--panel); font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .mock-strip .tag { color: var(--accent); }
+  .mock-strip button {
+    font-family: var(--mono); font-size: 11px; padding: 3px 10px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--bg); color: var(--muted);
+  }
+  .mock-strip button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+  /* ── page state switching ─────────────────────────── */
+  [data-state="ready"]    :is(.only-pending, .only-fallback) { display: none; }
+  [data-state="pending"]  :is(.only-ready,   .only-fallback) { display: none; }
+  [data-state="fallback"] :is(.only-ready,   .only-pending)  { display: none; }
+
+  /* ── site header ──────────────────────────────────── */
+  .site-header {
+    display: flex; align-items: center; gap: 14px;
+    height: 56px; padding: 0 20px; border-bottom: 1px solid var(--line);
+  }
+  .gx-mark {
+    font-family: var(--mono); font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .crumb { font-family: var(--mono); font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .crumb .sep { color: var(--faint); }
+  .crumb strong { color: var(--fg); font-weight: 500; }
+
+  /* ── layout: single column ────────────────────────── */
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 40px; }
+
+  /* ── review header ────────────────────────────────── */
+  .review-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; }
+  .review-head h1 {
+    font-size: 24px; font-weight: 650; letter-spacing: -0.015em;
+    line-height: 1.25; margin: 0; text-wrap: balance; max-width: 56ch;
+  }
+  .meta-line {
+    display: flex; flex-wrap: wrap; align-items: center; row-gap: 6px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .meta-line .m { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .meta-line .m + .m::before { content: "·"; margin: 0 10px; color: var(--faint); }
+  .meta-line .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .meta-line a { color: var(--muted); text-underline-offset: 3px; }
+  .meta-line a:hover { color: var(--fg); }
+
+  /* ── intro: Summary / Why? / attribution ──────────── */
+  .intro { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
+  .intro-acc summary {
+    list-style: none; display: grid; grid-template-columns: 11px minmax(0, 1fr);
+    column-gap: 12px; row-gap: 3px; align-items: baseline;
+    padding: 4px 0; cursor: pointer; user-select: none;
+  }
+  .intro-acc summary::-webkit-details-marker { display: none; }
+  .intro-acc .acc-title {
+    grid-column: 2; font-size: 16.5px; font-weight: 650; letter-spacing: -0.01em; color: var(--fg);
+  }
+  .intro-acc summary:hover .acc-title { color: var(--accent); }
+  .intro-acc .teaser {
+    grid-column: 2; font-size: 14px; color: var(--muted); min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .intro-acc[open] .teaser { display: none; }
+  .intro-body { padding: 2px 0 8px 23px; display: flex; flex-direction: column; gap: 8px; }
+  .intro-body p { margin: 0; font-size: 14.5px; color: var(--fg); max-width: 68ch; }
+  .quote {
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    border-left: 2px solid var(--agent-fill); padding: 2px 0 2px 10px;
+  }
+  .quote .who { color: var(--agent); }
+  .attr-row {
+    display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .attr-row > .label { margin-right: 2px; }
+  .attr-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; width: 180px; flex: none; background: var(--panel-2); }
+  .attr-bar span { display: block; height: 100%; }
+  .attr-row .key { display: inline-flex; align-items: center; gap: 6px; }
+  .attr-row .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .attr-row .pct { color: var(--fg); font-weight: 500; }
+  .rule { border: 0; border-top: 1px solid var(--line); margin: 0 0 26px; }
+
+  /* ── sections ─────────────────────────────────────── */
+  .section-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 16px; }
+  .section-head h2 { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; margin: 0; }
+  .section-head .count { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  /* ── notable change cards ─────────────────────────── */
+  .cards { display: flex; flex-direction: column; gap: 18px; margin-bottom: 30px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  .card-top { display: flex; align-items: flex-start; gap: 12px; padding: 15px 16px 0; }
+  .rank {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--fg);
+    border: 1px solid var(--line); background: var(--panel);
+    width: 26px; height: 26px; border-radius: 7px; flex: none;
+    display: grid; place-items: center; margin-top: 1px;
+  }
+  .card-title-wrap { min-width: 0; flex: 1; }
+  .card-title { font-size: 15.5px; font-weight: 620; margin: 0 0 5px; letter-spacing: -0.01em; }
+  .card-badges { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .cat {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11px;
+    padding: 2.5px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--bg);
+  }
+  .cat .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .cat.arch  .dot { background: var(--accent); }
+  .cat.blast .dot { background: var(--risk); }
+  .cat.parad .dot { background: var(--agent-fill); }
+  .rev-link { font-family: var(--mono); font-size: 11px; color: var(--muted); text-decoration: none; text-underline-offset: 3px; }
+  .rev-link:hover { color: var(--fg); text-decoration: underline; }
+  .card-why { padding: 10px 16px 0 54px; }
+  .card-why p { margin: 0; font-size: 13.5px; color: var(--fg); max-width: 68ch; }
+  .card-anchor {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 16px 12px 54px; font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .anchor-link { display: inline-flex; gap: 8px; align-items: baseline; text-decoration: none; min-width: 0; }
+  .anchor-link .path { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anchor-link .lines { color: var(--faint); }
+  .anchor-link:hover .path { color: var(--accent); }
+  .attr-chip {
+    display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+    font-family: var(--mono); font-size: 11px; padding: 2.5px 9px;
+    border-radius: 999px; background: var(--agent-soft); color: var(--agent);
+  }
+  .attr-chip.human { background: var(--panel-2); color: var(--muted); }
+  @media (max-width: 620px) { .card-why, .card-anchor { padding-left: 16px; } .attr-chip { margin-left: 0; } }
+
+  /* ── diff ─────────────────────────────────────────── */
+  .diff { border-top: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
+  .diff table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; line-height: 1.6; }
+  .diff td { padding: 0 14px 0 0; white-space: pre; }
+  .diff .ln {
+    width: 1%; min-width: 44px; padding: 0 10px; text-align: right;
+    color: var(--faint); user-select: none; font-size: 11px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .diff .code { padding-left: 14px; }
+  .diff tr.add  { background: var(--add-bg); } .diff tr.add .code  { color: var(--add-fg); }
+  .diff tr.del  { background: var(--del-bg); } .diff tr.del .code  { color: var(--del-fg); }
+  .diff tr.hl td { box-shadow: inset 3px 0 0 var(--accent); }
+  .diff tr.hunk .code { color: var(--muted); font-size: 11px; }
+  .diff-foot { display: flex; gap: 14px; padding: 8px 16px; border-top: 1px solid var(--line-soft); font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .diff-foot a { color: var(--muted); text-underline-offset: 3px; }
+  .diff-foot a:hover { color: var(--accent); }
+
+  /* ── activity ─────────────────────────────────────── */
+  .activity { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 30px; }
+  .activity .head { padding: 13px 16px 0; }
+  .activity .head h2 { font-size: 14px; font-weight: 600; margin: 0; }
+  .activity-list { padding: 10px 16px 13px; display: flex; flex-direction: column; gap: 8px; }
+  .activity-row { display: flex; gap: 12px; font-size: 13px; color: var(--muted); align-items: baseline; }
+  .activity-row .t { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; min-width: 24px; }
+  .activity-row a { color: var(--muted); text-underline-offset: 3px; }
+  .activity-row a:hover { color: var(--fg); }
+
+  /* ── safe to skim ─────────────────────────────────── */
+  .skim { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 30px; }
+  .skim summary {
+    list-style: none; display: flex; align-items: baseline; gap: 10px;
+    padding: 13px 16px; cursor: pointer; user-select: none;
+  }
+  .skim summary::-webkit-details-marker { display: none; }
+  .twist { font-family: var(--mono); color: var(--faint); font-size: 11px; transition: transform 0.15s; }
+  details[open] > summary .twist { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .twist { transition: none; } }
+  .skim summary h2 { font-size: 14px; font-weight: 600; margin: 0; }
+  .skim summary .count { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .skim-list { border-top: 1px solid var(--line-soft); }
+  .skim-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; padding: 8px 16px; border-top: 1px solid var(--line-soft); }
+  .skim-row:first-child { border-top: 0; }
+  .skim-row .path { font-family: var(--mono); font-size: 12px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+  .skim-row a.path:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .skim-row .why { font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 620px) { .skim-row { grid-template-columns: 1fr; gap: 2px; } }
+
+  /* ── agent usage accordion (bottom) ───────────────── */
+  .usage { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 30px; }
+  .usage summary {
+    list-style: none; display: flex; align-items: baseline; gap: 10px;
+    padding: 13px 16px; cursor: pointer; user-select: none; flex-wrap: wrap;
+  }
+  .usage summary::-webkit-details-marker { display: none; }
+  .usage summary h2 { font-size: 14px; font-weight: 600; margin: 0; }
+  .usage-summary-stats { margin-left: auto; display: flex; gap: 14px; align-items: baseline; font-family: var(--mono); font-size: 12.5px; }
+  .usage-summary-stats .tok { color: var(--muted); }
+  .usage-summary-stats .cost-total { font-weight: 700; color: var(--fg); }
+  .usage-summary-stats .unpriced { font-size: 10.5px; color: var(--faint); }
+  .usage-rows { border-top: 1px solid var(--line-soft); padding: 6px 6px 8px; }
+  .usage-row { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px 10px; border-radius: 7px; }
+  .usage-row:hover { background: var(--panel); }
+  .usage-row .top { display: flex; align-items: baseline; gap: 8px; }
+  .harness { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .model { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .usage-row .cost { margin-left: auto; font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .cost.na { color: var(--faint); font-weight: 400; }
+  .usage-row .stats { display: flex; gap: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .cache-bar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: var(--panel-2); margin-top: 2px; }
+  .cache-bar .cached { background: var(--agent-fill); opacity: 0.45; }
+  .cache-bar .fresh { background: var(--agent); }
+  .usage-foot { padding: 4px 16px 13px; font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+  .usage-foot .warn-note { color: var(--warn); }
+
+  /* ── approve bar ──────────────────────────────────── */
+  .approve-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .approve-inner {
+    max-width: 860px; margin: 0 auto; padding: 12px 20px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .approve-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .ci { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--ok); }
+  .ci .tick { font-size: 13px; }
+  .ci-detail { color: var(--muted); }
+  .btn-group { display: flex; align-items: center; gap: 10px; flex: none; }
+  .btn-secondary {
+    font-family: var(--mono); font-size: 12.5px; padding: 9px 16px;
+    border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg);
+    text-decoration: none;
+  }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-approve {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 0.01em;
+    padding: 10px 22px; border: 1px solid var(--btn-bg); border-radius: 8px;
+    background: var(--btn-bg); color: var(--btn-fg);
+  }
+  .btn-approve:hover { background: transparent; color: var(--fg); }
+  .approve-note { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  @media (max-width: 700px) { .approve-note { display: none; } .btn-secondary { padding: 9px 12px; } }
+
+  /* ── pending state ────────────────────────────────── */
+  .pending-hero {
+    border: 1px solid var(--line); border-radius: 10px; padding: 40px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+    margin-bottom: 30px;
+  }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2.5px solid var(--line); border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pending-hero h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .pending-hero p { font-size: 13px; color: var(--muted); margin: 0; max-width: 44ch; }
+  .skeleton { border: 1px solid var(--line); border-radius: 10px; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+  .shimmer { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--panel-2) 25%, var(--line-soft) 50%, var(--panel-2) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    .shimmer { animation: none; background: var(--panel-2); }
+  }
+
+  /* ── fallback state ───────────────────────────────── */
+  .notice {
+    display: flex; gap: 12px; align-items: baseline;
+    border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+    background: var(--warn-soft); border-radius: 10px; padding: 13px 16px; margin-bottom: 22px;
+  }
+  .notice .mark { font-family: var(--mono); color: var(--warn); font-weight: 700; }
+  .notice p { margin: 0; font-size: 13.5px; }
+  .notice p small { display: block; color: var(--muted); margin-top: 2px; font-size: 12px; }
+  .summary-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 22px; }
+  .summary-block pre { margin: 8px 0 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
+</style>
+
+</head>
+<body data-state="ready">
+
+<div class="mock-strip" role="group" aria-label="Mockup controls (not part of the product)">
+  <span class="tag">mockup</span>
+  <span>states:</span>
+  <button type="button" data-set-state="ready" aria-pressed="true">ready</button>
+  <button type="button" data-set-state="pending" aria-pressed="false">analyzing</button>
+  <button type="button" data-set-state="fallback" aria-pressed="false">fallback</button>
+  <span style="margin-left:auto">real page uses FK Display + Geist Mono</span>
+</div>
+
+<header class="site-header">
+  <a class="gx-mark" href="#">gx</a>
+  <div class="crumb">
+    <span>satoricorp</span><span class="sep">/</span><span>gx</span><span class="sep">/</span><strong>bm_9f2e41</strong>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═══ review header (all states) ═══ -->
+  <div class="review-head">
+    <h1>Add GX-owned Convex backend for cloud auth and wire desktop review screens to live data</h1>
+    <div class="meta-line num">
+      <span class="m"><span class="dot" style="background: var(--ok)"></span>open</span>
+      <span class="m"><span class="dot" style="background: var(--warn)"></span>medium risk</span>
+      <span class="m">34 files</span>
+      <span class="m">2 revisions</span>
+      <span class="m">gx/add-gx-owned-convex-backend → main</span>
+      <span class="m"><a href="#">1ddbfdb</a></span>
+      <span class="m">2h ago by joe</span>
+      <span class="m"><a href="https://github.com/satoricorp/gx/pull/72">PR #72 ↗</a></span>
+    </div>
+  </div>
+
+  <!-- ═══ PENDING STATE ═══ -->
+  <div class="only-pending">
+    <div class="pending-hero">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2>Analyzing this push</h2>
+      <p>gx is ranking what needs human review — pattern changes, blast radius, and architectural decisions. Usually under a minute.</p>
+    </div>
+    <div class="skeleton" aria-hidden="true">
+      <div class="shimmer" style="width: 34%"></div>
+      <div class="shimmer" style="width: 88%"></div>
+      <div class="shimmer" style="width: 72%"></div>
+    </div>
+    <div class="skeleton" aria-hidden="true">
+      <div class="shimmer" style="width: 28%"></div>
+      <div class="shimmer" style="width: 81%"></div>
+      <div class="shimmer" style="width: 64%"></div>
+    </div>
+  </div>
+
+  <!-- ═══ FALLBACK STATE ═══ -->
+  <div class="only-fallback">
+    <div class="notice">
+      <span class="mark">!</span>
+      <p>gx couldn’t build a review plan for this push.
+        <small>Showing the standard summary and full diffs instead. <a href="#">Retry analysis</a></small>
+      </p>
+    </div>
+    <div class="summary-block">
+      <span class="label">PR summary</span>
+      <pre>Intent: replace fixture-backed desktop stores with live GX API data.
+Read these: services/api/src/routes/auth.ts, apps/desktop/src/renderer/main.jsx
+Safe to skim: styles, fixtures, generated API types.
+Blast radius: auth session issuance; bookmark merge-status sync.
+Provenance: 31/34 files agent-authored (codex, claude code).</pre>
+    </div>
+  </div>
+
+  <!-- ═══ READY STATE ═══ -->
+  <div class="only-ready">
+
+    <!-- Summary / Why? / attribution -->
+    <section class="intro">
+      <details class="intro-acc">
+        <summary>
+          <span class="twist">▶</span>
+          <span class="acc-title">Summary</span>
+          <span class="teaser">Gives the desktop app a real backend. …</span>
+        </summary>
+        <div class="intro-body">
+          <p>Gives the desktop app a real backend. Cloud auth and review data move to a GX-owned Convex deployment, and the desktop review screens stop reading local fixtures and start querying live bookmark and session data. The task was scoped to wiring existing screens to live data; the Convex backend was added along the way once the screens needed reactive queries.</p>
+          <p class="quote"><span class="who">agent self-report</span> — “Wire the desktop review screens to live GX API data sources, replacing the fixture-backed stores. Keep the auth token flow working end-to-end.”</p>
+        </div>
+      </details>
+      <details class="intro-acc">
+        <summary>
+          <span class="twist">▶</span>
+          <span class="acc-title">Why?</span>
+          <span class="teaser">Session tokens moved server-side, and reactive queries replaced polling. …</span>
+        </summary>
+        <div class="intro-body">
+          <p>Session tokens are now minted server-side and stored hashed, instead of raw tokens living only in the OS keychain — the agent chose this after hitting CORS limits calling the API directly from the renderer. Reactive Convex queries replace polling so merge status updates without a refresh cycle, and the fixture store is deleted rather than kept as a fallback to avoid a second data path drifting.</p>
+        </div>
+      </details>
+      <div class="attr-row num">
+        <span class="label">Attribution</span>
+        <div class="attr-bar" role="img" aria-label="Attribution sources: agent sessions 58 percent, codebase 22 percent, previous PRs 12 percent, docs 8 percent">
+          <span style="width: 58%; background: var(--agent-fill)"></span>
+          <span style="width: 22%; background: var(--src-codebase)"></span>
+          <span style="width: 12%; background: var(--src-prs)"></span>
+          <span style="width: 8%; background: var(--src-docs)"></span>
+        </div>
+        <span class="key"><span class="swatch" style="background: var(--agent-fill)"></span>agent sessions <span class="pct">58%</span></span>
+        <span class="key"><span class="swatch" style="background: var(--src-codebase)"></span>codebase <span class="pct">22%</span></span>
+        <span class="key"><span class="swatch" style="background: var(--src-prs)"></span>previous PRs <span class="pct">12%</span></span>
+        <span class="key"><span class="swatch" style="background: var(--src-docs)"></span>independent docs <span class="pct">8%</span></span>
+      </div>
+    </section>
+    <hr class="rule">
+
+    <!-- critical review -->
+    <div class="section-head">
+      <h2>Critical Review</h2>
+      <span class="count">4 of 34</span>
+    </div>
+
+    <div class="cards">
+
+      <!-- card 1 -->
+      <article class="card">
+        <div class="card-top">
+          <span class="rank">1</span>
+          <div class="card-title-wrap">
+            <h3 class="card-title">Auth trust boundary moves server-side: hashed session tokens replace keychain-only storage</h3>
+            <div class="card-badges">
+              <span class="cat arch"><span class="dot"></span>architecture</span>
+              <a class="rev-link" href="#">r/8f31c2</a>
+            </div>
+          </div>
+        </div>
+        <div class="card-why">
+          <p>Every future client authenticates against this scheme. Tokens are minted with a 90-day TTL and stored hashed — if the hashing or expiry logic is wrong here, it’s wrong for every device. This was a judgment call the agent made mid-task, not part of the original ask.</p>
+        </div>
+        <div class="card-anchor">
+          <a class="anchor-link" href="https://github.com/satoricorp/gx/blob/1ddbfdb/services/api/src/routes/auth.ts#L41-L58">
+            <span class="path">services/api/src/routes/auth.ts</span>
+            <span class="lines num">L41–58 ↗</span>
+          </a>
+          <span class="attr-chip">agent · codex · gpt-5.5</span>
+        </div>
+        <div class="diff">
+          <table role="presentation"><tbody>
+            <tr class="hunk"><td class="ln">…</td><td class="code">@@ -38,9 +41,18 @@ export async function completeCliAuth(req: AuthRequest) {</td></tr>
+            <tr class="del"><td class="ln num">38</td><td class="code">-  const token = generateToken();</td></tr>
+            <tr class="del"><td class="ln num">39</td><td class="code">-  await keychain.store(req.machineId, token);</td></tr>
+            <tr class="add hl"><td class="ln num">41</td><td class="code">+  const token = `gxcs_${randomBytes(32).toString("base64url")}`;</td></tr>
+            <tr class="add hl"><td class="ln num">42</td><td class="code">+  const tokenHash = createHash("sha256").update(token).digest("hex");</td></tr>
+            <tr class="add"><td class="ln num">43</td><td class="code">+</td></tr>
+            <tr class="add hl"><td class="ln num">44</td><td class="code">+  await db.insert("cliSessions", {</td></tr>
+            <tr class="add"><td class="ln num">45</td><td class="code">+    userId: user._id,</td></tr>
+            <tr class="add"><td class="ln num">46</td><td class="code">+    tokenHash,</td></tr>
+            <tr class="add"><td class="ln num">47</td><td class="code">+    machineId: req.machineId,</td></tr>
+            <tr class="add hl"><td class="ln num">48</td><td class="code">+    expiresAt: Date.now() + NINETY_DAYS_MS,</td></tr>
+            <tr class="add"><td class="ln num">49</td><td class="code">+  });</td></tr>
+            <tr><td class="ln num">50</td><td class="code">   return { token, expiresInDays: 90 };</td></tr>
+          </tbody></table>
+        </div>
+        <div class="diff-foot"><span>+18 −9</span><a href="#">full file diff</a><a href="#">session transcript ↗</a></div>
+      </article>
+
+      <!-- card 2 -->
+      <article class="card">
+        <div class="card-top">
+          <span class="rank">2</span>
+          <div class="card-title-wrap">
+            <h3 class="card-title">Review screens switch from fixture stores to reactive queries — the pattern every future screen copies</h3>
+            <div class="card-badges">
+              <span class="cat parad"><span class="dot"></span>pattern</span>
+              <a class="rev-link" href="#">r/1ddbfd</a>
+            </div>
+          </div>
+        </div>
+        <div class="card-why">
+          <p>This sets the data-access idiom for the whole desktop app: subscribe, don’t fetch. The old fixture store is deleted, so there’s no fallback path. Approve the shape of <span class="mono">useReviewData</span> and the rest of the diff is mechanical.</p>
+        </div>
+        <div class="card-anchor">
+          <a class="anchor-link" href="https://github.com/satoricorp/gx/blob/1ddbfdb/apps/desktop/src/renderer/main.jsx#L112-L126">
+            <span class="path">apps/desktop/src/renderer/main.jsx</span>
+            <span class="lines num">L112–126 ↗</span>
+          </a>
+          <span class="attr-chip">agent · claude code · claude-sonnet-4-6</span>
+        </div>
+        <div class="diff">
+          <table role="presentation"><tbody>
+            <tr class="hunk"><td class="ln">…</td><td class="code">@@ -108,11 +112,15 @@ function ReviewScreen({ bookmarkId }) {</td></tr>
+            <tr class="del"><td class="ln num">108</td><td class="code">-  const review = fixtures.reviews[bookmarkId];</td></tr>
+            <tr class="del"><td class="ln num">109</td><td class="code">-  const [status, setStatus] = useState(review?.status);</td></tr>
+            <tr class="del"><td class="ln num">110</td><td class="code">-  useEffect(() =&gt; pollMergeStatus(bookmarkId, setStatus), [bookmarkId]);</td></tr>
+            <tr class="add hl"><td class="ln num">112</td><td class="code">+  const review = useReviewData(bookmarkId);   // reactive: re-renders on push</td></tr>
+            <tr class="add"><td class="ln num">113</td><td class="code">+  if (review.isLoading) return &lt;ReviewSkeleton /&gt;;</td></tr>
+            <tr class="add"><td class="ln num">114</td><td class="code">+</td></tr>
+            <tr class="add"><td class="ln num">115</td><td class="code">+  const { plan, usage, mergeStatus } = review;</td></tr>
+            <tr><td class="ln num">116</td><td class="code">   return (</td></tr>
+            <tr class="add"><td class="ln num">117</td><td class="code">+    &lt;ReviewLayout plan={plan} usage={usage} status={mergeStatus}&gt;</td></tr>
+          </tbody></table>
+        </div>
+        <div class="diff-foot"><span>+64 −41</span><a href="#">full file diff</a><a href="#">session transcript ↗</a></div>
+      </article>
+
+      <!-- card 3 -->
+      <article class="card">
+        <div class="card-top">
+          <span class="rank">3</span>
+          <div class="card-title-wrap">
+            <h3 class="card-title">Merge-status derivation rewired — feeds CLI sync for every stack</h3>
+            <div class="card-badges">
+              <span class="cat blast"><span class="dot"></span>blast radius</span>
+              <a class="rev-link" href="#">r/1ddbfd</a>
+            </div>
+          </div>
+        </div>
+        <div class="card-why">
+          <p>A wrong <span class="mono">merge_status</span> here strands stacked branches on every developer’s machine — <span class="mono">gx sync</span> trusts this field. The new derivation treats a force-updated base ref as merged; check the squash-merge case on line 203.</p>
+        </div>
+        <div class="card-anchor">
+          <a class="anchor-link" href="https://github.com/satoricorp/gx/blob/1ddbfdb/services/api/src/routes/bookmarks.ts#L196-L208">
+            <span class="path">services/api/src/routes/bookmarks.ts</span>
+            <span class="lines num">L196–208 ↗</span>
+          </a>
+          <span class="attr-chip">agent · codex · gpt-5.5</span>
+        </div>
+        <div class="diff">
+          <table role="presentation"><tbody>
+            <tr class="hunk"><td class="ln">…</td><td class="code">@@ -190,7 +196,13 @@ function deriveMergeStatus(bookmark, remote) {</td></tr>
+            <tr class="del"><td class="ln num">190</td><td class="code">-  if (remote.prState === "merged") return "merged";</td></tr>
+            <tr class="add"><td class="ln num">196</td><td class="code">+  if (remote.prState === "merged") return "merged";</td></tr>
+            <tr class="add"><td class="ln num">197</td><td class="code">+</td></tr>
+            <tr class="add hl"><td class="ln num">198</td><td class="code">+  // Base ref force-updated past our head: treat as landed even without a PR.</td></tr>
+            <tr class="add hl"><td class="ln num">199</td><td class="code">+  if (remote.baseContains(bookmark.headCommitId)) return "merged";</td></tr>
+            <tr class="add"><td class="ln num">200</td><td class="code">+</td></tr>
+            <tr class="add hl"><td class="ln num">203</td><td class="code">+  if (remote.prState === "closed" &amp;&amp; !remote.baseContains(bookmark.headCommitId))</td></tr>
+            <tr class="add"><td class="ln num">204</td><td class="code">+    return "closed";  // squash-merge detection relies on baseContains above</td></tr>
+            <tr><td class="ln num">205</td><td class="code">   return "open";</td></tr>
+          </tbody></table>
+        </div>
+        <div class="diff-foot"><span>+23 −6</span><a href="#">full file diff</a><a href="#">session transcript ↗</a></div>
+      </article>
+
+      <!-- card 4 -->
+      <article class="card">
+        <div class="card-top">
+          <span class="rank">4</span>
+          <div class="card-title-wrap">
+            <h3 class="card-title">Preload bridge exposes a new IPC surface to the renderer</h3>
+            <div class="card-badges">
+              <span class="cat blast"><span class="dot"></span>blast radius</span>
+              <a class="rev-link" href="#">r/1ddbfd</a>
+            </div>
+          </div>
+        </div>
+        <div class="card-why">
+          <p>Everything exposed here is callable from renderer code. The bridge stays narrow — three methods, no raw token passthrough — but this file <em>is</em> the desktop security boundary, and it was hand-edited after the agent’s first pass.</p>
+        </div>
+        <div class="card-anchor">
+          <a class="anchor-link" href="https://github.com/satoricorp/gx/blob/1ddbfdb/apps/desktop/src/preload.js#L12-L21">
+            <span class="path">apps/desktop/src/preload.js</span>
+            <span class="lines num">L12–21 ↗</span>
+          </a>
+          <span class="attr-chip human">human · joe (after agent pass)</span>
+        </div>
+        <div class="diff">
+          <table role="presentation"><tbody>
+            <tr class="hunk"><td class="ln">…</td><td class="code">@@ -9,4 +12,10 @@ contextBridge.exposeInMainWorld("gx", {</td></tr>
+            <tr><td class="ln num">12</td><td class="code">   getAuthState: () =&gt; ipcRenderer.invoke("gx:auth-state"),</td></tr>
+            <tr class="add hl"><td class="ln num">13</td><td class="code">+  openReview: (bookmarkId) =&gt; ipcRenderer.invoke("gx:open-review", bookmarkId),</td></tr>
+            <tr class="add"><td class="ln num">14</td><td class="code">+  subscribeReview: (bookmarkId, cb) =&gt; {</td></tr>
+            <tr class="add"><td class="ln num">15</td><td class="code">+    const ch = `gx:review:${bookmarkId}`;</td></tr>
+            <tr class="add hl"><td class="ln num">16</td><td class="code">+    ipcRenderer.on(ch, (_e, data) =&gt; cb(sanitize(data)));  // joe: strip tokens</td></tr>
+            <tr class="add"><td class="ln num">17</td><td class="code">+    return () =&gt; ipcRenderer.removeAllListeners(ch);</td></tr>
+            <tr class="add"><td class="ln num">18</td><td class="code">+  },</td></tr>
+          </tbody></table>
+        </div>
+        <div class="diff-foot"><span>+10 −1</span><a href="#">full file diff</a></div>
+      </article>
+    </div>
+
+    <!-- activity -->
+    <div class="activity">
+      <div class="head"><h2>Activity</h2></div>
+      <div class="activity-list">
+        <div class="activity-row"><span class="t num">2h</span><span>Pushed by <span class="mono">joe</span> · review plan generated (claude-sonnet-4-6)</span></div>
+        <div class="activity-row"><span class="t num">2h</span><span>Summary posted to <a href="https://github.com/satoricorp/gx/pull/72">PR #72</a></span></div>
+        <div class="activity-row"><span class="t num">1h</span><span>CI passed · <span class="num">14/14</span> checks</span></div>
+      </div>
+    </div>
+
+    <!-- safe to skim -->
+    <details class="skim">
+      <summary>
+        <span class="twist">▶</span>
+        <h2>Safe to skim</h2>
+        <span class="count">30 files · mechanical or derived changes</span>
+      </summary>
+      <div class="skim-list">
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/apps/desktop/src/renderer/styles.css">apps/desktop/src/renderer/styles.css ↗</a><span class="why">Presentational only — tokens for the new review layout</span></div>
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/apps/desktop/src/renderer/components/ReviewSkeleton.jsx">apps/desktop/src/renderer/components/ReviewSkeleton.jsx ↗</a><span class="why">New loading placeholder, no logic</span></div>
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/services/api/src/generated/api-types.ts">services/api/src/generated/api-types.ts ↗</a><span class="why">Generated from the schema — review the schema instead</span></div>
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/services/api/src/routes/bookmarks.test.ts">services/api/src/routes/bookmarks.test.ts ↗</a><span class="why">Mirrors the merge-status cases shown in change 3</span></div>
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/apps/desktop/src/main.js">apps/desktop/src/main.js ↗</a><span class="why">Registers the IPC handlers exposed in change 4</span></div>
+        <div class="skim-row"><a class="path" href="https://github.com/satoricorp/gx/blob/1ddbfdb/package-lock.json">package-lock.json · bun.lock ↗</a><span class="why">Lockfiles — convex@1.39 added</span></div>
+        <div class="skim-row"><span class="path">+ 24 more</span><span class="why"><a href="#">Show all files with reasons</a></span></div>
+      </div>
+    </details>
+
+    <!-- agent usage accordion -->
+    <details class="usage">
+      <summary>
+        <span class="twist">▶</span>
+        <h2>Agent usage</h2>
+        <span class="usage-summary-stats num">
+          <span class="tok">26.2 MTok</span>
+          <span class="cost-total">est. $16.36</span>
+          <span class="unpriced">+1 unpriced</span>
+        </span>
+      </summary>
+      <div class="usage-rows num">
+        <div class="usage-row">
+          <div class="top"><span class="harness">codex</span><span class="model">gpt-5.5</span><span class="cost">$3.72</span></div>
+          <div class="stats"><span>2 sessions</span><span>in 14.2M</span><span>out 48.1K</span><span>91% cached</span></div>
+          <div class="cache-bar" role="img" aria-label="91 percent of input tokens served from cache"><span class="cached" style="width:91%"></span><span class="fresh" style="width:9%"></span></div>
+        </div>
+        <div class="usage-row">
+          <div class="top"><span class="harness">claude code</span><span class="model">claude-sonnet-4-6</span><span class="cost">$6.56</span></div>
+          <div class="stats"><span>1 session</span><span>in 9.8M</span><span>out 62.4K</span><span>90% cached</span></div>
+          <div class="cache-bar" role="img" aria-label="90 percent of input tokens served from cache"><span class="cached" style="width:90%"></span><span class="fresh" style="width:10%"></span></div>
+        </div>
+        <div class="usage-row">
+          <div class="top"><span class="harness">claude code</span><span class="model">claude-opus-4-8</span><span class="cost">$6.08</span></div>
+          <div class="stats"><span>1 session</span><span>in 1.2M</span><span>out 21.0K</span><span>83% cached</span></div>
+          <div class="cache-bar" role="img" aria-label="83 percent of input tokens served from cache"><span class="cached" style="width:83%"></span><span class="fresh" style="width:17%"></span></div>
+        </div>
+        <div class="usage-row">
+          <div class="top"><span class="harness">codex</span><span class="model">gpt-5.3-codex-spark</span><span class="cost na">—</span></div>
+          <div class="stats"><span>1 session</span><span>in 0.9M</span><span>out 12.2K</span></div>
+          <div class="cache-bar" role="img" aria-label="cache breakdown unavailable"><span class="cached" style="width:0%"></span><span class="fresh" style="width:100%; opacity:0.35"></span></div>
+        </div>
+        <div class="usage-foot">
+          Estimated from captured token counts and public list prices. <span class="warn-note">gpt-5.3-codex-spark has no published pricing.</span>
+        </div>
+      </div>
+    </details>
+  </div>
+</main>
+
+<!-- ═══ approve bar ═══ -->
+<div class="approve-bar">
+  <div class="approve-inner">
+    <div class="approve-status">
+      <span class="ci"><span class="tick">✓</span>CI passing <span class="ci-detail num">14/14 checks</span></span>
+      <span class="approve-note">Approves PR #72 as you on GitHub, then merges. Your decision is recorded to the review ledger.</span>
+    </div>
+    <div class="btn-group">
+      <a class="btn-secondary" href="https://github.com/satoricorp/gx/pull/72">Open in GitHub</a>
+      <button class="btn-approve" type="button">Approve &amp; merge</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("[data-set-state]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.body.dataset.state = btn.dataset.setState;
+      document.querySelectorAll("[data-set-state]").forEach((b) =>
+        b.setAttribute("aria-pressed", String(b === btn)));
+    });
+  });
+</script>
+</body>
+
+</html>

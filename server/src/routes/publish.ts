@@ -9,6 +9,7 @@ import {
 import { postIssueComment } from "../github/comments";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
+import { enqueueReviewPlanGeneration } from "../review-plan/generate";
 import { generateSummary } from "../summary/generate";
 import { capture, Events } from "../telemetry/posthog";
 import type { PublishRegistration, PushBundle } from "../types";
@@ -157,6 +158,23 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       });
     } catch (error) {
       console.error("PR Summary after publish failed", {
+        orgId,
+        bookmarkId: result.bookmark.id,
+        error,
+      });
+    }
+
+    try {
+      if (result.bookmark.head_commit_id) {
+        enqueueReviewPlanGeneration(db, {
+          orgId,
+          bookmarkId: result.bookmark.id,
+          headCommitId: result.bookmark.head_commit_id,
+          eventId: result.eventId,
+        });
+      }
+    } catch (error) {
+      console.error("Review plan enqueue after publish failed", {
         orgId,
         bookmarkId: result.bookmark.id,
         error,

@@ -31,15 +31,16 @@ describe("gx api server helpers", () => {
     expect(getGxApiBaseUrl()).toBe("http://localhost:3201");
   });
 
-  test("normalizes bookmark paths to v1", () => {
-    expect(normalizeGxApiPath("/bookmarks")).toBe("/v1/bookmarks");
+  test("keeps bookmark paths unprefixed and adds a leading slash", () => {
+    expect(normalizeGxApiPath("/bookmarks")).toBe("/bookmarks");
     expect(normalizeGxApiPath("/bookmarks/abc?include_payload=1")).toBe(
-      "/v1/bookmarks/abc?include_payload=1",
+      "/bookmarks/abc?include_payload=1",
     );
-    expect(normalizeGxApiPath("/v1/bookmarks")).toBe("/v1/bookmarks");
+    expect(normalizeGxApiPath("/v1/reviews/abc")).toBe("/v1/reviews/abc");
+    expect(normalizeGxApiPath("bookmarks")).toBe("/bookmarks");
   });
 
-  test("sends console requests to the normalized v1 API", async () => {
+  test("sends console requests to the API", async () => {
     process.env.GX_CLOUD_URL = "http://gx-cloud.test/";
     process.env.GX_CLOUD_API_KEY = "service-token";
 
@@ -54,7 +55,7 @@ describe("gx api server helpers", () => {
     await gxApiRequest("user-1", "/bookmarks?merge_status=open");
 
     expect(requested).toBe(
-      "http://gx-cloud.test/v1/bookmarks?merge_status=open&format=console",
+      "http://gx-cloud.test/bookmarks?merge_status=open&format=console",
     );
     expect(init?.headers).toMatchObject({
       Authorization: "Bearer service-token",

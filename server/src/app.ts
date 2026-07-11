@@ -11,6 +11,7 @@ import { publishRoutes } from "./routes/publish";
 import { reportedLogsRoutes } from "./routes/reported-logs";
 import { reviewRoutes } from "./routes/review";
 import { reviewHistoryRoutes } from "./routes/review-history";
+import { reviewsRoutes } from "./routes/reviews";
 import { summaryRoutes } from "./routes/summary";
 
 const app = new Hono<AppEnv>();
@@ -21,6 +22,7 @@ app.route("/", ingestRoutes);
 app.route("/", summaryRoutes);
 app.route("/", reviewRoutes);
 app.route("/", reviewHistoryRoutes);
+app.route("/", reviewsRoutes);
 app.route("/", activityRoutes);
 app.route("/", bookmarksRoutes);
 app.route("/", publishRoutes);
