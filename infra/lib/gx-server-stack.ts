@@ -141,7 +141,7 @@ export class GxServerStack extends Stack {
         desiredCount: props.desiredCount,
         assignPublicIp: false,
         // Allows `aws ecs execute-command` shells and SSM port forwarding
-        // to RDS through the task (scripts/prod-db.sh).
+        // to RDS through the task (scripts/rds.sh).
         enableExecuteCommand: true,
         taskSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,

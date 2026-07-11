@@ -8,9 +8,9 @@
 #   - psql on PATH
 #
 # Usage:
-#   scripts/prod-db.sh              # production psql shell
-#   scripts/prod-db.sh staging     # staging psql shell
-#   scripts/prod-db.sh production "select count(*) from review_usage"
+#   scripts/rds.sh              # production psql shell
+#   scripts/rds.sh staging     # staging psql shell
+#   scripts/rds.sh production "select count(*) from review_usage"
 set -euo pipefail
 
 env_name="${1:-production}"
