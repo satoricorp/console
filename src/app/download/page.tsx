@@ -1,22 +1,22 @@
 import { AppPage } from "@/components/app-page";
-import { DownloadPlatformChooser } from "@/components/download-platform-chooser";
+import { DownloadCliInstall } from "@/components/download-cli-install";
 import { DownloadSeenMarker } from "@/components/download-seen-marker";
 
 export default function DownloadPage() {
   return (
     <AppPage>
       <DownloadSeenMarker />
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 py-4">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
+        <div className="space-y-1">
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             Install
           </h1>
-          <p className="max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Choose your platform to continue.
+          <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+            Run the install script, then log in from your terminal.
           </p>
         </div>
 
-        <DownloadPlatformChooser />
+        <DownloadCliInstall />
       </div>
     </AppPage>
   );

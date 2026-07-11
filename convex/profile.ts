@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import { v } from "convex/values";
 import { authComponent } from "./auth";
 import type { Doc } from "./_generated/dataModel";
 
@@ -64,6 +65,30 @@ export const getMyProfile = query({
       repos: repos
         .map((repo) => repoSummary(repo, jobsByFullName.get(repo.fullName) ?? null))
         .sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    };
+  },
+});
+
+/** Lightweight auth identity for BFF routes (GX API user id). */
+export const getViewer = query({
+  args: {},
+  returns: v.union(
+    v.object({
+      id: v.string(),
+      name: v.union(v.string(), v.null()),
+      email: v.union(v.string(), v.null()),
+      image: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return null;
+    return {
+      id: user._id,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      image: user.image ?? null,
     };
   },
 });

@@ -15,6 +15,7 @@ import {
   createDraftPullRequest,
   getPullStatusForPush,
   mergePullRequestOnGithub,
+  submitApprovingReview,
   type PullStatusResponse,
   type PullStatusSnapshot,
   reconcilePullRequest,
@@ -404,6 +405,106 @@ async function loadAuthorizedPublishContext(
     localHeadSha,
   };
 }
+
+/** Approve the PR as the signed-in user, then merge. */
+export const approveAndMergePullRequest = action({
+  args: {
+    bookmarkId: v.string(),
+    publishContext: publishContextValidator,
+    pullRequestNumber: v.optional(v.number()),
+    approvalBody: v.optional(v.string()),
+  },
+  returns: v.object({
+    approved: v.boolean(),
+    merged: v.boolean(),
+    selfApproval: v.boolean(),
+    notice: v.union(v.string(), v.null()),
+    pullRequestNumber: v.number(),
+    pullRequestUrl: v.string(),
+    sha: v.union(v.string(), v.null()),
+    alreadyMerged: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const { accessToken, target } = await loadAuthorizedPublishContext(
+      ctx,
+      args.publishContext,
+    );
+
+    const resolution = await resolvePullForPush(
+      accessToken,
+      target.repoFullName,
+      args.pullRequestNumber,
+      target.headBranch,
+      target.baseBranch,
+    );
+    const pull = activePullFromResolution(resolution);
+
+    if (pull.merged || pull.state === "closed") {
+      // Re-fetch to confirm merged
+      const current = await getPullRequest(
+        accessToken,
+        target.repoFullName,
+        pull.number,
+      );
+      if (current.merged) {
+        return {
+          approved: false,
+          merged: true,
+          selfApproval: false,
+          notice: "Pull request was already merged.",
+          pullRequestNumber: current.number,
+          pullRequestUrl: current.html_url,
+          sha: current.head.sha,
+          alreadyMerged: true,
+        };
+      }
+    }
+
+    const review = await submitApprovingReview(
+      accessToken,
+      target.repoFullName,
+      pull.number,
+      args.approvalBody,
+    );
+
+    const selfApproval = !review.approved && review.reason === "self_approval";
+    if (!review.approved && !selfApproval) {
+      throw new Error(
+        typeof review.reason === "string"
+          ? review.reason
+          : "Could not approve pull request.",
+      );
+    }
+
+    try {
+      const result = await mergePullRequestOnGithub(
+        accessToken,
+        target.repoFullName,
+        pull,
+      );
+      return {
+        approved: review.approved,
+        merged: true,
+        selfApproval,
+        notice: selfApproval
+          ? "Could not approve your own pull request; merged without a new approval."
+          : null,
+        pullRequestNumber: result.pull.number,
+        pullRequestUrl: result.pull.html_url,
+        sha: result.sha ?? null,
+        alreadyMerged: false,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Merge failed";
+      // Surface branch-protection / merge errors verbatim; caller may record approve-only.
+      throw new Error(
+        review.approved || selfApproval
+          ? `Approval recorded but merge failed: ${message}`
+          : message,
+      );
+    }
+  },
+});
 
 /** Branch + GitHub Actions status for GX-first publish (no GitHub PR required). */
 export const getPublishStatus = action({

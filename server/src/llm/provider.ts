@@ -56,6 +56,64 @@ export function createMockProvider(contextHint?: string): LLMProvider {
         };
       }
 
+      if (/focused human review plan/i.test(system) || /notableChanges/i.test(system)) {
+        const files = [...user.matchAll(/^###\s+(.+)$/gm)].map((m) => m[1]!.trim());
+        const fileList = [...user.matchAll(/files=\d+:\s*(.+)$/gm)].flatMap((m) =>
+          (m[1] ?? "").split(",").map((f) => f.trim()).filter(Boolean),
+        );
+        const changed = [...new Set([...files, ...fileList])].filter(Boolean);
+        const primary = changed[0] ?? "src/main.ts";
+        const secondary = changed[1] ?? primary;
+        const selfReport =
+          user.match(/Self-report:\s*(.+)/)?.[1]?.trim() ||
+          contextHint?.slice(0, 120) ||
+          "Implement the requested changes";
+        const notableFiles = changed.slice(0, Math.min(5, Math.max(3, changed.length || 3)));
+        while (notableFiles.length < 3) {
+          notableFiles.push(primary);
+        }
+        const categories = ["architecture", "pattern", "blast-radius"] as const;
+        const plan = {
+          schemaVersion: 1,
+          narrative: {
+            summary: `Purpose: ${selfReport.slice(0, 200)}. Original intent was to land these agent-authored changes with human review on the highest-risk surfaces.`,
+            summaryTeaser: `${selfReport.slice(0, 100)}.`,
+            why: "The agent touched shared patterns and high-blast-radius paths; humans should confirm the architectural choices before merge.",
+            whyTeaser: "Shared patterns and high blast radius need a human pass.",
+            attributionSources: [
+              { source: "agent-sessions", pct: 65 },
+              { source: "codebase", pct: 20 },
+              { source: "previous-prs", pct: 10 },
+              { source: "docs", pct: 5 },
+            ],
+            selfReportQuote: selfReport.slice(0, 240),
+          },
+          notableChanges: notableFiles.slice(0, 5).map((file, index) => ({
+            rank: index + 1,
+            category: categories[index % categories.length],
+            title: `Review ${file}`,
+            whyItMatters:
+              "This change alters a shared surface that other code depends on. Confirm the approach matches repo conventions and that blast radius is understood.",
+            anchor: {
+              file,
+              lineStart: 1,
+              lineEnd: 20,
+              revisionChangeId: undefined,
+            },
+            anchorConfidence: "file",
+            attribution: { authorship: "agent", tool: "mock", model: "mock" },
+          })),
+          safeToSkim: changed
+            .filter((f) => !notableFiles.slice(0, 5).includes(f))
+            .map((file) => ({
+              file,
+              reason: "Supporting or low-risk change.",
+            })),
+          revisions: [],
+        };
+        return { text: JSON.stringify(plan), model: "mock" };
+      }
+
       const intent = contextHint?.slice(0, 80) || "Changes from captured agent sessions";
       const text = [
         "Review: Mostly safe 🟢",

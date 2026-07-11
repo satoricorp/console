@@ -8,7 +8,7 @@ import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
 import { GetStartedButton } from "@/components/get-started-button";
 import { GitHubIcon } from "@/components/github-icon";
-import { GxLogo } from "@/components/gx-logo";
+import { GxWordmark } from "@/components/gx-wordmark";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
 import { NavSeparator } from "@/components/nav-separator";
 import { SignInLink } from "@/components/sign-in-link";
@@ -201,7 +201,7 @@ function MobileNavMenu() {
       <SheetTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 sm:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 lg:hidden"
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
@@ -327,16 +327,16 @@ export function SiteHeader() {
           className={cn(
             "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity] duration-500 ease-out",
             showNavLogo
-              ? "max-w-[8.25rem] opacity-100"
+              ? "max-w-[5rem] opacity-100"
               : "pointer-events-none max-w-0 opacity-0",
           )}
         >
-          <GxLogo variant="header" />
+          <GxWordmark size="nav" className="px-3 sm:px-4" />
         </Link>
 
         <nav
           aria-label="Primary"
-          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 sm:flex sm:gap-8"
+          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 lg:flex"
         >
           {NAV_LINKS.map((link) => (
             <HeaderNavLink key={link.href} link={link} />
@@ -344,7 +344,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
-          <SocialIconCluster className="hidden sm:flex" />
+          <SocialIconCluster className="hidden xl:flex" />
           <HeaderAuthActions />
           <MobileNavMenu />
         </div>

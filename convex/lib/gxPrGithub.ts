@@ -1125,3 +1125,52 @@ export async function mergePullRequestOnGithub(
 
   return { ...result, pull: current, markedReady };
 }
+
+export type ApprovingReviewResult =
+  | { approved: true }
+  | { approved: false; reason: "self_approval" | "already_approved" | string };
+
+/**
+ * Submit an approving PR review as the authenticated GitHub user.
+ * Maps 422 "Can not approve your own pull request" → self_approval.
+ */
+export async function submitApprovingReview(
+  accessToken: string,
+  repoFullName: string,
+  pullNumber: number,
+  body?: string,
+): Promise<ApprovingReviewResult> {
+  const response = await fetch(
+    `https://api.github.com/repos/${repoFullName}/pulls/${pullNumber}/reviews`,
+    {
+      method: "POST",
+      headers: {
+        ...githubHeaders(accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event: "APPROVE",
+        ...(body?.trim() ? { body: body.trim() } : {}),
+      }),
+    },
+  );
+
+  if (response.ok) {
+    return { approved: true };
+  }
+
+  const text = await response.text();
+  if (
+    response.status === 422 &&
+    /can not approve your own pull request/i.test(text)
+  ) {
+    return { approved: false, reason: "self_approval" };
+  }
+  if (response.status === 422 && /already reviewed|pending review/i.test(text)) {
+    // Treat as soft success — proceed to merge
+    return { approved: true };
+  }
+
+  throw new Error(githubErrorMessage(response.status, text, "Approve review"));
+}
+

@@ -16,6 +16,12 @@ const fkDisplay = localFont({
   display: "swap",
 });
 
+const xer0 = localFont({
+  src: "../fonts/Xer0-Regular.otf",
+  variable: "--font-xer0",
+  display: "swap",
+});
+
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -35,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fkDisplay.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fkDisplay.variable} ${xer0.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
         <Suspense fallback={null}>

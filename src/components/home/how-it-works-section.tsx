@@ -4,10 +4,10 @@ import { HOW_IT_WORKS_DOCS_URL } from "@/lib/site-links";
 const STEPS = [
   {
     step: "01",
-    verb: "Generate",
-    title: "Generate Review Stacks based on sessions.",
+    verb: "Surface",
+    title: "Surface only critical code changes",
     detail:
-      "GX captures your coding sessions and creates organized branches and commits to improve review. We leverage your existing codebase and metadata from past pull requests to identify issues.",
+      "Because GX has context on code changes, it can surface the most important changes that are in the critical path, saving you hours every day.",
     visual: "capture",
   },
   {
@@ -15,15 +15,15 @@ const STEPS = [
     verb: "Review Loop",
     title: "Review Loop.",
     detail:
-      "GX uses 92 independent resources to make sure we review your code correctly, reducing bugs. GX verifies its findings through Review Loop, where OpenAI and Anthropic face-off to determine the best fixes for every issue.",
+      "GX uses 92 independent resources to make sure we review your code correctly, reducing bugs. GX verifies its findings through Review Loop, where frontier models face-off to determine the best fixes for every issue.",
     visual: "verify",
   },
   {
     step: "03",
-    verb: "Focus",
-    title: "Review the most important changes.",
+    verb: "Save",
+    title: "Save your coding history.",
     detail:
-      "End up with the most important lines of code to review manually, reducing your review time drastically.",
+      "Don't let any more of your data slip through your fingers. It's important to understand how your product is built, from ground zero. Start saving your data today.",
     visual: "review",
   },
 ] as const;
@@ -38,12 +38,10 @@ function CaptureMockup() {
   return (
     <div
       aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+      className="overflow-hidden border border-zinc-200 bg-white"
     >
-      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Review Stack
-        </p>
+      <div className="border-b border-zinc-200 px-4 py-3">
+        <p className="text-xs font-medium text-zinc-900">Review Context</p>
       </div>
       <div className="space-y-0 px-4 py-3 pl-6 font-mono text-xs leading-6">
         {items.map((item, index) => {
@@ -53,7 +51,7 @@ function CaptureMockup() {
           return (
             <div
               key={item}
-              className="flex min-w-0 items-center text-zinc-700 dark:text-zinc-300"
+              className="flex min-w-0 items-center text-zinc-700"
             >
               <span aria-hidden className="mr-2 shrink-0 text-zinc-400">
                 {branch}
@@ -75,22 +73,20 @@ function VerifyMockup() {
   ] as const;
 
   const signalToneClass = {
-    error: "text-red-600 dark:text-red-400",
-    warn: "text-amber-600 dark:text-amber-400",
-    success: "text-emerald-600 dark:text-emerald-400",
+    error: "text-red-600",
+    warn: "text-amber-600",
+    success: "text-emerald-600",
   } as const;
 
   return (
     <div
       aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+      className="overflow-hidden border border-zinc-200 bg-white"
     >
-      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Review Loop
-        </p>
+      <div className="border-b border-zinc-200 px-4 py-3">
+        <p className="text-xs font-medium text-zinc-900">Review Loop</p>
       </div>
-      <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+      <ul className="divide-y divide-zinc-200">
         {models.map((model) => (
           <li
             key={model.name}
@@ -110,36 +106,30 @@ function VerifyMockup() {
 }
 
 function ReviewMockup() {
-  const reviews = [
-    { title: "api.ts:42 — missing validation", status: "flagged", tone: "active" },
-    { title: "handler.ts:18 — untested path", status: "flagged", tone: "active" },
-    { title: "+847 other lines", status: "skipped", tone: "ready" },
+  const sessions = [
+    { title: "auth-refactor session", status: "saved", tone: "ready" },
+    { title: "47 tool calls indexed", status: "indexed", tone: "ready" },
+    { title: "opus · 128k tokens", status: "$1.24", tone: "active" },
   ] as const;
 
   return (
     <div
       aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+      className="overflow-hidden border border-zinc-200 bg-white"
     >
-      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-          Lines to review
-        </p>
+      <div className="border-b border-zinc-200 px-4 py-3">
+        <p className="text-xs font-medium text-zinc-900">Session history</p>
       </div>
-      <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-        {reviews.map((item) => (
+      <ul className="divide-y divide-zinc-200">
+        {sessions.map((item) => (
           <li
             key={item.title}
             className="flex items-center justify-between gap-3 px-4 py-3 text-xs"
           >
-            <span className="min-w-0 truncate text-zinc-700 dark:text-zinc-300">
-              {item.title}
-            </span>
+            <span className="min-w-0 truncate text-zinc-700">{item.title}</span>
             <span
               className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
-                item.tone === "ready"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-amber-600 dark:text-amber-400"
+                item.tone === "ready" ? "text-emerald-600" : "text-zinc-500"
               }`}
             >
               {item.status}
@@ -161,28 +151,30 @@ export function HowItWorksSection() {
   return (
     <section
       id="how-it-works"
-      className="border-t border-zinc-200 px-6 py-16 dark:border-zinc-800 sm:py-24"
+      className="border-t border-zinc-200 px-6 py-16 sm:py-24"
     >
       <ScrollReveal className="mx-auto w-full max-w-5xl">
-        <div className="mb-14 max-w-2xl space-y-4">
+        <div className="mb-14 max-w-4xl space-y-4">
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
             How it works
           </p>
-          <h2 className="text-xl font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-3xl">
-            Use your codebase and coding sessions to improve review.
+          <h2 className="whitespace-nowrap text-xl font-medium tracking-tight text-zinc-950 sm:text-3xl">
+            Use your coding sessions to improve code review.
           </h2>
-          <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Commits were built for humans. They don&apos;t contain session
-            context to provide the &apos;why&apos;, which helps review pull
-            requests generated by agents.
+          <p className="max-w-2xl text-sm leading-6 text-zinc-600">
+            Traditional commits don&apos;t contain session context to provide
+            the &apos;why&apos;, which helps developers understand how to review
+            code generated by agents.
           </p>
-          <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Just like using a linter, use GX to improve quality and verify
-            changes without reading your pull requests line by line.
+          <p className="max-w-2xl text-sm leading-6 text-zinc-600">
+            GX saves your raw session data, tool calls, and edits to better
+            understand how changes were made. GX also saves the metadata about
+            what models you used along with token spend, so you can understand
+            how each feature was built and how much it cost.
           </p>
           <a
             href={HOW_IT_WORKS_DOCS_URL}
-            className="inline-block text-sm text-zinc-700 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-zinc-950 dark:text-zinc-300 dark:decoration-zinc-700 dark:hover:text-zinc-100"
+            className="inline-block text-sm text-zinc-700 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-zinc-950"
           >
             Read how it works in the docs
           </a>
@@ -206,12 +198,10 @@ export function HowItWorksSection() {
                       {item.verb}
                     </span>
                   </div>
-                  <h3 className="text-lg font-medium tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-xl">
+                  <h3 className="text-lg font-medium tracking-tight text-zinc-950 sm:text-xl">
                     {item.title}
                   </h3>
-                  <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                    {item.detail}
-                  </p>
+                  <p className="text-sm leading-6 text-zinc-600">{item.detail}</p>
                 </div>
 
                 <div className={visualFirst ? "lg:order-1" : ""}>
