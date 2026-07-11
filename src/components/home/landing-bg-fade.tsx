@@ -15,9 +15,9 @@ type LandingBgFadeProps = {
 };
 
 /**
- * Document-space vertical gradient that bridges section seams:
- * black→white spans into How it works; white→black spans into Features.
- * No separate spacer zones — stops are tied to section tops.
+ * Document-space vertical gradient: black→white bridges into How it works.
+ * White holds through How it works, then hard-cuts to black at Features
+ * (no bottom wipe).
  */
 export function LandingBgFade({ children }: LandingBgFadeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -50,26 +50,23 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
       const howTop = docY(howEl);
       const featTop = docY(featuresEl);
 
-      // Soft band ~½–⅔ viewport centered on each seam so the wipe
-      // overlaps the previous section and the incoming section.
+      // Soft band only at the top seam into How it works.
       const softIn = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
-      const softOut = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
 
       const toPct = (y: number) => `${clamp((y / height) * 100, 0, 100)}%`;
 
-      // black … [seam into how] … white … [seam into features] … black
       const blackHold = toPct(howTop - softIn);
       const whiteStart = toPct(howTop + softIn * 0.4);
-      const whiteHold = toPct(featTop - softOut * 0.4);
-      const blackReturn = toPct(featTop + softOut);
+      // Hard cut to black at Features — no white→black wipe.
+      const whiteEnd = toPct(featTop);
 
       bg.style.background = [
         "linear-gradient(to bottom,",
         `${BLACK} 0%,`,
         `${BLACK} ${blackHold},`,
         `${WHITE} ${whiteStart},`,
-        `${WHITE} ${whiteHold},`,
-        `${BLACK} ${blackReturn},`,
+        `${WHITE} ${whiteEnd},`,
+        `${BLACK} ${whiteEnd},`,
         `${BLACK} 100%)`,
       ].join(" ");
     };
