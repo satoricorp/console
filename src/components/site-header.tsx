@@ -201,7 +201,7 @@ function MobileNavMenu() {
       <SheetTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 sm:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100 lg:hidden"
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
@@ -336,7 +336,7 @@ export function SiteHeader() {
 
         <nav
           aria-label="Primary"
-          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 sm:flex sm:gap-8"
+          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 lg:flex"
         >
           {NAV_LINKS.map((link) => (
             <HeaderNavLink key={link.href} link={link} />
@@ -344,7 +344,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
-          <SocialIconCluster className="hidden sm:flex" />
+          <SocialIconCluster className="hidden xl:flex" />
           <HeaderAuthActions />
           <MobileNavMenu />
         </div>

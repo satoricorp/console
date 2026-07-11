@@ -22,7 +22,7 @@ export function LandingLenis({ children }: LandingLenisProps) {
       smoothWheel: true,
       syncTouch: false,
     });
-    // Expose for local visual QA / agent screenshot loops
+    // Expose so LandingBgFade (and local QA) can subscribe to Lenis scroll.
     (window as Window & { __lenis?: Lenis }).__lenis = lenis;
 
     let frame = 0;
@@ -41,6 +41,7 @@ export function LandingLenis({ children }: LandingLenisProps) {
     return () => {
       media.removeEventListener("change", onChange);
       cancelAnimationFrame(frame);
+      delete (window as Window & { __lenis?: Lenis }).__lenis;
       lenis.destroy();
     };
   }, []);

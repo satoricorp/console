@@ -37,7 +37,26 @@ export function SignedOutLanding() {
         <main className="flex flex-1 flex-col">
           <HeroSection />
           <GitToGxSection />
+
+          {/*
+            2× viewport: first vh = black→white wipe to the top of the screen,
+            second vh = solid white hold, then How it works content.
+          */}
+          <div
+            id="landing-fade-in"
+            aria-hidden
+            className="h-[200dvh] w-full shrink-0"
+          />
           <HowItWorksSection />
+          {/*
+            2× viewport: first vh = white→black wipe through the full screen,
+            second vh = solid black hold, then Features content.
+          */}
+          <div
+            id="landing-fade-out"
+            aria-hidden
+            className="h-[200dvh] w-full shrink-0"
+          />
           <FeaturesSection />
 
           <section
