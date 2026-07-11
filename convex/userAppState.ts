@@ -1,4 +1,9 @@
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import { authComponent } from "./auth";
 import {
   BASE_TRIAL_DAYS,
@@ -37,6 +42,7 @@ function formatAppState(state: {
   communityScreenCompletedAt?: number;
   githubStarBonusClaimedAt?: number;
   discordBonusClaimedAt?: number;
+  windowsCliRequestedAt?: number;
 }) {
   return {
     downloadScreenCompleted: Boolean(state.downloadScreenCompletedAt),
@@ -45,6 +51,7 @@ function formatAppState(state: {
     communityScreenCompletedAt: state.communityScreenCompletedAt ?? null,
     githubStarBonusClaimed: Boolean(state.githubStarBonusClaimedAt),
     discordBonusClaimed: Boolean(state.discordBonusClaimedAt),
+    windowsCliRequested: Boolean(state.windowsCliRequestedAt),
     baseTrialDays: BASE_TRIAL_DAYS,
     githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
     discordBonusDays: DISCORD_BONUS_DAYS,
@@ -71,6 +78,7 @@ export const getMyAppState = query({
         communityScreenCompletedAt: null,
         githubStarBonusClaimed: false,
         discordBonusClaimed: false,
+        windowsCliRequested: false,
         baseTrialDays: BASE_TRIAL_DAYS,
         githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
         discordBonusDays: DISCORD_BONUS_DAYS,
@@ -95,6 +103,58 @@ export const completeDownloadScreen = mutation({
       downloadScreenCompletedAt: existing.downloadScreenCompletedAt ?? now,
       updatedAt: now,
     });
+  },
+});
+
+export const requestWindowsCli = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Sign in to continue");
+
+    const now = Date.now();
+    const existing = await getOrCreateUserAppState(ctx, user._id);
+
+    if (existing.windowsCliRequestedAt) {
+      return formatAppState(existing);
+    }
+
+    await ctx.db.patch(existing._id, {
+      windowsCliRequestedAt: now,
+      updatedAt: now,
+    });
+
+    const updated = await ctx.db.get("userAppStates", existing._id);
+    if (!updated) {
+      throw new Error("Could not update app state");
+    }
+
+    return formatAppState(updated);
+  },
+});
+
+/** Admin: everyone who requested a native Windows CLI build, with contact emails. */
+export const listWindowsCliRequests = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const states = await ctx.db.query("userAppStates").collect();
+    const requests = states
+      .filter((state) => state.windowsCliRequestedAt)
+      .sort(
+        (a, b) => (a.windowsCliRequestedAt ?? 0) - (b.windowsCliRequestedAt ?? 0),
+      );
+
+    return await Promise.all(
+      requests.map(async (state) => {
+        const user = await authComponent.getAnyUserById(ctx, state.userId);
+        return {
+          userId: state.userId,
+          email: user?.email ?? null,
+          name: user?.name ?? null,
+          requestedAt: state.windowsCliRequestedAt ?? null,
+        };
+      }),
+    );
   },
 });
 
