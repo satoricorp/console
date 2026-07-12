@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppPage } from "@/components/app-page";
 import { DownloadCliInstall } from "@/components/download-cli-install";
 import { DownloadSeenMarker } from "@/components/download-seen-marker";
@@ -16,7 +17,9 @@ export default function DownloadPage() {
           </p>
         </div>
 
-        <DownloadCliInstall />
+        <Suspense fallback={null}>
+          <DownloadCliInstall />
+        </Suspense>
       </div>
     </AppPage>
   );

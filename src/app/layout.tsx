@@ -61,7 +61,19 @@ export default function RootLayout({
           <ConvexClientProvider>
             <PostHogIdentifier />
             <SiteHeader />
-            <OnboardingGate>{children}</OnboardingGate>
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center px-6 py-24">
+                  <div
+                    className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-100"
+                    role="status"
+                    aria-label="Loading"
+                  />
+                </div>
+              }
+            >
+              <OnboardingGate>{children}</OnboardingGate>
+            </Suspense>
             <SiteFooter />
           </ConvexClientProvider>
         </RootProvider>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/button";
@@ -32,6 +32,7 @@ export function ConnectReposStep({
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const listAvailableRepos = useAction(api.repoActions.listAvailableRepos);
   const connectRepos = useAction(api.repoActions.connectRepos);
+  const completeOnboarding = useMutation(api.userAppState.completeOnboarding);
   const connectedRepos = useQuery(
     api.repos.getMyConnectedRepos,
     session?.user && isAuthenticated ? {} : "skip",
@@ -144,6 +145,7 @@ export function ConnectReposStep({
     setError(null);
     try {
       await connectRepos({ repos: reposToConnect });
+      await completeOnboarding({});
       router.push("/reviews");
     } catch (connectError) {
       setError(
@@ -270,6 +272,9 @@ export function ConnectReposStep({
           {canSkip ? (
             <Link
               href="/reviews"
+              onClick={() => {
+                void completeOnboarding({});
+              }}
               className="inline-flex items-center justify-center py-2.5 text-[13px] font-medium text-zinc-500 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
             >
               Skip
