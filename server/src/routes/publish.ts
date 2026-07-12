@@ -161,6 +161,8 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       githubPrNumber,
     });
 
+    await refreshBookmarkAppFields(db, bookmark.id, payload);
+
     try {
       await postMissingPrSummaryAfterPublish(db, {
         orgId,
@@ -918,6 +920,45 @@ function captureGitHubCommentPosted(
     },
     orgId,
   );
+}
+
+function collectPublishFiles(payload: PushBundle): string[] {
+  const files = new Set<string>();
+  for (const file of payload.change?.files ?? []) {
+    const trimmed = file.trim();
+    if (trimmed) files.add(trimmed);
+  }
+  for (const entry of payload.stack ?? []) {
+    for (const file of entry.change?.files ?? []) {
+      const trimmed = file.trim();
+      if (trimmed) files.add(trimmed);
+    }
+  }
+  return [...files];
+}
+
+async function refreshBookmarkAppFields(
+  db: postgres.Sql,
+  bookmarkId: string,
+  payload: PushBundle,
+) {
+  const files = collectPublishFiles(payload);
+  const stackCount = Math.max(
+    payload.stack?.length ?? 0,
+    payload.change ? 1 : 0,
+  );
+  const baseBranch =
+    payload.stack?.find((entry) => entry.base_branch_name?.trim())?.base_branch_name?.trim() ||
+    payload.repo.default_branch?.trim() ||
+    "main";
+
+  await db`
+    UPDATE bookmarks
+    SET app_file_count = ${files.length},
+        app_stack_count = ${stackCount},
+        app_base_branch = ${baseBranch}
+    WHERE id = ${bookmarkId}
+  `;
 }
 
 function branchSlugTitle(branchName: string): string {
