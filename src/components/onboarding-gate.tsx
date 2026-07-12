@@ -81,7 +81,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     return <OnboardingGateFallback />;
   }
 
-  if (session?.user && convexAuthLoading) {
+  if (session?.user && convexAuthLoading && !skipOnboardingRedirect) {
     return <OnboardingGateFallback />;
   }
 
@@ -89,7 +89,11 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     return <OnboardingGateFallback />;
   }
 
-  if (session?.user && (!isAuthenticated || onboardingStatus === undefined)) {
+  if (
+    session?.user &&
+    !skipOnboardingRedirect &&
+    (!isAuthenticated || onboardingStatus === undefined)
+  ) {
     return <OnboardingGateFallback />;
   }
 

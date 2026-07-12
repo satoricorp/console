@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   Command,
@@ -18,6 +18,10 @@ import { DISCORD_URL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
 
 const commandItemClass =
   "justify-between gap-4 text-zinc-100 data-[selected=true]:bg-zinc-900 data-[selected=true]:text-white";
+
+function isDocsPath(pathname: string) {
+  return pathname === "/docs" || pathname.startsWith("/docs/");
+}
 
 function CommandShortcut({ children }: { children: string }) {
   return (
@@ -48,9 +52,16 @@ function handlePaletteNavigation(event: ReactKeyboardEvent) {
 
 export function AppCommandPalette() {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const onDocs = isDocsPath(pathname);
 
   useEffect(() => {
+    if (onDocs) {
+      setOpen(false);
+      return;
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -60,7 +71,7 @@ export function AppCommandPalette() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [onDocs]);
 
   const runCommand = useCallback((path: string) => {
     setOpen(false);
@@ -83,7 +94,7 @@ export function AppCommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || onDocs) return;
 
     function handleCommandShortcut(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -105,7 +116,9 @@ export function AppCommandPalette() {
 
     window.addEventListener("keydown", handleCommandShortcut);
     return () => window.removeEventListener("keydown", handleCommandShortcut);
-  }, [open, runCommand, runExternal]);
+  }, [open, onDocs, runCommand, runExternal]);
+
+  if (onDocs) return null;
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
