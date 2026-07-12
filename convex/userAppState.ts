@@ -47,6 +47,7 @@ function formatAppState(state: {
   twitterBonusClaimedAt?: number;
   downloadScreenCompletedAt?: number;
   communityScreenCompletedAt?: number;
+  githubAppInstallScreenCompletedAt?: number;
   onboardingCompletedAt?: number;
   windowsCliRequestedAt?: number;
 }) {
@@ -55,6 +56,11 @@ function formatAppState(state: {
     downloadScreenCompletedAt: state.downloadScreenCompletedAt ?? null,
     communityScreenCompleted: Boolean(state.communityScreenCompletedAt),
     communityScreenCompletedAt: state.communityScreenCompletedAt ?? null,
+    githubAppInstallScreenCompleted: Boolean(
+      state.githubAppInstallScreenCompletedAt,
+    ),
+    githubAppInstallScreenCompletedAt:
+      state.githubAppInstallScreenCompletedAt ?? null,
     onboardingCompleted: Boolean(state.onboardingCompletedAt),
     onboardingCompletedAt: state.onboardingCompletedAt ?? null,
     githubStarBonusClaimed: Boolean(state.githubStarBonusClaimedAt),
@@ -129,6 +135,8 @@ export const getMyAppState = query({
         downloadScreenCompletedAt: null,
         communityScreenCompleted: false,
         communityScreenCompletedAt: null,
+        githubAppInstallScreenCompleted: false,
+        githubAppInstallScreenCompletedAt: null,
         onboardingCompleted: false,
         onboardingCompletedAt: null,
         githubStarBonusClaimed: false,
@@ -314,6 +322,23 @@ export const completeCommunityScreen = mutation({
 
     await ctx.db.patch(existing._id, {
       communityScreenCompletedAt: existing.communityScreenCompletedAt ?? now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const completeGithubAppInstallScreen = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Sign in to continue");
+
+    const now = Date.now();
+    const existing = await getOrCreateUserAppState(ctx, user._id);
+
+    await ctx.db.patch(existing._id, {
+      githubAppInstallScreenCompletedAt:
+        existing.githubAppInstallScreenCompletedAt ?? now,
       updatedAt: now,
     });
   },
