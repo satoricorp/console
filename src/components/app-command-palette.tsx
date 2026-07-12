@@ -104,6 +104,10 @@ export function AppCommandPalette() {
         event.preventDefault();
         runCommand("/download");
       }
+      if (key === "r") {
+        event.preventDefault();
+        runCommand("/reviews");
+      }
       if (key === "j") {
         event.preventDefault();
         runExternal(DISCORD_URL);
@@ -156,6 +160,14 @@ export function AppCommandPalette() {
             <CommandList>
               <CommandEmpty>No command found.</CommandEmpty>
               <CommandGroup heading="Workspace" className="text-zinc-50">
+                <CommandItem
+                  value="reviews published changes prs"
+                  onSelect={() => runCommand("/reviews")}
+                  className={commandItemClass}
+                >
+                  <span>Reviews</span>
+                  <CommandShortcut>⌘R</CommandShortcut>
+                </CommandItem>
                 <CommandItem
                   value="repositories github repos"
                   onSelect={() => runCommand("/repositories")}
