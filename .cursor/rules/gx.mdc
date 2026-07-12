@@ -4,10 +4,12 @@ alwaysApply: true
 ---
 # GX
 
-This repo uses GX (`.gx/` present). Do not use `git commit` or `git push` for normal work.
+This repo uses GX (`.gx/` present). Do not use `git commit` for normal work.
 
-- Finish work: `gx add -m "…"`
-- Publish: `gx pr`
-- Inspect: `git status`, `git diff`, `git log` only
+- Stage: `git add`
+- Record: `gx commit -m "…"` (never `git commit`)
+- Publish: plain `git push` (pre-push hook runs capture). Do not run `gx push`.
+- Open PRs: `gh pr create`
+- Inspect: `git status`, `git diff`, `git log`, `gx status`
 
 Read the gx skill before any commit, push, or PR.

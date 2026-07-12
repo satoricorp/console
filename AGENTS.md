@@ -1,4 +1,11 @@
-Version control: use GX (`gx add`, `gx pr`), not `git commit` / `git push`.
+Version control: use GX, not `git commit`.
+
+Default flow:
+- `git add` to stage files for this revision
+- `gx commit -m "…"` (or MCP `gx_commit`) to record a GX revision
+- `gx status` to inspect local/remote stack state
+- plain `git push` to publish (GX pre-push hook captures and uploads) — do not run `gx push`
+- `gh pr create` to open the PR; GX Cloud posts the rich PR summary comment
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
