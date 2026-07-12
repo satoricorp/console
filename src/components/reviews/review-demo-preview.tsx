@@ -4,6 +4,7 @@ import { CriticalReviewSection } from "@/components/reviews/critical-review-card
 import { NarrativeSection } from "@/components/reviews/narrative-section";
 import { ReviewHeader } from "@/components/reviews/review-header";
 import { SafeToSkim } from "@/components/reviews/safe-to-skim";
+import { UsageAccordion } from "@/components/reviews/usage-accordion";
 import { DEMO_REVIEW } from "@/lib/demo-review";
 import "@/components/reviews/reviews.css";
 
@@ -21,6 +22,7 @@ export function ReviewDemoPreview() {
         <NarrativeSection plan={plan} />
         <CriticalReviewSection plan={plan} review={DEMO_REVIEW} />
         <SafeToSkim items={plan.safeToSkim} review={DEMO_REVIEW} />
+        <UsageAccordion usage={DEMO_REVIEW.usage} />
       </div>
     </div>
   );

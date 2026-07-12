@@ -15,11 +15,11 @@ export function ReviewsEmptyState() {
           You continue creating PRs as you normally would in GitHub. However,
           instead of using the command{" "}
           <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
-            git commit
+            git commit -m &quot;your message&quot;
           </code>
           , you would now want to use the command{" "}
           <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
-            gx commit
+            gx commit -m &quot;your message&quot;
           </code>
           .
         </p>
@@ -29,7 +29,7 @@ export function ReviewsEmptyState() {
           work to improve the review process.
         </p>
 
-        <CopyCommand command="gx commit" />
+        <CopyCommand command={`gx commit -m "your message"`} />
 
         <p>
           Once you begin using GX commit instead of Git commit, you will notice
