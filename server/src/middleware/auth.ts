@@ -218,19 +218,18 @@ async function enforceOrgMembership(
   auth: AuthContext,
 ): Promise<{ auth: AuthContext } | { status: 401 | 403; error: string }> {
   if (isTrustedInfraAuth(auth)) {
-    if (auth.tokenLabel === "cloud-api-key") {
-      if (!auth.orgId) {
-        return { status: 401, error: "Missing X-Org-Id" };
-      }
-      console.info("cloud-api-key org access", {
-        orgId: auth.orgId,
-        userId: auth.userId,
-        tokenLabel: auth.tokenLabel,
-      });
-      return { auth };
-    }
-    // local-dev: allow default org fill-in
+    // Console BFF uses GX_CLOUD_API_KEY + X-User-Id and does not send
+    // X-Org-Id. Fill the default org like local-dev; review/bookmark access
+    // still matches on bookmark.user_id = auth.userId across install orgs.
     const withOrg = await withDefaultOrg(auth);
+    if (auth.tokenLabel === "cloud-api-key") {
+      console.info("cloud-api-key org access", {
+        orgId: withOrg.orgId,
+        userId: withOrg.userId,
+        tokenLabel: withOrg.tokenLabel,
+        orgFromHeader: Boolean(auth.orgId),
+      });
+    }
     return { auth: withOrg };
   }
 
