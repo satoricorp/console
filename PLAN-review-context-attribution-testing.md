@@ -35,7 +35,7 @@ cd server && bun run typecheck
 | # | Case | Expect | Where |
 |---|---|---|---|
 | A1 | Cloud API key + `X-Org-Id` | 200; membership skipped; audit log | auth-middleware ✓ |
-| A2 | Cloud API key, no `X-Org-Id` | 401 | auth-middleware ✓ |
+| A2 | Cloud API key, no `X-Org-Id` | 200 with default org fill-in (Console BFF path) | auth-middleware ✓ |
 | A3 | CLI `gxcs_` + member `github_user_id` | 200 | auth-middleware ✓ |
 | A4 | CLI + spoofed other org | 403 | auth-middleware ✓ |
 | A5 | GitHub token + member | 200 + `githubUserId` | auth-middleware ✓ |

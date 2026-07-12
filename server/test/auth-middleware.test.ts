@@ -73,7 +73,7 @@ describe("requireAuth", () => {
     });
   });
 
-  test("rejects cloud API key without X-Org-Id", async () => {
+  test("fills default org for cloud API key when X-Org-Id is omitted", async () => {
     installTestAuth();
 
     const res = await authApp().request("http://localhost/secure", {
@@ -82,7 +82,15 @@ describe("requireAuth", () => {
         "X-User-Id": "test-user",
       },
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      orgId: string;
+      userId: string;
+      tokenLabel: string;
+    };
+    expect(body.userId).toBe("test-user");
+    expect(body.tokenLabel).toBe("cloud-api-key");
+    expect(body.orgId.length).toBeGreaterThan(0);
   });
 
   test("allows local development without a bearer token when cloud API key is unset", async () => {
