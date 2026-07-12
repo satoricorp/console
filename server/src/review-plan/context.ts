@@ -6,6 +6,10 @@ import type {
   ContextSnippet,
 } from "../context/broker";
 import {
+  fetchPullRequestFilePatches,
+  githubFilesToUnifiedDiff,
+} from "../github/pr-patches";
+import {
   capFilePatches,
   splitUnifiedDiff,
   type FilePatch,
@@ -223,10 +227,11 @@ export async function loadReviewPlanContext(
     head_commit_id: string | null;
     latest_event_id: string | null;
     app_base_branch: string | null;
+    github_pr_number: number | null;
   }[]>`
     SELECT
       id, org_id, repo_full_name, branch_name, title,
-      head_commit_id, latest_event_id, app_base_branch
+      head_commit_id, latest_event_id, app_base_branch, github_pr_number
     FROM bookmarks
     WHERE id = ${args.bookmarkId}::uuid
       AND org_id = ${args.orgId}::uuid
@@ -302,10 +307,14 @@ export async function loadReviewPlanContext(
       LIMIT 1
     `;
     if (fallback?.change) {
+      const rawPatch =
+        typeof fallback.patch === "string" && fallback.patch.trim()
+          ? fallback.patch
+          : null;
       entries = [
         {
           change: fallback.change as StackEntry["change"],
-          patch: fallback.patch ?? undefined,
+          patch: rawPatch ?? undefined,
           branch_name: fallback.branch_name ?? undefined,
           base_branch_name: fallback.base_branch_name ?? undefined,
         },
@@ -319,19 +328,22 @@ export async function loadReviewPlanContext(
     ),
   ];
 
-  const revisions: ReviewRevisionContext[] = entries.map((entry, index) => {
+  let revisions: ReviewRevisionContext[] = entries.map((entry, index) => {
     const provenance = parseProvenance(
       Array.isArray(entry.change?.review_context?.agent_provenance)
         ? entry.change!.review_context!.agent_provenance!
         : [],
     );
     allProvenance.push(...provenance);
-    const patch = typeof entry.patch === "string" ? entry.patch : null;
+    // Empty string patches are common from some GX clients — treat as missing.
+    const rawPatch = typeof entry.patch === "string" ? entry.patch : null;
+    const patch = rawPatch && rawPatch.trim() ? rawPatch : null;
     const filePatches = patch ? splitUnifiedDiff(patch) : [];
+    const listedFiles = (
+      Array.isArray(entry.change?.files) ? entry.change!.files! : []
+    ).filter((f): f is string => typeof f === "string");
     const files =
-      (Array.isArray(entry.change?.files) ? entry.change!.files! : []).filter(
-        (f): f is string => typeof f === "string",
-      ) || filePatches.map((f) => f.file);
+      listedFiles.length > 0 ? listedFiles : filePatches.map((f) => f.file);
 
     return {
       changeId: changeIdFrom(entry, index),
@@ -352,6 +364,53 @@ export async function loadReviewPlanContext(
       agentProvenance: provenance,
     };
   });
+
+  // When the published artifact omitted patch text, fall back to GitHub PR files.
+  const hasFilePatches = revisions.some((r) => r.filePatches.length > 0);
+  if (!hasFilePatches && bookmark.github_pr_number) {
+    try {
+      const ghFiles = await fetchPullRequestFilePatches(
+        db,
+        bookmark.repo_full_name,
+        Number(bookmark.github_pr_number),
+      );
+      const unified = githubFilesToUnifiedDiff(ghFiles);
+      if (unified.trim()) {
+        const filePatches = splitUnifiedDiff(unified);
+        const ghFileNames = filePatches.map((f) => f.file);
+        if (revisions.length === 0) {
+          revisions = [
+            {
+              changeId: "github-pr",
+              branchName: bookmark.branch_name,
+              baseBranchName: bookmark.app_base_branch,
+              description: bookmark.title,
+              files: ghFileNames,
+              patch: unified,
+              filePatches,
+              agentProvenance: [],
+            },
+          ];
+        } else {
+          revisions = revisions.map((rev, index) =>
+            index === 0
+              ? {
+                  ...rev,
+                  patch: unified,
+                  filePatches,
+                  files:
+                    rev.files.length > 0
+                      ? rev.files
+                      : [...new Set([...rev.files, ...ghFileNames])],
+                }
+              : rev,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("GitHub PR patch fallback failed", error);
+    }
+  }
 
   const allFiles = [...new Set(revisions.flatMap((r) => r.files))];
   const cappedPatches = capFilePatches(revisions.flatMap((r) => r.filePatches));
@@ -441,7 +500,11 @@ export async function loadReviewPlanContext(
       })),
     usage,
     risk,
-    prPayloadPresent: true,
+    prPayloadPresent:
+      sessions.length > 0 ||
+      cappedPatches.length > 0 ||
+      allProvenance.length > 0 ||
+      revisions.some((r) => Boolean(r.description?.trim())),
     ...(await loadBrokerFields(db, {
       orgId: args.orgId,
       repoFullName: bookmark.repo_full_name,

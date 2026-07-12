@@ -336,18 +336,41 @@ async function buildReviewResponse(
           ? "failed"
           : "missing";
 
+  // Drop model-invented self-report quotes when the artifact has no verified
+  // gx_commit self-report or first user prompt (common mislabel of the revision description).
+  let planOut = effective?.plan ?? null;
+  if (
+    planOut?.narrative.selfReportQuote &&
+    !ctx?.intent.selfReport?.taskSummary &&
+    !(ctx?.intent.firstUserMessages?.length)
+  ) {
+    planOut = {
+      ...planOut,
+      narrative: {
+        ...planOut.narrative,
+        selfReportQuote: undefined,
+      },
+    };
+  }
+
   return {
     bookmark: bookmarkSummary,
     plan: {
       status: planStatus,
       stale,
-      plan: effective?.plan ?? null,
+      plan: planOut,
       model: effective?.model ?? null,
       provider: effective?.provider ?? null,
       generatedAtMs: effective ? Number(effective.updated_at_ms) : null,
       error: effective?.error ?? null,
     },
-    usage: effective?.usage ?? ctx?.usage ?? null,
+    usage:
+      effective?.usage?.totals?.totalTokens &&
+      effective.usage.totals.totalTokens > 0
+        ? effective.usage
+        : ctx?.usage?.totals?.totalTokens && ctx.usage.totals.totalTokens > 0
+          ? ctx.usage
+          : null,
     changes,
     notablePatches,
     summary: summary

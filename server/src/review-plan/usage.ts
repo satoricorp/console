@@ -17,6 +17,8 @@ type ProvenanceEntry = {
 type ArtifactSession = {
   id?: string;
   session_id?: string;
+  sessionId?: string;
+  uuid?: string;
   command?: string;
   process_name?: string;
   tool?: string;
@@ -47,12 +49,21 @@ type ArtifactResponse = {
   response_body?: unknown;
 };
 
-const emptyCounts = (): UsageTokenCounts => ({
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-});
+function emptyCounts(): UsageTokenCounts {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
+}
+
+function sessionIdOf(session: ArtifactSession): string | null {
+  const raw =
+    session.id ?? session.session_id ?? session.sessionId ?? session.uuid;
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
+  return trimmed || null;
+}
 
 function asNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
@@ -163,7 +174,7 @@ function buildSessionHarnessMap(
     });
   }
   for (const session of sessions) {
-    const sessionId = (session.id ?? session.session_id)?.trim();
+    const sessionId = sessionIdOf(session);
     if (!sessionId || map.has(sessionId)) continue;
     const heuristic =
       harnessFromCommand(session.command, session.process_name) ||
@@ -216,7 +227,7 @@ export function buildUsageBreakdown(args: {
   const unknownModels = new Set<string>();
 
   for (const session of sessions) {
-    const sessionId = (session.id ?? session.session_id)?.trim();
+    const sessionId = sessionIdOf(session);
     if (!sessionId) continue;
 
     const mapped = harnessMap.get(sessionId);

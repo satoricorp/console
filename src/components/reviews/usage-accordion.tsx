@@ -33,7 +33,7 @@ export function UsageAccordion({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  if (!usage) return null;
+  if (!usage || usage.totals.totalTokens <= 0) return null;
   const { totals, byHarness, unknownModels } = usage;
 
   return (

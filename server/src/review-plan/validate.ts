@@ -322,10 +322,11 @@ export function parseAndValidateReviewPlan(
       why,
       whyTeaser,
       attributionSources,
+      // Only quote verified self-report / first user prompt — never trust a
+      // free-form model quote (it often echoes the revision description).
       selfReportQuote:
-        asString(narrativeRaw.selfReportQuote) ??
-        asString(narrativeRaw.self_report_quote) ??
         ctx.intent.selfReport?.taskSummary ??
+        ctx.intent.firstUserMessages[0] ??
         undefined,
     },
     notableChanges: capped,
