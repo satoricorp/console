@@ -22,12 +22,18 @@ function formatUsd(cost: number | null): string {
   return `$${cost.toFixed(2)}`;
 }
 
-export function UsageAccordion({ usage }: { usage: UsageBreakdown | null }) {
+export function UsageAccordion({
+  usage,
+  defaultOpen = false,
+}: {
+  usage: UsageBreakdown | null;
+  defaultOpen?: boolean;
+}) {
   if (!usage) return null;
   const { totals, byHarness, unknownModels } = usage;
 
   return (
-    <details className="usage">
+    <details className="usage" defaultOpen={defaultOpen}>
       <summary>
         <span className="twist">▶</span>
         <h2>Agent usage</h2>

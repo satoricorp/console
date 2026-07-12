@@ -5,6 +5,21 @@
   line-height: 1.55;
   padding-bottom: 96px;
 }
+.gx-review.gx-review-demo {
+  padding-bottom: 0;
+}
+.gx-review.gx-review-demo .wrap {
+  padding: 24px 20px;
+}
+.gx-review.gx-review-demo .usage {
+  margin-bottom: 0;
+}
+.gx-review.gx-review-demo .wrap {
+  padding: 24px 20px;
+}
+.gx-review.gx-review-demo .usage {
+  margin-bottom: 0;
+}
 .gx-review a { color: inherit; }
 .gx-review button { font: inherit; cursor: pointer; }
 .gx-review :is(a, button, summary):focus-visible {

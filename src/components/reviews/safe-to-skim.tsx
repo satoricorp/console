@@ -3,9 +3,11 @@ import type { ReviewPlan, ReviewResponse } from "@/lib/reviews-client";
 export function SafeToSkim({
   items,
   review,
+  defaultOpen = false,
 }: {
   items: ReviewPlan["safeToSkim"];
   review: ReviewResponse;
+  defaultOpen?: boolean;
 }) {
   if (items.length === 0) return null;
   const headSha =
@@ -13,7 +15,7 @@ export function SafeToSkim({
   const repo = review.bookmark.repoFullName;
 
   return (
-    <details className="skim">
+    <details className="skim" defaultOpen={defaultOpen}>
       <summary>
         <span className="twist">▶</span>
         <h2>Safe to skim</h2>
