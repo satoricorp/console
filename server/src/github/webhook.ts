@@ -304,7 +304,15 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  if (!bookmark.latest_event_id) {
+  const resolved = await adoptLatestEventFromBranchSibling(db, {
+    orgId,
+    bookmarkId: bookmark.id,
+    repoFullName: repo.full_name,
+    branchName: pr.head?.ref ?? `pr-${pr.number}`,
+    latestEventId: bookmark.latest_event_id,
+  });
+
+  if (!resolved.latest_event_id) {
     console.info("PR Summary skipped: bookmark has no latest_event_id", {
       bookmarkId: bookmark.id,
     });
@@ -314,7 +322,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const result = await generateSummary(db, {
     orgId,
     userId: "github-webhook",
-    bookmarkId: bookmark.id,
+    bookmarkId: resolved.id,
     provider: createLLMProvider(),
   });
 
@@ -876,6 +884,54 @@ async function findOrCreateBookmark(
     RETURNING id, latest_event_id
   `;
   return created;
+}
+
+async function adoptLatestEventFromBranchSibling(
+  db: postgres.Sql,
+  input: {
+    orgId: string;
+    bookmarkId: string;
+    repoFullName: string;
+    branchName: string;
+    latestEventId: string | null;
+  },
+): Promise<{ id: string; latest_event_id: string | null }> {
+  if (input.latestEventId) {
+    return { id: input.bookmarkId, latest_event_id: input.latestEventId };
+  }
+
+  const [sibling] = await db<
+    { id: string; latest_event_id: string; head_commit_id: string | null }[]
+  >`
+    SELECT id, latest_event_id, head_commit_id
+    FROM bookmarks
+    WHERE org_id = ${input.orgId}
+      AND repo_full_name = ${input.repoFullName}
+      AND branch_name = ${input.branchName}
+      AND latest_event_id IS NOT NULL
+      AND id <> ${input.bookmarkId}
+    ORDER BY updated_at_ms DESC
+    LIMIT 1
+  `;
+  if (!sibling) {
+    return { id: input.bookmarkId, latest_event_id: null };
+  }
+
+  const now = Date.now();
+  const [updated] = await db<{ id: string; latest_event_id: string | null }[]>`
+    UPDATE bookmarks
+    SET latest_event_id = ${sibling.latest_event_id},
+        head_commit_id = COALESCE(bookmarks.head_commit_id, ${sibling.head_commit_id}),
+        updated_at_ms = ${now}
+    WHERE id = ${input.bookmarkId}
+    RETURNING id, latest_event_id
+  `;
+  console.info("PR Summary adopted latest_event_id from branch sibling", {
+    bookmarkId: input.bookmarkId,
+    siblingId: sibling.id,
+    eventId: sibling.latest_event_id,
+  });
+  return updated ?? { id: input.bookmarkId, latest_event_id: sibling.latest_event_id };
 }
 
 async function upsertOrgForInstallation(
