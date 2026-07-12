@@ -167,6 +167,7 @@ export class GxServerStack extends Stack {
             PGDATABASE: "gx",
             PGSSLMODE: "require",
             PORT: String(containerPort),
+            GX_CONTEXT_BROKER: "1",
             ...(props.environmentName === "production"
               ? { GX_SITE_URL: "https://gx.run" }
               : {}),
