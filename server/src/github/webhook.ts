@@ -15,6 +15,7 @@ import {
   resolveOrgIdForInstallation,
   verifyGitHubWebhookSignature,
 } from "./app";
+import { bootstrapInstallationMembership } from "../orgs/members";
 import { postIssueComment, postPullRequestReviewReply } from "./comments";
 
 export const githubWebhookRoutes = new Hono();
@@ -44,6 +45,7 @@ type GitHubInstallation = {
 };
 
 type GitHubUser = {
+  id?: number;
   login?: string;
 };
 
@@ -158,6 +160,8 @@ async function handleInstallation(db: postgres.Sql, payload: WebhookPayload) {
   const now = Date.now();
   const action = payload.action ?? "";
   const removed = action === "deleted";
+  const senderGithubUserId =
+    typeof payload.sender?.id === "number" ? payload.sender.id : null;
 
   await db.begin(async (tx) => {
     await upsertInstallation(tx, installation, now);
@@ -186,6 +190,13 @@ async function handleInstallation(db: postgres.Sql, payload: WebhookPayload) {
   if (!removed) {
     const orgId = await resolveOrgIdForInstallation(db, installation.installationId);
     if (orgId) {
+      await bootstrapInstallationMembership(db, {
+        orgId,
+        installationId: installation.installationId,
+        accountLogin: installation.accountLogin,
+        accountType: installation.accountType,
+        senderGithubUserId,
+      });
       for (const repo of payload.repositories ?? []) {
         if (!repo.full_name) continue;
         enqueueIndexJob({

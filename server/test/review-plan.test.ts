@@ -199,7 +199,13 @@ diff --git a/src/b.ts b/src/b.ts
 });
 
 describe("parseAndValidateReviewPlan", () => {
-  function stubCtx(files: string[]): ReviewPlanContext {
+  function stubCtx(
+    files: string[],
+    opts?: {
+      contextManifest?: ReviewPlanContext["contextManifest"];
+      prPayloadPresent?: boolean;
+    },
+  ): ReviewPlanContext {
     const patch = files
       .map(
         (f) => `diff --git a/${f} b/${f}
@@ -257,7 +263,35 @@ describe("parseAndValidateReviewPlan", () => {
         unknownModels: [],
       },
       risk: { level: "medium", score: 40, signals: [] },
+      contextManifest: opts?.contextManifest,
+      prPayloadPresent: opts?.prPayloadPresent ?? true,
     };
+  }
+
+  function validPlanRaw(attributionSources: Array<{ source: string; pct: number }>) {
+    return JSON.stringify({
+      schemaVersion: 1,
+      narrative: {
+        summary: "Ship the review page as planned.",
+        summaryTeaser: "Ship the review page as planned.",
+        why: "Humans need a focused review surface.",
+        whyTeaser: "Humans need a focused review surface.",
+        attributionSources,
+        selfReportQuote: "Ship the review page",
+      },
+      notableChanges: [
+        {
+          rank: 1,
+          category: "architecture",
+          title: "Core route",
+          whyItMatters: "New review API shapes the product.",
+          anchor: { file: "src/a.ts", lineStart: 1, lineEnd: 2 },
+          anchorConfidence: "exact",
+        },
+      ],
+      safeToSkim: [{ file: "src/b.ts", reason: "trivial" }],
+      revisions: [],
+    });
   }
 
   test("keeps valid anchors and fills safeToSkim", () => {
@@ -329,6 +363,91 @@ describe("parseAndValidateReviewPlan", () => {
     });
     const result = parseAndValidateReviewPlan(raw, ctx);
     expect(result.ok).toBe(false);
+  });
+
+  test("zeros attribution for buckets with provided=0", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"], {
+      contextManifest: {
+        "agent-sessions": { provided: 3, chars: 900 },
+        codebase: { provided: 0, chars: 0 },
+        "previous-prs": { provided: 0, chars: 0 },
+        docs: { provided: 0, chars: 0 },
+      },
+      prPayloadPresent: true,
+    });
+    const result = parseAndValidateReviewPlan(
+      validPlanRaw([
+        { source: "agent-sessions", pct: 50 },
+        { source: "docs", pct: 50 },
+      ]),
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    const sources = result.plan!.narrative.attributionSources;
+    expect(sources.find((s) => s.source === "docs")).toBeUndefined();
+    expect(sources.some((s) => s.source === "agent-sessions")).toBe(true);
+    expect(sources.reduce((sum, s) => sum + s.pct, 0)).toBeCloseTo(100, 0);
+  });
+
+  test("empty model attribution falls back from manifest + pr-payload", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"], {
+      contextManifest: {
+        "agent-sessions": { provided: 0, chars: 0 },
+        codebase: { provided: 2, chars: 400 },
+        "previous-prs": { provided: 0, chars: 0 },
+        docs: { provided: 1, chars: 100 },
+      },
+      prPayloadPresent: true,
+    });
+    const result = parseAndValidateReviewPlan(validPlanRaw([]), ctx);
+    expect(result.ok).toBe(true);
+    const sources = result.plan!.narrative.attributionSources;
+    expect(sources.some((s) => s.source === "codebase")).toBe(true);
+    expect(sources.some((s) => s.source === "docs")).toBe(true);
+    expect(sources.some((s) => s.source === "pr-payload")).toBe(true);
+    expect(sources.every((s) => s.pct > 0)).toBe(true);
+    // Must not be the deleted 70/20/5/5 hardcoded split
+    expect(sources.find((s) => s.source === "agent-sessions")).toBeUndefined();
+  });
+
+  test("payload-only empty index yields 100% pr-payload", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"], {
+      contextManifest: {
+        "agent-sessions": { provided: 0, chars: 0 },
+        codebase: { provided: 0, chars: 0 },
+        "previous-prs": { provided: 0, chars: 0 },
+        docs: { provided: 0, chars: 0 },
+      },
+      prPayloadPresent: true,
+    });
+    const result = parseAndValidateReviewPlan(validPlanRaw([]), ctx);
+    expect(result.ok).toBe(true);
+    expect(result.plan!.narrative.attributionSources).toEqual([
+      { source: "pr-payload", pct: 100 },
+    ]);
+  });
+
+  test("drops pr-payload when prPayloadPresent is false", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"], {
+      contextManifest: {
+        "agent-sessions": { provided: 1, chars: 50 },
+        codebase: { provided: 0, chars: 0 },
+        "previous-prs": { provided: 0, chars: 0 },
+        docs: { provided: 0, chars: 0 },
+      },
+      prPayloadPresent: false,
+    });
+    const result = parseAndValidateReviewPlan(
+      validPlanRaw([
+        { source: "agent-sessions", pct: 40 },
+        { source: "pr-payload", pct: 60 },
+      ]),
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    const sources = result.plan!.narrative.attributionSources;
+    expect(sources.find((s) => s.source === "pr-payload")).toBeUndefined();
+    expect(sources).toEqual([{ source: "agent-sessions", pct: 100 }]);
   });
 });
 

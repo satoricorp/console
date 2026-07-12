@@ -1,5 +1,9 @@
 import { createMiddleware } from "hono/factory";
 import { getSql } from "../db";
+import {
+  parseGithubUserIdFromAuth,
+  requireOrgMembership,
+} from "../orgs/members";
 import type { AuthContext } from "../types";
 
 export type AppEnv = {
@@ -29,8 +33,13 @@ function resolveCloudApiKey(
   return { orgId: orgIdHeader?.trim() || "", userId, tokenLabel: "cloud-api-key" };
 }
 
-function localDevAuthEnabled(): boolean {
-  return process.env.NODE_ENV !== "production" && !process.env.GX_CLOUD_API_KEY?.trim();
+export function localDevAuthEnabled(): boolean {
+  const enabled =
+    process.env.NODE_ENV !== "production" && !process.env.GX_CLOUD_API_KEY?.trim();
+  if (process.env.NODE_ENV === "production" && !process.env.GX_CLOUD_API_KEY?.trim()) {
+    console.error("local-dev auth path asserted inactive in production (no GX_CLOUD_API_KEY)");
+  }
+  return enabled;
 }
 
 function resolveLocalDevAuth(
@@ -153,10 +162,12 @@ async function resolveGitHubToken(
     return null;
   }
 
-  const auth = {
+  const auth: AuthContext = {
     orgId,
     userId: `github:${user.id}`,
     tokenLabel: user.login ? `github:${user.login}` : "github",
+    githubUserId: user.id,
+    githubUserLogin: user.login,
   };
   githubAuthCache.set(`${orgId}:${token}`, auth);
   return auth;
@@ -197,6 +208,55 @@ async function withDefaultOrg(auth: AuthContext): Promise<AuthContext> {
   return { ...auth, orgId: await defaultOrgId() };
 }
 
+function isTrustedInfraAuth(auth: AuthContext): boolean {
+  return auth.tokenLabel === "cloud-api-key" || auth.tokenLabel === "local-dev";
+}
+
+async function enforceOrgMembership(
+  auth: AuthContext,
+): Promise<{ auth: AuthContext } | { status: 401 | 403; error: string }> {
+  if (isTrustedInfraAuth(auth)) {
+    if (auth.tokenLabel === "cloud-api-key") {
+      if (!auth.orgId) {
+        return { status: 401, error: "Missing X-Org-Id" };
+      }
+      console.info("cloud-api-key org access", {
+        orgId: auth.orgId,
+        userId: auth.userId,
+        tokenLabel: auth.tokenLabel,
+      });
+      return { auth };
+    }
+    // local-dev: allow default org fill-in
+    const withOrg = await withDefaultOrg(auth);
+    return { auth: withOrg };
+  }
+
+  if (!auth.orgId) {
+    return { status: 401, error: "Missing X-Org-Id" };
+  }
+
+  const githubUserId =
+    typeof auth.githubUserId === "number"
+      ? auth.githubUserId
+      : parseGithubUserIdFromAuth(auth.userId);
+  if (typeof githubUserId !== "number") {
+    return { status: 403, error: "Forbidden" };
+  }
+
+  const member = await requireOrgMembership(auth.orgId, githubUserId);
+  if (!member) {
+    return { status: 403, error: "Forbidden" };
+  }
+
+  return {
+    auth: {
+      ...auth,
+      githubUserId,
+    },
+  };
+}
+
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const token = bearerToken(c.req.header("Authorization"));
   if (!token && !localDevAuthEnabled()) {
@@ -216,6 +276,11 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
-  c.set("auth", await withDefaultOrg(auth));
+  const enforced = await enforceOrgMembership(auth);
+  if ("error" in enforced) {
+    return c.json({ error: enforced.error }, enforced.status);
+  }
+
+  c.set("auth", enforced.auth);
   await next();
 });

@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+import { attachBrokerContext } from "../context/attach";
 import { createLLMProvider, type LLMProvider } from "../llm/provider";
 import {
   recordGithubPostSkip,
@@ -56,6 +57,7 @@ export type IndexSnippetRow = {
   text: string;
   score?: number;
   sourceKind?: string;
+  bucket?: string;
 };
 
 export type PublishedRevisionRow = {
@@ -287,6 +289,29 @@ export async function loadExtractContext(
     );
   }
 
+  let indexSnippets: IndexSnippetRow[] | undefined;
+  const [bookmarkMeta] = await db<{ repo_full_name: string; branch_name: string }[]>`
+    SELECT repo_full_name, branch_name
+    FROM bookmarks
+    WHERE id = ${target.bookmarkId} AND org_id = ${orgId}
+  `;
+  if (bookmarkMeta?.repo_full_name) {
+    try {
+      const attached = await attachBrokerContext(db, {
+        orgId,
+        repoFullName: bookmarkMeta.repo_full_name,
+        changedFiles: hunkRows.map((h) => h.file),
+        branch: bookmarkMeta.branch_name,
+        headSha: event.head_commit_id ?? undefined,
+      });
+      if (attached.indexSnippets.length > 0) {
+        indexSnippets = attached.indexSnippets;
+      }
+    } catch {
+      // fail open
+    }
+  }
+
   return {
     eventId: target.eventId,
     bookmarkId: target.bookmarkId,
@@ -310,6 +335,7 @@ export async function loadExtractContext(
       model: row.model,
     })),
     sessionEvents,
+    indexSnippets,
     publishedRevisions: publishedRevisionsFromPayload(payload),
     publishedSessions: publishedSessionsFromPayload(payload),
   };

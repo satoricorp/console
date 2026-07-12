@@ -24,7 +24,15 @@ const ATTRIBUTION_SOURCES: AttributionSource["source"][] = [
   "codebase",
   "previous-prs",
   "docs",
+  "pr-payload",
 ];
+
+const BROKER_BUCKETS = [
+  "agent-sessions",
+  "codebase",
+  "previous-prs",
+  "docs",
+] as const;
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -267,12 +275,9 @@ export function parseAndValidateReviewPlan(
     attributionSources.push({ source, pct: Math.max(0, Math.min(100, pct)) });
   }
   if (attributionSources.length === 0) {
-    attributionSources = [
-      { source: "agent-sessions", pct: 70 },
-      { source: "codebase", pct: 20 },
-      { source: "previous-prs", pct: 5 },
-      { source: "docs", pct: 5 },
-    ];
+    attributionSources = fallbackAttributionFromManifest(ctx);
+  } else {
+    attributionSources = clampAttributionToManifest(attributionSources, ctx);
   }
   const attrSum = attributionSources.reduce((s, a) => s + a.pct, 0) || 1;
   attributionSources = attributionSources.map((a) => ({
@@ -348,4 +353,55 @@ export function scoreReviewPlanCandidate(result: ValidatePlanResult): number {
   if (result.plan.narrative.summary.length > 40) score += 5;
   if (result.plan.narrative.why.length > 20) score += 5;
   return score;
+}
+
+function providedChars(
+  ctx: ReviewPlanContext,
+  source: AttributionSource["source"],
+): number {
+  if (source === "pr-payload") {
+    return ctx.prPayloadPresent ? 1 : 0;
+  }
+  const entry = ctx.contextManifest?.[source];
+  return entry?.provided ? entry.chars || entry.provided : 0;
+}
+
+function clampAttributionToManifest(
+  sources: AttributionSource[],
+  ctx: ReviewPlanContext,
+): AttributionSource[] {
+  const kept = sources
+    .map((s) => {
+      if (s.source === "pr-payload") {
+        return ctx.prPayloadPresent ? s : { ...s, pct: 0 };
+      }
+      const provided = ctx.contextManifest?.[s.source]?.provided ?? 0;
+      // When broker off / no manifest, keep model estimate for broker buckets
+      if (!ctx.contextManifest) return s;
+      return provided > 0 ? s : { ...s, pct: 0 };
+    })
+    .filter((s) => s.pct > 0);
+  return kept.length > 0 ? kept : fallbackAttributionFromManifest(ctx);
+}
+
+function fallbackAttributionFromManifest(ctx: ReviewPlanContext): AttributionSource[] {
+  const weights: AttributionSource[] = [];
+  for (const bucket of BROKER_BUCKETS) {
+    const chars = providedChars(ctx, bucket);
+    if (chars > 0) {
+      weights.push({ source: bucket, pct: chars });
+    }
+  }
+  if (ctx.prPayloadPresent) {
+    // Nominal weight so empty-index plans still attribute to payload
+    const payloadWeight = Math.max(
+      100,
+      weights.reduce((s, w) => s + w.pct, 0) * 0.25,
+    );
+    weights.push({ source: "pr-payload", pct: payloadWeight });
+  }
+  if (weights.length === 0) {
+    return [{ source: "pr-payload", pct: 100 }];
+  }
+  return weights;
 }

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { requireAuth, type AppEnv } from "../src/middleware/auth";
+import { setOrgMemberCheckForTests } from "../src/orgs/members";
 import { authHeaders, installTestAuth, testAuthToken } from "./auth";
 
 const originalFetch = globalThis.fetch;
@@ -17,6 +18,7 @@ function authApp() {
 describe("requireAuth", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    setOrgMemberCheckForTests(null);
     if (originalCloudApiKey === undefined) {
       delete process.env.GX_CLOUD_API_KEY;
     } else {
@@ -67,6 +69,18 @@ describe("requireAuth", () => {
     });
   });
 
+  test("rejects cloud API key without X-Org-Id", async () => {
+    installTestAuth();
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: `Bearer ${testAuthToken}`,
+        "X-User-Id": "test-user",
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+
   test("allows local development without a bearer token when cloud API key is unset", async () => {
     delete process.env.GX_CLOUD_API_KEY;
     process.env.NODE_ENV = "development";
@@ -97,10 +111,13 @@ describe("requireAuth", () => {
     expect(res.status).toBe(401);
   });
 
-  test("authorizes a GX CLI session token through Convex", async () => {
+  test("authorizes a GX CLI session token for an org member", async () => {
     delete process.env.GX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     process.env.CONVEX_SITE_URL = "https://convex.example";
+    setOrgMemberCheckForTests(async (orgId, githubUserId) => {
+      return orgId === "test-org" && githubUserId === 12345;
+    });
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://convex.example/cx/auth/cli/verify");
       expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
@@ -139,8 +156,36 @@ describe("requireAuth", () => {
     });
   });
 
-  test("authorizes a GitHub access token", async () => {
+  test("rejects CLI session spoofing another org", async () => {
     delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    process.env.CONVEX_SITE_URL = "https://convex.example";
+    setOrgMemberCheckForTests(async (orgId) => orgId === "own-org");
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          session_id: "session_1",
+          user_id: "user_1",
+          github_user_id: 12345,
+          github_login: "octocat",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gxcs_test",
+        "X-Org-Id": "other-org",
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("authorizes a GitHub access token for an org member", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    setOrgMemberCheckForTests(async (orgId, githubUserId) => {
+      return orgId === "test-org" && githubUserId === 12345;
+    });
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.github.com/user");
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer gho_test");
@@ -162,6 +207,26 @@ describe("requireAuth", () => {
       orgId: "test-org",
       userId: "github:12345",
       tokenLabel: "github:octocat",
+      githubUserId: 12345,
+      githubUserLogin: "octocat",
     });
+  });
+
+  test("rejects GitHub token for non-member org", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    setOrgMemberCheckForTests(async () => false);
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gho_other",
+        "X-Org-Id": "test-org",
+      },
+    });
+    expect(res.status).toBe(403);
   });
 });

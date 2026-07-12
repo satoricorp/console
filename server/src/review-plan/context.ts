@@ -1,4 +1,10 @@
 import type postgres from "postgres";
+import { attachBrokerContext } from "../context/attach";
+import type {
+  ContextBucket,
+  ContextManifestEntry,
+  ContextSnippet,
+} from "../context/broker";
 import {
   capFilePatches,
   splitUnifiedDiff,
@@ -72,6 +78,10 @@ export type ReviewPlanContext = {
   hunkLinks: HunkAttribution[];
   usage: UsageBreakdown;
   risk: { level?: string; score?: number; signals?: string[] } | null;
+  contextBuckets?: Record<ContextBucket, ContextSnippet[]>;
+  contextManifest?: Record<ContextBucket, ContextManifestEntry>;
+  /** True when non-indexed PR/session payload evidence was available for prompts. */
+  prPayloadPresent?: boolean;
 };
 
 type StackEntry = {
@@ -431,7 +441,48 @@ export async function loadReviewPlanContext(
       })),
     usage,
     risk,
+    prPayloadPresent: true,
+    ...(await loadBrokerFields(db, {
+      orgId: args.orgId,
+      repoFullName: bookmark.repo_full_name,
+      branchName: bookmark.branch_name,
+      headCommitId: args.headCommitId || event.head_commit_id,
+      allFiles,
+      intentSummary: selfReport?.taskSummary,
+    })),
   };
+}
+
+async function loadBrokerFields(
+  db: postgres.Sql,
+  args: {
+    orgId: string;
+    repoFullName: string;
+    branchName: string;
+    headCommitId: string;
+    allFiles: string[];
+    intentSummary?: string;
+  },
+): Promise<{
+  contextBuckets?: Record<ContextBucket, ContextSnippet[]>;
+  contextManifest?: Record<ContextBucket, ContextManifestEntry>;
+}> {
+  try {
+    const attached = await attachBrokerContext(db, {
+      orgId: args.orgId,
+      repoFullName: args.repoFullName,
+      branch: args.branchName,
+      headSha: args.headCommitId,
+      changedFiles: args.allFiles,
+      intent: args.intentSummary,
+    });
+    return {
+      contextBuckets: attached.contextBuckets,
+      contextManifest: attached.contextManifest,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export function changedFileSet(ctx: ReviewPlanContext): Set<string> {
