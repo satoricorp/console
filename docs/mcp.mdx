@@ -1,6 +1,6 @@
 ---
 title: MCP Setup
-description: Configure the GX MCP server so coding agents can commit, inspect, review, sync, and push stacks through the local CLI.
+description: Configure the GX MCP server so coding agents can commit, edit, inspect, review, and push stacks through the local CLI.
 ---
 
 The GX MCP server is installed with the CLI. It shells out to your local `gx` binary, so repo state stays on your machine.
@@ -66,13 +66,11 @@ env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
 | --- | --- | --- |
 | `gx_commit` | `gx commit -m "..."` | Record staged Git changes as a GX revision (**default save**) |
 | `gx_status` | `gx status --json` | Inspect unstaged work, features, revisions, and remote state |
+| `gx_edit` | `gx edit <rev>` | Re-enter an existing revision to keep working on it |
 | `gx_push` | `gx push [stack]` | Publish stacks, sessions, and metadata |
-| `gx_sync` | `gx sync` | Reflect remote GitHub and GX state locally |
 | `gx_review` | `gx review [prompt]` | Review using local and cloud context |
-| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
-| `gx_set_base` | `gx base --set <default>` | Return authoring base to the repo default branch |
 
-All tools accept an optional `cwd` (repository working directory; defaults to the MCP server process cwd). Long-running tools (`gx_push`, `gx_sync`, `gx_review`, `gx_generate`) allow up to 5 minutes.
+All tools accept an optional `cwd` (repository working directory; defaults to the MCP server process cwd). Long-running tools (`gx_push`, `gx_review`) allow up to 5 minutes.
 
 ### gx_commit
 
@@ -100,7 +98,17 @@ The provenance fields are the reason to prefer `gx_commit` over shelling out: th
 
 ### gx_status
 
-Read-only. Returns the `gx status --json` stack summary: unstaged files, features, revisions, publish counts, and remote sync state. Optional `show_all` includes hidden compatibility state.
+Read-only. Returns the `gx status --json` stack summary: unstaged files, features, revisions, publish counts, and remote sync state. Optional `show_all` includes all changed files in git working tree sections.
+
+### gx_edit
+
+Re-enter an existing revision so follow-up work lands on that change. Required when amending — `gx commit --amend` is unsupported.
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `revision` | string (required) | change id, commit id, or short id from `gx_status` |
+
+After editing, return to the base branch before starting unrelated `gx_commit` work.
 
 ### gx_push
 
@@ -108,12 +116,6 @@ Read-only. Returns the `gx status --json` stack summary: unstaged files, feature
 | --- | --- | --- |
 | `stack` | string | stack/feature name to push; omit to push the current stack, like `git push` |
 | `all` | boolean | push every accepted stack instead of only the current one |
-
-If the result reports remote divergence, run `gx_sync` and retry the push for that stack.
-
-### gx_sync
-
-Optional `remote` selects a specific remote. Run it before committing or pushing when remote GitHub merges may have landed.
 
 ### gx_review
 
@@ -125,23 +127,6 @@ Optional `remote` selects a specific remote. Run it before committing or pushing
 | `deep` | boolean | full-spectrum review with more local and indexed context |
 | `verbose` | boolean | include repo facts, docs, and changed files |
 
-### gx_generate
-
-Bulk organizer for a large messy working copy — secondary to `gx_commit`.
-
-| Parameter | Type | Meaning |
-| --- | --- | --- |
-| `intent` | string | intent prefix for generated revisions |
-| `filesets` | string[] | changed files or directories to include |
-| `exclude` | string[] | changed files or directories to exclude |
-| `session_id` / `session_ids` | string / string[] | captured GX session ids to include as provenance |
-
-`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. It requires a session id: pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS` in the server environment.
-
-### gx_set_base
-
-Returns the GX authoring base to the repository default branch. It intentionally does not accept an arbitrary branch target.
-
 ## Agent workflow
 
 When a user says "save work", "save using gx", or "save with gx", run:
@@ -151,7 +136,7 @@ When a user says "save work", "save using gx", or "save with gx", run:
 3. `gx_status` — inspect before publish
 4. `gx_push` for ready stacks (unless they ask to keep work local)
 
-Use `gx_sync` first when remote merges may have landed. Use `gx_generate` only for bulk organization of large working copies.
+Use `gx_edit` when continuing or amending an existing revision.
 
 A typical save sequence, as tool calls:
 
@@ -187,11 +172,9 @@ Default flow:
 - Run `gx push` to push code changes, sessions, and GX metadata to GitHub/origin
   and GX Cloud. Plain `git push` also works when the GX pre-push hook is installed.
 
-Use GX MCP first: `gx_sync`, `gx_status`, then `gx_commit` / `gx_push`.
+Use GX MCP first: `gx_status`, then `gx_commit` / `gx_push`. Use `gx_edit` only to re-enter an existing revision.
 If MCP is unavailable, use the CLI fallback: `git add`, `gx commit`, `gx status`, then `git push`.
 
 Use hidden utility commands such as `gx base` or `gx edit` only for explicit
 surgery or user-directed repair.
-
-Use `gx generate` only for bulk organization of large working copies.
 ```

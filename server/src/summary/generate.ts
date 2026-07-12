@@ -1,6 +1,10 @@
 import type postgres from "postgres";
 import { createLLMProvider, type LLMProvider } from "../llm/provider";
 import {
+  recordGithubPostSkip,
+  type GithubPostSkipSource,
+} from "../metering/github-post-skips";
+import {
   checkPrSummaryQuota,
   QuotaExceededError,
   recordPrSummaryUsage,
@@ -98,6 +102,8 @@ export type GenerateSummaryInput = {
   eventId?: string;
   provider?: LLMProvider;
   skipQuotaCheck?: boolean;
+  /** Where to attribute a quota skip row when posting is blocked. */
+  quotaSkipSource?: GithubPostSkipSource;
 };
 
 export type GenerateSummaryResult = {
@@ -363,6 +369,7 @@ export async function generateSummary(
       input.userId,
     );
     if (!quota.allowed) {
+      const reason = quota.reason ?? "trial_expired";
       capture(
         Events.SummaryQuotaBlocked,
         {
@@ -370,9 +377,18 @@ export async function generateSummary(
           event_id: target.eventId,
           used: quota.used,
           limit: quota.limit,
+          reason,
+          source: input.quotaSkipSource ?? "summary_api",
         },
         input.orgId,
       );
+      await recordGithubPostSkip(db, {
+        orgId: input.orgId,
+        bookmarkId: target.bookmarkId,
+        eventId: target.eventId,
+        reason,
+        source: input.quotaSkipSource ?? "summary_api",
+      });
       throw new QuotaExceededError(quota);
     }
   }
