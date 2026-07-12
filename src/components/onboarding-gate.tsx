@@ -15,6 +15,7 @@ const POST_ONBOARDING_PATH = "/reviews";
 const ONBOARDING_FUNNEL_PATHS = [
   "/download",
   "/community",
+  "/install-github",
   "/onboarding",
 ];
 
@@ -25,6 +26,7 @@ const ONBOARDING_BYPASS_PATHS = [
   "/design",
   "/docs",
   "/download",
+  "/install-github",
   "/repositories",
 ];
 
