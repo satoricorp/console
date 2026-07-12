@@ -127,6 +127,36 @@ describeDb("compat bookmarks route", () => {
     expect(typeof rows[0]!.updated_at_ms).toBe("number");
   });
 
+  test("GET /bookmarks includes the user's own bookmarks from other orgs", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const [otherOrg] = await db<{ id: string }[]>`
+      INSERT INTO orgs (plan, created_at_ms)
+      VALUES ('free', ${now})
+      RETURNING id
+    `;
+    await db`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, published_at_ms, updated_at_ms, org_id
+      ) VALUES
+        ('compat-test-user', ${repoFullName}, 'feature/installed-org', 'Installed org bookmark', 1, 'open', ${now}, ${now + 1}, ${otherOrg.id}),
+        ('someone-else', ${repoFullName}, 'feature/foreign', 'Foreign bookmark', 1, 'open', ${now}, ${now + 2}, ${otherOrg.id})
+    `;
+
+    const res = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}`,
+      { headers: authHeaders("compat-test-user", orgId) },
+    );
+
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{ branch_name: string }>;
+    expect(rows.map((row) => row.branch_name).sort()).toEqual([
+      "feature/compat",
+      "feature/installed-org",
+    ]);
+  });
+
   test("GET /bookmarks rejects invalid merge_status", async () => {
     const res = await app.request("http://localhost/bookmarks?merge_status=deleted", {
       headers: authHeaders("compat-test-user", orgId),
