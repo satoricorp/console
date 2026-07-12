@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { ReviewPlan, ReviewResponse } from "@/lib/reviews-client";
 
 export function SafeToSkim({
@@ -9,13 +12,18 @@ export function SafeToSkim({
   review: ReviewResponse;
   defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   if (items.length === 0) return null;
   const headSha =
     review.bookmark.headCommitId || review.bookmark.remoteHeadSha || "HEAD";
   const repo = review.bookmark.repoFullName;
 
   return (
-    <details className="skim" defaultOpen={defaultOpen}>
+    <details
+      className="skim"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>
         <span className="twist">▶</span>
         <h2>Safe to skim</h2>

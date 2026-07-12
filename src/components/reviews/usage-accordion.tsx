@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { UsageBreakdown } from "@/lib/reviews-client";
 
 function formatTok(n: number): string {
@@ -29,11 +32,16 @@ export function UsageAccordion({
   usage: UsageBreakdown | null;
   defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   if (!usage) return null;
   const { totals, byHarness, unknownModels } = usage;
 
   return (
-    <details className="usage" defaultOpen={defaultOpen}>
+    <details
+      className="usage"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>
         <span className="twist">▶</span>
         <h2>Agent usage</h2>
