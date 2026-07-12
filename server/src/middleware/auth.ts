@@ -177,6 +177,10 @@ async function resolveGitHubToken(
 
 let defaultOrgIdCache: string | null = null;
 
+/** Org placeholder for Console BFF cloud-api-key calls that omit X-Org-Id.
+ * Access checks still authorize via bookmark.user_id = X-User-Id. */
+const CLOUD_API_KEY_DEFAULT_ORG_ID = "00000000-0000-4000-8000-000000000001";
+
 async function defaultOrgId(): Promise<string> {
   if (defaultOrgIdCache) {
     return defaultOrgIdCache;
@@ -218,18 +222,23 @@ async function enforceOrgMembership(
   auth: AuthContext,
 ): Promise<{ auth: AuthContext } | { status: 401 | 403; error: string }> {
   if (isTrustedInfraAuth(auth)) {
-    // Console BFF uses GX_CLOUD_API_KEY + X-User-Id and does not send
-    // X-Org-Id. Fill the default org like local-dev; review/bookmark access
-    // still matches on bookmark.user_id = auth.userId across install orgs.
-    const withOrg = await withDefaultOrg(auth);
     if (auth.tokenLabel === "cloud-api-key") {
+      // Console BFF sends GX_CLOUD_API_KEY + X-User-Id without X-Org-Id.
+      // Use a stable placeholder so auth does not require a DB round-trip;
+      // review/bookmark routes still match on bookmark.user_id = auth.userId.
+      const withOrg = auth.orgId
+        ? auth
+        : { ...auth, orgId: CLOUD_API_KEY_DEFAULT_ORG_ID };
       console.info("cloud-api-key org access", {
         orgId: withOrg.orgId,
         userId: withOrg.userId,
         tokenLabel: withOrg.tokenLabel,
         orgFromHeader: Boolean(auth.orgId),
       });
+      return { auth: withOrg };
     }
+    // local-dev: allow default org fill-in from DB
+    const withOrg = await withDefaultOrg(auth);
     return { auth: withOrg };
   }
 
