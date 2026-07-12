@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import { requireAuth, type AppEnv } from "../src/middleware/auth";
-import { setOrgMemberCheckForTests } from "../src/orgs/members";
+import {
+  setOrgMemberCheckForTests,
+  setOrgResolveForTests,
+} from "../src/orgs/members";
 import { authHeaders, installTestAuth, testAuthToken } from "./auth";
 
 const originalFetch = globalThis.fetch;
@@ -19,6 +22,7 @@ describe("requireAuth", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     setOrgMemberCheckForTests(null);
+    setOrgResolveForTests(null);
     if (originalCloudApiKey === undefined) {
       delete process.env.GX_CLOUD_API_KEY;
     } else {
@@ -103,7 +107,8 @@ describe("requireAuth", () => {
   test("rejects missing cloud API key configuration in production", async () => {
     delete process.env.GX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
-    globalThis.fetch = (async () => new Response("bad token", { status: 401 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response("bad token", { status: 401 })) as unknown as typeof fetch;
 
     const res = await authApp().request("http://localhost/secure", {
       headers: authHeaders("test-user", "test-org"),
@@ -120,7 +125,9 @@ describe("requireAuth", () => {
     });
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://convex.example/cx/auth/cli/verify");
-      expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+      expect((init?.headers as Record<string, string>)["Content-Type"]).toBe(
+        "application/json",
+      );
       expect(JSON.parse(String(init?.body))).toEqual({ token: "gxcs_test" });
       return new Response(
         JSON.stringify({
@@ -156,6 +163,71 @@ describe("requireAuth", () => {
     });
   });
 
+  test("resolves org for CLI session when X-Org-Id is omitted", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    process.env.CONVEX_SITE_URL = "https://convex.example";
+    setOrgResolveForTests(async (githubUserId) => {
+      expect(githubUserId).toBe(12345);
+      return "resolved-org";
+    });
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          session_id: "session_1",
+          user_id: "user_1",
+          github_user_id: 12345,
+          github_login: "octocat",
+          machine_id: "machine_1",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gxcs_test",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      orgId: "resolved-org",
+      userId: "user_1",
+      tokenLabel: "gx-cli:octocat",
+      githubUserId: 12345,
+      githubUserLogin: "octocat",
+      sessionId: "session_1",
+      machineId: "machine_1",
+    });
+  });
+
+  test("rejects CLI session without org membership or install", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    process.env.CONVEX_SITE_URL = "https://convex.example";
+    setOrgResolveForTests(async () => null);
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          session_id: "session_1",
+          user_id: "user_1",
+          github_user_id: 12345,
+          github_login: "octocat",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gxcs_test",
+      },
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: "Install the GX GitHub App to continue",
+    });
+  });
+
   test("rejects CLI session spoofing another org", async () => {
     delete process.env.GX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
@@ -188,7 +260,9 @@ describe("requireAuth", () => {
     });
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://api.github.com/user");
-      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer gho_test");
+      expect((init?.headers as Record<string, string>).Authorization).toBe(
+        "Bearer gho_test",
+      );
       return new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },

@@ -195,6 +195,7 @@ async function handleInstallation(db: postgres.Sql, payload: WebhookPayload) {
         installationId: installation.installationId,
         accountLogin: installation.accountLogin,
         accountType: installation.accountType,
+        accountId: installation.accountId,
         senderGithubUserId,
       });
       for (const repo of payload.repositories ?? []) {
