@@ -1,54 +1,50 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+import { source } from "@/lib/source";
+import {
+  DocsBody,
+  DocsDescription,
+  DocsPage,
+  DocsTitle,
+} from "fumadocs-ui/layouts/docs/page";
 import { notFound } from "next/navigation";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { allDocSlugs, getDocPage } from "@/lib/docs-content";
+import { getMDXComponents } from "@/components/mdx";
+import type { Metadata } from "next";
+import { createRelativeLink } from "fumadocs-ui/mdx";
 
-type Props = {
-  params: Promise<{ slug?: string[] }>;
-};
-
-export function generateStaticParams() {
-  return allDocSlugs().map((slug) => ({ slug }));
-}
-
-export const dynamicParams = false;
-
-export async function generateMetadata(props: Props): Promise<Metadata> {
+export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   const params = await props.params;
-  const page = getDocPage(params.slug ?? []);
-  if (!page) return {};
-  return {
-    title: `${page.title} — GX Docs`,
-    description: page.description,
-  };
-}
-
-export default async function DocsPage(props: Props) {
-  const params = await props.params;
-  const page = getDocPage(params.slug ?? []);
+  const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  const MDX = page.data.body;
+
   return (
-    <article className="docs-prose">
-      <h1>{page.title}</h1>
-      <p className="docs-description">{page.description}</p>
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children }) =>
-            href?.startsWith("/") ? (
-              <Link href={href}>{children}</Link>
-            ) : (
-              <a href={href} rel="noreferrer">
-                {children}
-              </a>
-            ),
-        }}
-      >
-        {page.content}
-      </Markdown>
-    </article>
+    <DocsPage toc={page.data.toc} full={page.data.full}>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <DocsDescription>{page.data.description}</DocsDescription>
+      <DocsBody>
+        <MDX
+          components={getMDXComponents({
+            a: createRelativeLink(source, page),
+          })}
+        />
+      </DocsBody>
+    </DocsPage>
   );
+}
+
+export async function generateStaticParams() {
+  return source.generateParams();
+}
+
+export async function generateMetadata(
+  props: PageProps<"/docs/[[...slug]]">,
+): Promise<Metadata> {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  return {
+    title: `${page.data.title} — GX Docs`,
+    description: page.data.description,
+  };
 }
