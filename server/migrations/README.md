@@ -20,6 +20,13 @@ Forward-only Postgres migrations for the consolidated GX server. The original AP
 14. `server/migrations/014_rename_gx_prefix.sql`
 15. `server/migrations/015_flatten_conflict_checks.sql`
 16. `server/migrations/016_flatten_ci_details.sql`
+17. `server/migrations/017_git_blame_context.sql`
+18. `server/migrations/018_bookmarks_branch_unique.sql`
+19. `server/migrations/019_code_review_history.sql`
+20. `server/migrations/020_reported_logs.sql`
+21. `server/migrations/021_reported_logs_identity.sql`
+22. `server/migrations/022_review_plans.sql`
+23. `server/migrations/023_github_post_skips.sql`
 
 ### One-liner (local Postgres via Docker)
 

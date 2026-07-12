@@ -2,6 +2,7 @@ import { createHmac, generateKeyPairSync } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import { validateSummary } from "../src/summary/validate";
 
 const hasDb = Boolean(process.env.DATABASE_URL);
@@ -119,12 +120,15 @@ describeDb("GitHub webhook", () => {
     const [org] = await db<{ id: string }[]>`
       INSERT INTO orgs (installation_id, plan, created_at_ms)
       VALUES (${INSTALLATION_ID}, 'free', ${now})
-      ON CONFLICT (installation_id) DO UPDATE SET plan = EXCLUDED.plan
+      ON CONFLICT (installation_id) DO UPDATE SET
+        plan = EXCLUDED.plan,
+        created_at_ms = EXCLUDED.created_at_ms
       RETURNING id
     `;
     orgId = org.id;
 
     await db`DELETE FROM review_usage WHERE org_id = ${orgId}`;
+    await db`DELETE FROM github_post_skips WHERE org_id = ${orgId}`;
     await db`DELETE FROM summary_events WHERE org_id = ${orgId}`;
     await db`DELETE FROM summaries WHERE org_id = ${orgId}`;
 
@@ -173,6 +177,12 @@ describeDb("GitHub webhook", () => {
         ${orgId},
         ${eventId}
       )
+      ON CONFLICT (user_id, repo_full_name, branch_name) DO UPDATE SET
+        github_pr_number = EXCLUDED.github_pr_number,
+        github_pr_url = EXCLUDED.github_pr_url,
+        org_id = EXCLUDED.org_id,
+        latest_event_id = EXCLUDED.latest_event_id,
+        updated_at_ms = EXCLUDED.updated_at_ms
       RETURNING id
     `;
     bookmarkId = bookmark.id;
@@ -311,6 +321,60 @@ describeDb("GitHub webhook", () => {
     `;
     expect(comments.length).toBe(1);
     expect(Number(comments[0]?.github_comment_id)).toBe(9001);
+  });
+
+  test("pull_request opened with expired trial posts nothing and logs skip", async () => {
+    const db = getSql();
+    const expired = Date.now() - (BASE_TRIAL_DAYS + 1) * MS_PER_DAY;
+    await db`
+      UPDATE orgs SET created_at_ms = ${expired}, plan = 'free' WHERE id = ${orgId}
+    `;
+    await db`DELETE FROM github_post_skips WHERE org_id = ${orgId}`;
+    await db`DELETE FROM summaries WHERE org_id = ${orgId}`;
+    fetchCalls.length = 0;
+
+    const res = await postWebhook("pull_request", {
+      action: "opened",
+      installation: { id: INSTALLATION_ID },
+      repository: {
+        id: 999001,
+        full_name: REPO_FULL_NAME,
+        name: "gx",
+        owner: { login: "acme" },
+      },
+      pull_request: {
+        number: PR_NUMBER,
+        title: "Add webhook",
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER}`,
+        head: { ref: "feat/webhook", sha: "abc123" },
+        base: { ref: "main", sha: "def456" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(fetchCalls.some((c) => c.url.includes("/issues/"))).toBe(false);
+    expect(fetchCalls.some((c) => c.url.includes("/comments"))).toBe(false);
+
+    const skips = await db<
+      { reason: string; source: string; pr_number: number | null }[]
+    >`
+      SELECT reason, source, pr_number FROM github_post_skips
+      WHERE org_id = ${orgId}
+      ORDER BY created_at_ms DESC
+    `;
+    expect(skips.length).toBe(1);
+    expect(skips[0]!.reason).toBe("trial_expired");
+    expect(skips[0]!.source).toBe("github_webhook");
+    expect(skips[0]!.pr_number).toBe(PR_NUMBER);
+
+    const summaries = await db<{ id: string }[]>`
+      SELECT id FROM summaries WHERE org_id = ${orgId} AND bookmark_id = ${bookmarkId}
+    `;
+    expect(summaries.length).toBe(0);
+
+    await db`
+      UPDATE orgs SET created_at_ms = ${Date.now()}, plan = 'free' WHERE id = ${orgId}
+    `;
   });
 
   test("review comment creates pr_comments, decisions, and rules", async () => {

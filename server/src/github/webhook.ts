@@ -3,7 +3,8 @@ import type postgres from "postgres";
 import { getSql } from "../db";
 import { containsGxMention, handleGxMention } from "../gx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
-import { checkPrSummaryQuota, upgradeMessage } from "../metering/quota";
+import { recordGithubPostSkip } from "../metering/github-post-skips";
+import { checkPrSummaryQuota } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
@@ -259,7 +260,13 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
 
   const quota = await checkPrSummaryQuota(db, orgId, bookmark.id);
   if (!quota.allowed) {
-    console.info("PR Summary blocked by quota", { orgId, bookmarkId: bookmark.id });
+    const reason = quota.reason ?? "trial_expired";
+    console.info("PR Summary skipped: not posting to GitHub", {
+      orgId,
+      bookmarkId: bookmark.id,
+      reason,
+      source: "github_webhook",
+    });
     capture(
       Events.SummaryQuotaBlocked,
       {
@@ -268,21 +275,20 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
         repo: repo.full_name,
         used: quota.used,
         limit: quota.limit,
+        reason,
         source: "github_webhook",
       },
       orgId,
     );
-    try {
-      const token = await getInstallationAccessToken(installationId);
-      await postIssueComment(
-        token,
-        repo.full_name,
-        pr.number,
-        upgradeMessage(quota),
-      );
-    } catch (error) {
-      console.error("Failed to post quota upgrade comment", { orgId, error });
-    }
+    await recordGithubPostSkip(db, {
+      orgId,
+      bookmarkId: bookmark.id,
+      eventId: bookmark.latest_event_id ?? null,
+      reason,
+      source: "github_webhook",
+      prNumber: pr.number,
+      repoFullName: repo.full_name,
+    });
     return;
   }
 

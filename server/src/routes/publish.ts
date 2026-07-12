@@ -10,6 +10,7 @@ import { postIssueComment } from "../github/comments";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
+import { QuotaExceededError } from "../metering/quota";
 import { generateSummary } from "../summary/generate";
 import { capture, Events } from "../telemetry/posthog";
 import type { PublishRegistration, PushBundle } from "../types";
@@ -356,6 +357,7 @@ async function generateMissingSummary(
       orgId: input.orgId,
       userId: input.userId,
       bookmarkId: input.bookmarkId,
+      quotaSkipSource: "publish",
     });
     return {
       summaryId: result.summaryId,
@@ -363,6 +365,14 @@ async function generateMissingSummary(
       content: result.content,
     };
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      console.info("PR Summary after publish skipped: not posting to GitHub", {
+        orgId: input.orgId,
+        bookmarkId: input.bookmarkId,
+        reason: error.message,
+      });
+      return null;
+    }
     console.error("PR Summary after publish failed", {
       orgId: input.orgId,
       bookmarkId: input.bookmarkId,
