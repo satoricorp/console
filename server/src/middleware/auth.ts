@@ -1,8 +1,10 @@
 import { createMiddleware } from "hono/factory";
 import { getSql } from "../db";
 import {
+  healPersonalInstallMembership,
   parseGithubUserIdFromAuth,
   requireOrgMembership,
+  resolveOrgIdForGithubUser,
 } from "../orgs/members";
 import type { AuthContext } from "../types";
 
@@ -232,10 +234,6 @@ async function enforceOrgMembership(
     return { auth: withOrg };
   }
 
-  if (!auth.orgId) {
-    return { status: 401, error: "Missing X-Org-Id" };
-  }
-
   const githubUserId =
     typeof auth.githubUserId === "number"
       ? auth.githubUserId
@@ -244,14 +242,38 @@ async function enforceOrgMembership(
     return { status: 403, error: "Forbidden" };
   }
 
-  const member = await requireOrgMembership(auth.orgId, githubUserId);
-  if (!member) {
-    return { status: 403, error: "Forbidden" };
+  let orgId = auth.orgId;
+  if (!orgId) {
+    // CLI never sends X-Org-Id; resolve from membership or personal install.
+    const resolved = await resolveOrgIdForGithubUser(
+      githubUserId,
+      auth.githubUserLogin,
+    );
+    if (!resolved) {
+      return {
+        status: 403,
+        error: "Install the GX GitHub App to continue",
+      };
+    }
+    orgId = resolved;
+  } else {
+    const member = await requireOrgMembership(orgId, githubUserId);
+    if (!member) {
+      const healed = await healPersonalInstallMembership(
+        orgId,
+        githubUserId,
+        auth.githubUserLogin,
+      );
+      if (!healed) {
+        return { status: 403, error: "Forbidden" };
+      }
+    }
   }
 
   return {
     auth: {
       ...auth,
+      orgId,
       githubUserId,
     },
   };
