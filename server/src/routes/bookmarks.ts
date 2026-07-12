@@ -33,6 +33,10 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   }
 
   const db = getSql();
+  // Publishes for GitHub-App-installed repos are filed under the installation
+  // org (resolvePublishOrgId), not the caller's org, so an org-only filter
+  // hides the user's own publishes. Match the access model of
+  // loadAccessibleBookmark in routes/reviews.ts: own bookmarks always show.
   const rows = await db<BookmarkListRow[]>`
     SELECT
       id,
@@ -45,7 +49,7 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
       merge_status,
       updated_at_ms
     FROM bookmarks
-    WHERE org_id = ${auth.orgId}
+    WHERE (org_id = ${auth.orgId} OR user_id = ${auth.userId})
       ${mergeStatus ? db`AND merge_status = ${mergeStatus}` : db``}
       ${repoFullName ? db`AND repo_full_name = ${repoFullName}` : db``}
     ORDER BY updated_at_ms DESC
