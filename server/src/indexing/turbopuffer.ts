@@ -183,29 +183,71 @@ export async function indexCodeReviewHistory(
   }
 }
 
+export async function embedQueryText(query: string): Promise<number[] | null> {
+  const cfg = indexingConfig();
+  if (!cfg) return null;
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  const [vector] = await embedTexts(cfg, [trimmed]);
+  return vector ?? null;
+}
+
 export async function searchIndex(args: {
   orgId: string;
   repoFullName: string;
   query: string;
   limit?: number;
+  sourceKinds?: string[];
+  /** Override namespace (e.g. shared knowledge). When set, org/repo filters are not applied unless includeOrgFilter. */
+  namespace?: string;
+  includeOrgFilter?: boolean;
+  extraFilters?: Array<[string, string, string]>;
+  /** Precomputed embedding — avoids duplicate OpenAI calls when querying multiple buckets. */
+  vector?: number[];
 }): Promise<IndexSearchResult[]> {
   const cfg = indexingConfig();
   if (!cfg) {
     return [];
   }
   const query = args.query.trim();
-  if (!query) {
+  if (!query && !args.vector) {
     return [];
   }
 
-  const namespace = namespaceForOrgRepo(args.orgId, args.repoFullName);
-  const [vector] = await embedTexts(cfg, [query]);
+  const namespace = args.namespace ?? namespaceForOrgRepo(args.orgId, args.repoFullName);
+  const vector = args.vector ?? (await embedTexts(cfg, [query]))[0];
+  if (!vector) {
+    return [];
+  }
+
+  const filterClauses: Array<[string, string, string] | ["Or", Array<[string, string, string]>]> = [];
+  const useOrgFilter = args.includeOrgFilter ?? !args.namespace;
+  if (useOrgFilter) {
+    filterClauses.push(["org_id", "Eq", args.orgId]);
+    filterClauses.push(["repo_full_name", "Eq", args.repoFullName]);
+  }
+  if (args.sourceKinds && args.sourceKinds.length === 1) {
+    filterClauses.push(["source_kind", "Eq", args.sourceKinds[0]!]);
+  } else if (args.sourceKinds && args.sourceKinds.length > 1) {
+    filterClauses.push([
+      "Or",
+      args.sourceKinds.map((kind) => ["source_kind", "Eq", kind] as [string, string, string]),
+    ]);
+  }
+  for (const extra of args.extraFilters ?? []) {
+    filterClauses.push(extra);
+  }
+
   const body: Record<string, unknown> = {
     rank_by: ["vector", "ANN", vector],
     limit: Math.min(Math.max(args.limit ?? 8, 1), 50),
     include_attributes: true,
-    filters: ["repo_full_name", "Eq", args.repoFullName],
   };
+  if (filterClauses.length === 1) {
+    body.filters = filterClauses[0];
+  } else if (filterClauses.length > 1) {
+    body.filters = ["And", filterClauses];
+  }
 
   const response = await fetchImpl(namespaceURL(cfg, namespace, "query"), {
     method: "POST",
@@ -232,6 +274,64 @@ export async function searchIndex(args: {
       attributes,
     }];
   });
+}
+
+/** Upsert pre-chunked client content into the org/repo namespace (stamps org_id). */
+export async function upsertClientChunks(args: {
+  orgId: string;
+  repoFullName: string;
+  chunks: Array<{
+    text: string;
+    sourceKind: string;
+    chunkHash?: string;
+    file?: string;
+    attributes?: Record<string, unknown>;
+  }>;
+}): Promise<IndexJobResult> {
+  const cfg = indexingConfig();
+  if (!cfg) {
+    return { status: "disabled", chunks: 0 };
+  }
+  if (args.chunks.length === 0) {
+    return { status: "empty", chunks: 0 };
+  }
+
+  const namespace = namespaceForOrgRepo(args.orgId, args.repoFullName);
+  const prepared: IndexChunk[] = args.chunks.map((item, index) => {
+    const hash =
+      item.chunkHash?.trim() ||
+      createHash("sha256").update(`${item.sourceKind}:${item.file ?? ""}:${item.text}`).digest("hex");
+    const text = limitBytes(item.text, maxChunkBytes);
+    return chunk(
+      item.sourceKind,
+      [args.orgId, args.repoFullName, hash, String(index)],
+      text,
+      {
+        org_id: args.orgId,
+        repo_full_name: args.repoFullName,
+        source_kind: item.sourceKind,
+        file: item.file ?? "",
+        chunk_hash: hash,
+        indexed_reason: "client_chunks",
+        ...(item.attributes ?? {}),
+      },
+    );
+  });
+
+  try {
+    for (let start = 0; start < prepared.length; start += 64) {
+      const batch = prepared.slice(start, start + 64);
+      const embeddings = await embedTexts(cfg, batch.map((c) => c.text));
+      await upsertTurboPufferRows(cfg, namespace, batch, embeddings);
+    }
+    return { status: "indexed", chunks: prepared.length };
+  } catch (error) {
+    return {
+      status: "failed",
+      chunks: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export async function searchCodeReviewHistory(args: {

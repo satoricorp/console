@@ -1,4 +1,8 @@
 import type { ReviewPlanContext } from "../../review-plan/context";
+import {
+  formatBucketPromptSections,
+  formatContextManifestLine,
+} from "../../context/broker";
 
 export const REVIEW_PLAN_SYSTEM_PROMPT = `You are a principal engineer writing a focused human review plan for a pull request.
 
@@ -10,8 +14,8 @@ Return JSON only (no markdown fences) matching this schema:
     "summaryTeaser": string,    // exactly one sentence; shown when Summary is collapsed
     "why": string,              // rationale for the approach, <=600 chars
     "whyTeaser": string,        // exactly one sentence; shown when Why? is collapsed
-    "attributionSources": [     // model estimate of evidence provenance (not measured) — sum ~100
-      {"source": "agent-sessions"|"codebase"|"previous-prs"|"docs", "pct": number}
+    "attributionSources": [     // estimate over provided context only — sum ~100
+      {"source": "agent-sessions"|"codebase"|"previous-prs"|"docs"|"pr-payload", "pct": number}
     ],
     "selfReportQuote": string   // short quote of agent self-report / first prompt
   },
@@ -41,7 +45,7 @@ Rules:
 - Anchors must reference changed files; line numbers must fall inside the provided hunk new-line ranges when possible (anchorConfidence="exact").
 - Summary must restate the original intent and quote the self-report / first user prompt when available.
 - summaryTeaser and whyTeaser must each be exactly one sentence (a condensation of the full text).
-- attributionSources percentages are your estimate of where the narrative's evidence came from based on the context blocks — informative, not measured.
+- attributionSources percentages are your estimate of where the narrative's evidence came from based on the context blocks — informative, not measured. Only name sources listed in "Context provided" (plus pr-payload for PR/session payload evidence). Never name a bucket with provided=0.
 - Be specific and concrete. No filler. No markdown.`;
 
 export function buildReviewPlanUserPrompt(ctx: ReviewPlanContext): string {
@@ -99,6 +103,11 @@ export function buildReviewPlanUserPrompt(ctx: ReviewPlanContext): string {
         `- ${link.file}:${link.lineStart}-${link.lineEnd} ${link.authorship} tool=${link.tool ?? "?"} model=${link.model ?? "?"}`,
       );
     }
+  }
+
+  if (ctx.contextBuckets && ctx.contextManifest) {
+    lines.push("", formatContextManifestLine(ctx.contextManifest));
+    lines.push(...formatBucketPromptSections(ctx.contextBuckets));
   }
 
   lines.push("", "## Patches (capped)");

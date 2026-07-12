@@ -1,4 +1,11 @@
 import type { ExtractContext } from "../../summary/generate";
+import {
+  formatBucketPromptSections,
+  formatContextManifestLine,
+  type ContextBucket,
+  type ContextManifestEntry,
+  type ContextSnippet,
+} from "../../context/broker";
 
 export const PR_SUMMARY_SYSTEM_PROMPT = `You write PR Summaries for GitHub pull request comments.
 
@@ -15,7 +22,9 @@ Rules:
 - Be concise; bullet lines count as lines
 - Never use the word "brief"
 - Mention binding rules only when violated
-- Under Provenance, cite GX capture (hunk_links, session_events) when available`;
+- Under Provenance, cite GX capture (hunk_links, session_events) when available
+- Only cite indexed buckets that appear in "Context provided"; never name a bucket with provided=0
+- End Provenance with a Sources footer using the Context provided counts when present`;
 
 const maxPatchCharsPerRevision = 3000;
 const maxPatchCharsTotal = 12000;
@@ -92,6 +101,41 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
         `- ${event.sessionId} ${event.eventType} ${event.filePath ?? ""} line=${event.rawLine}`,
       );
     }
+  }
+
+  if (ctx.indexSnippets && ctx.indexSnippets.length > 0) {
+    const byBucket = new Map<ContextBucket, ContextSnippet[]>();
+    const manifest = {
+      "agent-sessions": { provided: 0, chars: 0 },
+      codebase: { provided: 0, chars: 0 },
+      "previous-prs": { provided: 0, chars: 0 },
+      docs: { provided: 0, chars: 0 },
+    } as Record<ContextBucket, ContextManifestEntry>;
+    for (const snip of ctx.indexSnippets) {
+      const bucket = (snip.bucket as ContextBucket | undefined) ?? "codebase";
+      const list = byBucket.get(bucket) ?? [];
+      list.push({
+        id: snip.id,
+        citationId: snip.id,
+        bucket,
+        sourceKind: snip.sourceKind ?? "unknown",
+        text: snip.text,
+        score: snip.score,
+      });
+      byBucket.set(bucket, list);
+      manifest[bucket] = {
+        provided: list.length,
+        chars: list.reduce((s, x) => s + x.text.length, 0),
+      };
+    }
+    const buckets = {
+      "agent-sessions": byBucket.get("agent-sessions") ?? [],
+      codebase: byBucket.get("codebase") ?? [],
+      "previous-prs": byBucket.get("previous-prs") ?? [],
+      docs: byBucket.get("docs") ?? [],
+    };
+    lines.push(formatContextManifestLine(manifest));
+    lines.push(...formatBucketPromptSections(buckets));
   }
 
   lines.push("", "Write the PR Summary now.");

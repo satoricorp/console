@@ -13,6 +13,7 @@ import { reviewRoutes } from "./routes/review";
 import { reviewHistoryRoutes } from "./routes/review-history";
 import { reviewsRoutes } from "./routes/reviews";
 import { summaryRoutes } from "./routes/summary";
+import { indexRoutes } from "./routes/index-chunks";
 
 const app = new Hono<AppEnv>();
 
@@ -27,6 +28,7 @@ app.route("/", activityRoutes);
 app.route("/", bookmarksRoutes);
 app.route("/", publishRoutes);
 app.route("/", reportedLogsRoutes);
+app.route("/", indexRoutes);
 app.route("/gx/openai", openAIRoutes);
 app.route("/", githubWebhookRoutes);
 

@@ -2,7 +2,8 @@ export type AttributionSourceKind =
   | "agent-sessions"
   | "codebase"
   | "previous-prs"
-  | "docs";
+  | "docs"
+  | "pr-payload";
 
 export type NotableCategory =
   | "architecture"

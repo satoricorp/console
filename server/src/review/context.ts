@@ -1,4 +1,6 @@
 import type postgres from "postgres";
+import { attachBrokerContext } from "../context/attach";
+import { contextBrokerEnabled } from "../indexing/config";
 import { searchIndex } from "../indexing/turbopuffer";
 
 export type ReviewRule = {
@@ -133,25 +135,45 @@ export async function loadReviewContext(
   const repoFullName = await resolveRepoFullName(db, orgId, input.repoRoot);
   if (repoFullName) {
     try {
-      const query = [input.repoRoot, input.head, ...hunkLinks.map((h) => h.file)]
-        .filter(Boolean)
-        .join(" ");
-      const hits = await searchIndex({
-        orgId,
-        repoFullName,
-        query,
-        limit: 8,
-      });
-      indexAvailable = hits.length > 0 || Boolean(process.env.OPENAI_API_KEY && process.env.TURBOPUFFER_API_KEY);
-      indexSnippets = hits.map((hit) => ({
-        id: hit.id,
-        text: hit.text,
-        score: hit.score,
-        sourceKind:
-          typeof hit.attributes.source_kind === "string"
-            ? hit.attributes.source_kind
-            : undefined,
-      }));
+      if (contextBrokerEnabled()) {
+        const attached = await attachBrokerContext(db, {
+          orgId,
+          repoFullName,
+          changedFiles: hunkLinks.map((h) => h.file),
+          headSha: input.head,
+        });
+        indexSnippets = attached.indexSnippets.map((s) => ({
+          id: s.id,
+          text: s.text,
+          score: s.score,
+          sourceKind: s.sourceKind,
+        }));
+        indexAvailable =
+          attached.indexSnippets.length > 0 ||
+          Boolean(process.env.OPENAI_API_KEY && process.env.TURBOPUFFER_API_KEY);
+      } else {
+        const query = [input.repoRoot, input.head, ...hunkLinks.map((h) => h.file)]
+          .filter(Boolean)
+          .join(" ");
+        const hits = await searchIndex({
+          orgId,
+          repoFullName,
+          query,
+          limit: 8,
+        });
+        indexAvailable =
+          hits.length > 0 ||
+          Boolean(process.env.OPENAI_API_KEY && process.env.TURBOPUFFER_API_KEY);
+        indexSnippets = hits.map((hit) => ({
+          id: hit.id,
+          text: hit.text,
+          score: hit.score,
+          sourceKind:
+            typeof hit.attributes.source_kind === "string"
+              ? hit.attributes.source_kind
+              : undefined,
+        }));
+      }
     } catch {
       indexSnippets = [];
     }

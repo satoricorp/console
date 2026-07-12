@@ -34,3 +34,12 @@ export function namespaceForOrgRepo(orgId: string, repoFullName: string): string
   const slug = repoFullName.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
   return `gx-${orgId}-${slug}`;
 }
+
+export function reviewKnowledgeNamespace(): string {
+  return process.env.GX_REVIEW_KNOWLEDGE_NAMESPACE?.trim() || "gx-review-knowledge";
+}
+
+export function contextBrokerEnabled(): boolean {
+  const flag = process.env.GX_CONTEXT_BROKER?.trim();
+  return flag === "1" || flag === "true";
+}
