@@ -14,8 +14,8 @@ const POST_ONBOARDING_PATH = "/reviews";
 /** Soft funnel steps shown once after first login. */
 const ONBOARDING_FUNNEL_PATHS = [
   "/download",
-  "/community",
   "/install-github",
+  "/community",
   "/onboarding",
 ];
 

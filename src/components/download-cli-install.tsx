@@ -103,7 +103,7 @@ export function DownloadCliInstall() {
       <div className="flex justify-end">
         {installCommandCopied ? (
           <Link
-            href={withOnboardingParam("/community", forceOnboarding)}
+            href={withOnboardingParam("/install-github", forceOnboarding)}
             className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             <GitBranch className="h-3.5 w-3.5" />

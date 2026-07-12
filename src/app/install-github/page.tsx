@@ -11,7 +11,8 @@ export default function InstallGithubPage() {
             Install on GitHub
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            Connect the GX GitHub App so org membership and reviews work.
+            One click opens GitHub so you can install the GX app on your account
+            or organization.
           </p>
         </div>
 

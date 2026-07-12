@@ -158,7 +158,7 @@ export function CommunityBonusStep() {
 
       <div className="flex justify-end">
         <Link
-          href={withOnboardingParam("/install-github", forceOnboarding)}
+          href={withOnboardingParam("/onboarding", forceOnboarding)}
           onClick={markCommunityScreenComplete}
           className="group inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >

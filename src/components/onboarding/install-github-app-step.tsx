@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, ArrowUpRight, Check, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, RefreshCw } from "lucide-react";
 import { useAction, useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { GitHubIcon } from "@/components/github-icon";
 import { withOnboardingParam } from "@/lib/site-links";
+
+const FALLBACK_INSTALL_URL = "https://github.com/apps/gx-agentic-code-review";
 
 export function InstallGithubAppStep() {
   const searchParams = useSearchParams();
@@ -18,22 +20,26 @@ export function InstallGithubAppStep() {
     api.userAppState.completeGithubAppInstallScreen,
   );
 
-  const [installUrl, setInstallUrl] = useState<string | null>(null);
+  const [installUrl, setInstallUrl] = useState(FALLBACK_INSTALL_URL);
   const [installed, setInstalled] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
 
   const refreshStatus = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     setChecking(true);
     try {
       const status = await getStatus({});
-      setInstallUrl(status.installUrl);
+      setInstallUrl(status.installUrl || FALLBACK_INSTALL_URL);
       setInstalled(status.installed);
       setChecked(status.checked);
     } catch (error: unknown) {
       console.error("Failed to check GitHub App install status", error);
+      setInstallUrl(FALLBACK_INSTALL_URL);
     } finally {
       setLoading(false);
       setChecking(false);
@@ -64,58 +70,50 @@ export function InstallGithubAppStep() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-          Install the GX GitHub App on your personal account or org so reviews
-          and CLI auth can run against your repositories.
-        </p>
-        {installed ? (
-          <p className="flex items-center gap-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            <Check className="h-3.5 w-3.5 shrink-0 text-zinc-950 dark:text-zinc-50" />
-            GX is installed on at least one of your GitHub accounts.
-          </p>
-        ) : (
-          <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-            After installing, return here and continue. Membership syncs from
-            the install webhook.
-          </p>
-        )}
-      </div>
+      <ol className="list-decimal space-y-2 pl-4 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+        <li>Click the button below to open GitHub.</li>
+        <li>Choose your personal account or an organization.</li>
+        <li>Install the GX app, then come back here and continue.</li>
+      </ol>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {installUrl ? (
+      {installed ? (
+        <p className="flex items-center gap-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+          <Check className="h-3.5 w-3.5 shrink-0 text-zinc-950 dark:text-zinc-50" />
+          GX is installed on at least one of your GitHub accounts.
+        </p>
+      ) : null}
+
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
           <a
             href={installUrl}
             target="_blank"
             rel="noreferrer"
-            className="group inline-flex cursor-pointer items-center gap-1.5 border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] font-medium text-zinc-950 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-100"
+            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             <GitHubIcon className="h-3.5 w-3.5" />
-            {installed ? "Manage install on GitHub" : "Install GX on GitHub"}
-            <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            {installed ? "Manage on GitHub" : "Install GX on GitHub"}
           </a>
-        ) : null}
 
-        {checked && !installed ? (
-          <button
-            type="button"
-            onClick={() => void refreshStatus()}
-            disabled={checking}
-            className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-50"
-          >
-            <RefreshCw
-              className={`h-3 w-3 ${checking ? "animate-spin" : ""}`}
-            />
-            Check again
-          </button>
-        ) : null}
-      </div>
+          {checked && !installed ? (
+            <button
+              type="button"
+              onClick={() => void refreshStatus()}
+              disabled={checking}
+              className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-50"
+            >
+              <RefreshCw
+                className={`h-3 w-3 ${checking ? "animate-spin" : ""}`}
+              />
+              Check again
+            </button>
+          ) : null}
+        </div>
 
-      <div className="flex justify-end">
         <Link
-          href={withOnboardingParam("/onboarding", forceOnboarding)}
+          href={withOnboardingParam("/community", forceOnboarding)}
           onClick={markComplete}
-          className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="inline-flex cursor-pointer items-center justify-center gap-2 self-end rounded-none border border-zinc-200 bg-white px-3.5 py-2 text-[13px] font-medium text-zinc-950 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
         >
           Continue
           <ArrowRight className="h-3.5 w-3.5" />
