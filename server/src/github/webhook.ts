@@ -17,6 +17,7 @@ import {
 } from "./app";
 import { bootstrapInstallationMembership } from "../orgs/members";
 import { postIssueComment, postPullRequestReviewReply } from "./comments";
+import { updatePullRequestWithSummary } from "./pr-body";
 
 export const githubWebhookRoutes = new Hono();
 
@@ -326,18 +327,22 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     provider: createLLMProvider(),
   });
 
-  let githubCommentId: number | null = null;
+  let bodyUpdated = false;
+  let postedOk = false;
+  let postedBody = result.content;
   try {
     const token = await getInstallationAccessToken(installationId);
-    const posted = await postIssueComment(
+    const posted = await updatePullRequestWithSummary(
       token,
       repo.full_name,
       pr.number,
       result.content,
     );
-    githubCommentId = posted.id;
+    bodyUpdated = posted.updated;
+    postedBody = posted.body;
+    postedOk = true;
   } catch (error) {
-    console.error("Failed to post PR Summary comment", {
+    console.error("Failed to update PR Summary body", {
       orgId,
       bookmarkId: bookmark.id,
       error,
@@ -352,11 +357,17 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       summary_id: result.summaryId,
       pr_number: pr.number,
       repo: repo.full_name,
-      github_comment_id: githubCommentId,
-      posted: githubCommentId !== null,
+      github_comment_id: null,
+      posted: postedOk,
+      body_updated: bodyUpdated,
+      target: "pr_body",
     },
     orgId,
   );
+
+  if (!postedOk) {
+    return;
+  }
 
   const now = Date.now();
   await db`
@@ -365,9 +376,9 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     ) VALUES (
       ${orgId},
       ${bookmark.id},
-      ${githubCommentId},
+      ${null},
       'gx',
-      ${result.content},
+      ${postedBody},
       false,
       ${now}
     )

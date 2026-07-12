@@ -6,7 +6,7 @@ import {
   getInstallationAccessToken,
   resolveOrgIdForInstallation,
 } from "../github/app";
-import { postIssueComment } from "../github/comments";
+import { updatePullRequestWithSummary } from "../github/pr-body";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
@@ -370,16 +370,15 @@ async function postMissingPrSummaryAfterPublish(
     return;
   }
 
-  const [existingPostedComment] = await db<{ id: string }[]>`
+  const [existingPostedSummary] = await db<{ id: string }[]>`
     SELECT id
     FROM pr_comments
     WHERE org_id = ${input.orgId}
       AND bookmark_id = ${input.bookmark.id}
       AND author = 'gx'
-      AND github_comment_id IS NOT NULL
     LIMIT 1
   `;
-  if (existingPostedComment) {
+  if (existingPostedSummary) {
     return;
   }
 
@@ -428,17 +427,19 @@ async function postMissingPrSummaryAfterPublish(
       });
   if (!summary) return;
 
-  let githubCommentId: number | null = null;
+  let bodyUpdated = false;
+  let postedBody = summary.content;
   try {
-    const posted = await postIssueComment(
+    const result = await updatePullRequestWithSummary(
       token,
       input.bookmark.repo_full_name,
       input.bookmark.github_pr_number,
       summary.content,
     );
-    githubCommentId = posted.id;
+    bodyUpdated = result.updated;
+    postedBody = result.body;
   } catch (error) {
-    console.error("Failed to post PR Summary after publish", {
+    console.error("Failed to update PR Summary body after publish", {
       orgId: input.orgId,
       bookmarkId: input.bookmark.id,
       error,
@@ -454,8 +455,10 @@ async function postMissingPrSummaryAfterPublish(
       summary_id: summary.summaryId,
       pr_number: input.bookmark.github_pr_number,
       repo: input.bookmark.repo_full_name,
-      github_comment_id: githubCommentId,
-      posted: githubCommentId !== null,
+      github_comment_id: null,
+      posted: true,
+      body_updated: bodyUpdated,
+      target: "pr_body",
       source: "publish",
     },
     input.orgId,
@@ -467,8 +470,8 @@ async function postMissingPrSummaryAfterPublish(
       summaryId: summary.summaryId,
       prNumber: input.bookmark.github_pr_number,
       repo: input.bookmark.repo_full_name,
-      githubCommentId,
-      commentKind: "pr_summary",
+      githubCommentId: null,
+      commentKind: "pr_summary_body",
       source: "publish",
     },
     input.orgId,
@@ -480,9 +483,9 @@ async function postMissingPrSummaryAfterPublish(
     ) VALUES (
       ${input.orgId},
       ${input.bookmark.id},
-      ${githubCommentId},
+      ${null},
       'gx',
-      ${summary.content},
+      ${postedBody},
       false,
       ${Date.now()}
     )
