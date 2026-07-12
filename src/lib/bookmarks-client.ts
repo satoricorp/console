@@ -78,11 +78,23 @@ export async function fetchBookmarkIdByEvent(eventId: string): Promise<string | 
 
 export async function closeBookmarkRequest(bookmarkId: string): Promise<void> {
   const response = await fetch(
-    `/api/bookmarks/${encodeURIComponent(bookmarkId)}/close`,
+    `/api/bookmarks/${encodeURIComponent(bookmarkId)}/archive`,
     { method: "POST", credentials: "include" },
   );
   if (!response.ok) {
     return parseError(response, "Failed to archive bookmark.");
+  }
+}
+
+export async function unarchiveBookmarkRequest(
+  bookmarkId: string,
+): Promise<void> {
+  const response = await fetch(
+    `/api/bookmarks/${encodeURIComponent(bookmarkId)}/unarchive`,
+    { method: "POST", credentials: "include" },
+  );
+  if (!response.ok) {
+    return parseError(response, "Failed to unarchive bookmark.");
   }
 }
 

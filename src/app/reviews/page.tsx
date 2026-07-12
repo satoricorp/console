@@ -1,28 +1,13 @@
-import Link from "next/link";
 import { api } from "../../../convex/_generated/api";
 import { AppPage } from "@/components/app-page";
+import {
+  ReviewsList,
+  type ReviewListItem,
+} from "@/components/reviews/reviews-list";
 import { ReviewsEmptyState } from "@/components/reviews/reviews-empty-state";
 import { SignInLink } from "@/components/sign-in-link";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { gxApiJson } from "@/lib/gx-api-server";
-
-type BookmarkListItem = {
-  id: string;
-  repo_full_name: string;
-  branch_name: string;
-  title: string | null;
-  revision: number;
-  merge_status: "open" | "merged" | "closed";
-  updated_at_ms: number;
-};
-
-function formatDate(ms: number) {
-  return new Date(ms).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export default async function ReviewsPage() {
   const viewer = await fetchAuthQuery(api.profile.getViewer, {});
@@ -46,9 +31,12 @@ export default async function ReviewsPage() {
 
   // First-time copy lives in ReviewsEmptyState. Prefer that over a dead-end
   // error when the cloud API is unreachable or misconfigured.
-  let bookmarks: BookmarkListItem[] = [];
+  let bookmarks: ReviewListItem[] = [];
   try {
-    bookmarks = await gxApiJson<BookmarkListItem[]>(viewer.id, "/bookmarks");
+    bookmarks = await gxApiJson<ReviewListItem[]>(
+      viewer.id,
+      "/bookmarks?include_archived=1",
+    );
   } catch (error) {
     console.error("Failed to load reviews bookmarks", error);
   }
@@ -76,31 +64,7 @@ export default async function ReviewsPage() {
         {isEmpty ? (
           <ReviewsEmptyState />
         ) : (
-          <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-            {bookmarks.map((bookmark) => (
-              <li key={bookmark.id}>
-                <Link
-                  href={`/reviews/${bookmark.id}`}
-                  className="flex items-baseline justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
-                      {bookmark.title ?? bookmark.branch_name}
-                    </span>
-                    <span className="block truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                      {bookmark.repo_full_name} · {bookmark.branch_name}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                    {bookmark.merge_status}
-                    <span className="block">
-                      {formatDate(bookmark.updated_at_ms)}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <ReviewsList initialBookmarks={bookmarks} />
         )}
       </div>
     </AppPage>
