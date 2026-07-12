@@ -1,4 +1,5 @@
 import type postgres from "postgres";
+// e2e: exercise GX rich PR summary + /reviews visibility
 import { getInstallationTokenForRepo } from "./app";
 
 export type GitHubPullFile = {
