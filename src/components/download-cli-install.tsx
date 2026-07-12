@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowUpRight, GitBranch } from "lucide-react";
 import { useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { CopyCommand } from "@/components/copy-command";
 import { CLI_INSTALL_COMMAND } from "@/lib/gx-download";
-import { githubSignInUrl } from "@/lib/site-links";
+import { githubSignInUrl, withOnboardingParam } from "@/lib/site-links";
 
 const AUTH_LOGIN_COMMAND = "gx auth login";
 
@@ -73,6 +74,8 @@ function WindowsRequest() {
 
 export function DownloadCliInstall() {
   const [installCommandCopied, setInstallCommandCopied] = useState(false);
+  const searchParams = useSearchParams();
+  const forceOnboarding = searchParams.get("onboarding") === "1";
 
   return (
     <div className="space-y-4">
@@ -100,7 +103,7 @@ export function DownloadCliInstall() {
       <div className="flex justify-end">
         {installCommandCopied ? (
           <Link
-            href="/community"
+            href={withOnboardingParam("/community", forceOnboarding)}
             className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             <GitBranch className="h-3.5 w-3.5" />

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowUpRight, Check } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -14,6 +15,7 @@ import {
   GITHUB_REPO_URL,
   TWITTER_HANDLE,
   TWITTER_URL,
+  withOnboardingParam,
 } from "@/lib/site-links";
 import {
   BASE_TRIAL_DAYS,
@@ -66,6 +68,8 @@ function BonusRow({
 }
 
 export function CommunityBonusStep() {
+  const searchParams = useSearchParams();
+  const forceOnboarding = searchParams.get("onboarding") === "1";
   const appState = useQuery(api.userAppState.getMyAppState);
   const claimGithubStarBonus = useMutation(api.userAppState.claimGithubStarBonus);
   const claimDiscordBonus = useMutation(api.userAppState.claimDiscordBonus);
@@ -154,7 +158,7 @@ export function CommunityBonusStep() {
 
       <div className="flex justify-end">
         <Link
-          href="/onboarding"
+          href={withOnboardingParam("/onboarding", forceOnboarding)}
           onClick={markCommunityScreenComplete}
           className="group inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >

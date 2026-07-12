@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppPage } from "@/components/app-page";
 import { CommunityBonusStep } from "@/components/onboarding/community-bonus-step";
 
@@ -14,7 +15,9 @@ export default function CommunityPage() {
           </p>
         </div>
 
-        <CommunityBonusStep />
+        <Suspense fallback={null}>
+          <CommunityBonusStep />
+        </Suspense>
       </div>
     </AppPage>
   );

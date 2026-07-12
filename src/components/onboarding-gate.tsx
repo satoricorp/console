@@ -1,12 +1,22 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
+import { withOnboardingParam } from "@/lib/site-links";
 
 const ONBOARDING_PATH = "/onboarding";
+const ONBOARDING_START_PATH = "/download";
+const POST_ONBOARDING_PATH = "/reviews";
+
+/** Soft funnel steps shown once after first login. */
+const ONBOARDING_FUNNEL_PATHS = [
+  "/download",
+  "/community",
+  "/onboarding",
+];
 
 /** Routes reachable before repo connect. */
 const ONBOARDING_BYPASS_PATHS = [
@@ -18,15 +28,23 @@ const ONBOARDING_BYPASS_PATHS = [
   "/repositories",
 ];
 
+function matchesPath(pathname: string, path: string) {
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+function isFunnelPath(pathname: string) {
+  return ONBOARDING_FUNNEL_PATHS.some((path) => matchesPath(pathname, path));
+}
+
 function bypassesOnboarding(pathname: string) {
-  return ONBOARDING_BYPASS_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
+  return ONBOARDING_BYPASS_PATHS.some((path) => matchesPath(pathname, path));
 }
 
 export function OnboardingGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const forceOnboarding = searchParams.get("onboarding") === "1";
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   const authReady =
@@ -38,11 +56,17 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
   const isOnboardingRoute = pathname === ONBOARDING_PATH;
   const skipOnboardingRedirect = bypassesOnboarding(pathname);
-  const needsOnboarding =
+  const onFunnelPath = isFunnelPath(pathname);
+  const onboardingCompleted = Boolean(onboardingStatus?.onboardingCompleted);
+  const needsRepoConnect =
     Boolean(session?.user) &&
     onboardingStatus !== undefined &&
     onboardingStatus !== null &&
     !onboardingStatus.hasConnectedRepos;
+  const shouldLeaveCompletedFunnel =
+    onboardingCompleted && onFunnelPath && !forceOnboarding;
+  const shouldStartForcedOnboarding =
+    forceOnboarding && onboardingCompleted && !onFunnelPath;
 
   useEffect(() => {
     if (!sessionPending && !convexAuthLoading && !session?.user) {
@@ -58,12 +82,26 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
     if (onboardingStatus === null) return;
 
+    if (shouldStartForcedOnboarding) {
+      router.replace(withOnboardingParam(ONBOARDING_START_PATH, true));
+      return;
+    }
+
+    if (shouldLeaveCompletedFunnel) {
+      router.replace(POST_ONBOARDING_PATH);
+      return;
+    }
+
     if (
       !onboardingStatus.hasConnectedRepos &&
       !isOnboardingRoute &&
       !skipOnboardingRedirect
     ) {
-      router.replace(ONBOARDING_PATH);
+      router.replace(
+        forceOnboarding
+          ? withOnboardingParam(ONBOARDING_PATH, true)
+          : ONBOARDING_PATH,
+      );
       return;
     }
   }, [
@@ -71,6 +109,9 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     onboardingStatus,
     isOnboardingRoute,
     skipOnboardingRedirect,
+    shouldLeaveCompletedFunnel,
+    shouldStartForcedOnboarding,
+    forceOnboarding,
     session?.user,
     sessionPending,
     convexAuthLoading,
@@ -97,7 +138,11 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     return <OnboardingGateFallback />;
   }
 
-  if (needsOnboarding && !isOnboardingRoute && !skipOnboardingRedirect) {
+  if (shouldLeaveCompletedFunnel || shouldStartForcedOnboarding) {
+    return <OnboardingGateFallback />;
+  }
+
+  if (needsRepoConnect && !isOnboardingRoute && !skipOnboardingRedirect) {
     return <OnboardingGateFallback />;
   }
 

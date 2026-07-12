@@ -13,9 +13,21 @@ export const TWITTER_HANDLE = "@jlchnc";
 export const SUPPORT_EMAIL = "hi@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;
 
+/** First-time OAuth lands here; completed users are redirected to /reviews. */
 export const POST_SIGN_IN_URL = "/download";
-export const SIGNED_IN_HOME_URL = "/download";
+/** Returning signed-in users hitting `/` go straight to reviews. */
+export const SIGNED_IN_HOME_URL = "/reviews";
 export const GITHUB_SIGN_IN_URL = "/api/auth/github";
+
+/** Append `onboarding=1` so the funnel can be replayed. */
+export function withOnboardingParam(href: string, forceOnboarding: boolean) {
+  if (!forceOnboarding) return href;
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("onboarding", "1");
+  const next = params.toString();
+  return next ? `${path}?${next}` : path;
+}
 
 export function githubSignInUrl(callbackURL = POST_SIGN_IN_URL) {
   const params = new URLSearchParams({ callbackURL });

@@ -42,6 +42,7 @@ export default defineSchema({
     createdAt: v.number(),
     downloadScreenCompletedAt: v.optional(v.number()),
     communityScreenCompletedAt: v.optional(v.number()),
+    onboardingCompletedAt: v.optional(v.number()),
     githubStarBonusClaimedAt: v.optional(v.number()),
     discordBonusClaimedAt: v.optional(v.number()),
     twitterBonusClaimedAt: v.optional(v.number()),

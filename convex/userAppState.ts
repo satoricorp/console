@@ -47,6 +47,7 @@ function formatAppState(state: {
   twitterBonusClaimedAt?: number;
   downloadScreenCompletedAt?: number;
   communityScreenCompletedAt?: number;
+  onboardingCompletedAt?: number;
   windowsCliRequestedAt?: number;
 }) {
   return {
@@ -54,6 +55,8 @@ function formatAppState(state: {
     downloadScreenCompletedAt: state.downloadScreenCompletedAt ?? null,
     communityScreenCompleted: Boolean(state.communityScreenCompletedAt),
     communityScreenCompletedAt: state.communityScreenCompletedAt ?? null,
+    onboardingCompleted: Boolean(state.onboardingCompletedAt),
+    onboardingCompletedAt: state.onboardingCompletedAt ?? null,
     githubStarBonusClaimed: Boolean(state.githubStarBonusClaimedAt),
     discordBonusClaimed: Boolean(state.discordBonusClaimedAt),
     twitterBonusClaimed: Boolean(state.twitterBonusClaimedAt),
@@ -126,6 +129,8 @@ export const getMyAppState = query({
         downloadScreenCompletedAt: null,
         communityScreenCompleted: false,
         communityScreenCompletedAt: null,
+        onboardingCompleted: false,
+        onboardingCompletedAt: null,
         githubStarBonusClaimed: false,
         discordBonusClaimed: false,
         twitterBonusClaimed: false,
@@ -309,6 +314,22 @@ export const completeCommunityScreen = mutation({
 
     await ctx.db.patch(existing._id, {
       communityScreenCompletedAt: existing.communityScreenCompletedAt ?? now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const completeOnboarding = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Sign in to continue");
+
+    const now = Date.now();
+    const existing = await getOrCreateUserAppState(ctx, user._id);
+
+    await ctx.db.patch(existing._id, {
+      onboardingCompletedAt: existing.onboardingCompletedAt ?? now,
       updatedAt: now,
     });
   },

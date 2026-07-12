@@ -27,9 +27,19 @@ export const getOnboardingStatus = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
+    const appState = await ctx.db
+      .query("userAppStates")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+
+    const hasConnectedRepos = connected.length > 0;
+
     return {
-      hasConnectedRepos: connected.length > 0,
+      hasConnectedRepos,
       connectedCount: connected.length,
+      // Existing users who already connected repos count as completed.
+      onboardingCompleted:
+        Boolean(appState?.onboardingCompletedAt) || hasConnectedRepos,
     };
   },
 });
