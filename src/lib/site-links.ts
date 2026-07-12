@@ -7,8 +7,8 @@ export const DISCORD_URL =
 
 /** Company/product Twitter for now — Joe's handle. */
 export const TWITTER_URL =
-  process.env.NEXT_PUBLIC_TWITTER_URL ?? "https://x.com/jlchnc";
-export const TWITTER_HANDLE = "@jlchnc";
+  process.env.NEXT_PUBLIC_TWITTER_URL ?? "https://x.com/satori_corp";
+export const TWITTER_HANDLE = "@satori_corp";
 
 export const SUPPORT_EMAIL = "hi@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;
