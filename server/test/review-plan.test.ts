@@ -10,6 +10,7 @@ import { parseAndValidateReviewPlan } from "../src/review-plan/validate";
 import type { ReviewPlanContext } from "../src/review-plan/context";
 import { createMockProvider } from "../src/llm/provider";
 import { REVIEW_PLAN_SYSTEM_PROMPT } from "../src/llm/prompts/review-plan";
+import { githubFilesToUnifiedDiff } from "../src/github/pr-patches";
 import fixture from "./fixtures/review-artifact.json";
 
 
@@ -195,6 +196,23 @@ diff --git a/src/b.ts b/src/b.ts
     const sliced = sliceFilePatch(files[1]!, 10, 12);
     expect(sliced).toContain("@@ -10,2 +10,3 @@");
     expect(sliced).toContain("+added");
+  });
+
+  test("wraps GitHub PR file patches into parseable unified diffs", () => {
+    const unified = githubFilesToUnifiedDiff([
+      {
+        filename: "src/components/app-command-palette.tsx",
+        previousFilename: null,
+        status: "modified",
+        patch:
+          '@@ -104,6 +104,10 @@ export function AppCommandPalette() {\n         event.preventDefault();\n         runCommand("/download");\n       }\n+      if (key === "r") {\n+        event.preventDefault();\n+        runCommand("/reviews");\n+      }\n       if (key === "?") {\n',
+      },
+    ]);
+    const files = splitUnifiedDiff(unified);
+    expect(files).toHaveLength(1);
+    expect(files[0]!.file).toBe("src/components/app-command-palette.tsx");
+    expect(files[0]!.text).toContain("+      if (key === \"r\") {");
+    expect(sliceFilePatch(files[0]!).length).toBeGreaterThan(0);
   });
 });
 
@@ -448,6 +466,35 @@ describe("parseAndValidateReviewPlan", () => {
     const sources = result.plan!.narrative.attributionSources;
     expect(sources.find((s) => s.source === "pr-payload")).toBeUndefined();
     expect(sources).toEqual([{ source: "agent-sessions", pct: 100 }]);
+  });
+
+  test("selfReportQuote comes from verified intent, not model invention", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"]);
+    ctx.intent.selfReport = null;
+    ctx.intent.firstUserMessages = ["Please wire reviews into the palette"];
+    const result = parseAndValidateReviewPlan(
+      validPlanRaw([{ source: "pr-payload", pct: 100 }]).replace(
+        '"selfReportQuote": "Ship the review page"',
+        '"selfReportQuote": "Add Reviews to the command palette."',
+      ),
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.plan!.narrative.selfReportQuote).toBe(
+      "Please wire reviews into the palette",
+    );
+  });
+
+  test("omits selfReportQuote when no verified self-report or first prompt", () => {
+    const ctx = stubCtx(["src/a.ts", "src/b.ts"]);
+    ctx.intent.selfReport = null;
+    ctx.intent.firstUserMessages = [];
+    const result = parseAndValidateReviewPlan(
+      validPlanRaw([{ source: "pr-payload", pct: 100 }]),
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.plan!.narrative.selfReportQuote).toBeUndefined();
   });
 });
 
