@@ -1,18 +1,11 @@
-import "./docs.css";
-import { DocsSidebar } from "./sidebar";
-import { docNav } from "@/lib/docs-content";
+import { source } from "@/lib/source";
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import { baseOptions } from "@/lib/layout.shared";
 
-export default function DocsLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function Layout({ children }: LayoutProps<"/docs">) {
   return (
-    <div className="docs-shell">
-      <aside className="docs-sidebar">
-        <DocsSidebar entries={docNav()} />
-      </aside>
-      <main className="docs-main">{children}</main>
-    </div>
+    <DocsLayout tree={source.getPageTree()} {...baseOptions()}>
+      {children}
+    </DocsLayout>
   );
 }

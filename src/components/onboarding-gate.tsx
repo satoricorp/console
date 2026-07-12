@@ -13,6 +13,7 @@ const ONBOARDING_BYPASS_PATHS = [
   "/billing",
   "/community",
   "/design",
+  "/docs",
   "/download",
   "/repositories",
 ];

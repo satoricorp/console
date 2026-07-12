@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
+import { RootProvider } from "fumadocs-ui/provider/next";
 import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { GoogleAnalytics } from "@/components/google-analytics";
@@ -42,17 +43,20 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${fkDisplay.variable} ${xer0.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col font-sans">
-        <Suspense fallback={null}>
-          <GoogleAnalytics />
-        </Suspense>
-        <ConvexClientProvider>
-          <PostHogIdentifier />
-          <SiteHeader />
-          <OnboardingGate>{children}</OnboardingGate>
-          <SiteFooter />
-        </ConvexClientProvider>
+      <body className="flex min-h-screen flex-col font-sans">
+        <RootProvider theme={{ enabled: false, defaultTheme: "light" }}>
+          <Suspense fallback={null}>
+            <GoogleAnalytics />
+          </Suspense>
+          <ConvexClientProvider>
+            <PostHogIdentifier />
+            <SiteHeader />
+            <OnboardingGate>{children}</OnboardingGate>
+            <SiteFooter />
+          </ConvexClientProvider>
+        </RootProvider>
       </body>
     </html>
   );
