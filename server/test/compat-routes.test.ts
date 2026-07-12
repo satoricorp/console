@@ -136,9 +136,22 @@ describeDb("compat bookmarks route", () => {
   });
 });
 
-describe("compat OpenAI proxy routes", () => {
-  beforeAll(() => {
+describeDb("compat OpenAI proxy routes", () => {
+  // The proxy routes now run the cloud-AI quota gate, which resolves the
+  // caller's org from the database — so these tests need a real in-trial org.
+  let orgId: string;
+
+  beforeAll(async () => {
     installTestAuth();
+    await runMigrations();
+
+    const db = getSql();
+    const [org] = await db<{ id: string }[]>`
+      INSERT INTO orgs (plan, created_at_ms)
+      VALUES ('free', ${Date.now()})
+      RETURNING id
+    `;
+    orgId = org.id;
   });
 
   afterEach(() => {
@@ -170,7 +183,7 @@ describe("compat OpenAI proxy routes", () => {
     const res = await app.request("http://localhost/gx/openai/chat-completions", {
       method: "POST",
       headers: {
-        ...authHeaders("openai-test-user", crypto.randomUUID()),
+        ...authHeaders("openai-test-user", orgId),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -202,7 +215,7 @@ describe("compat OpenAI proxy routes", () => {
     const res = await app.request("http://localhost/gx/openai/responses", {
       method: "POST",
       headers: {
-        ...authHeaders("openai-test-user", crypto.randomUUID()),
+        ...authHeaders("openai-test-user", orgId),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

@@ -44,14 +44,16 @@ export default async function ReviewsPage() {
     );
   }
 
-  let bookmarks: BookmarkListItem[] | null = null;
+  // First-time copy lives in ReviewsEmptyState. Prefer that over a dead-end
+  // error when the cloud API is unreachable or misconfigured.
+  let bookmarks: BookmarkListItem[] = [];
   try {
     bookmarks = await gxApiJson<BookmarkListItem[]>(viewer.id, "/bookmarks");
-  } catch {
-    bookmarks = null;
+  } catch (error) {
+    console.error("Failed to load reviews bookmarks", error);
   }
 
-  const isEmpty = bookmarks !== null && bookmarks.length === 0;
+  const isEmpty = bookmarks.length === 0;
 
   return (
     <AppPage>
@@ -66,16 +68,12 @@ export default async function ReviewsPage() {
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
             {isEmpty
-              ? "How GX reviews work — and what you'll see after your first PR."
+              ? "How to review PRs with GX"
               : "Published changes, most recent first."}
           </p>
         </div>
 
-        {bookmarks === null ? (
-          <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            Couldn&apos;t load reviews. Try again in a moment.
-          </p>
-        ) : isEmpty ? (
+        {isEmpty ? (
           <ReviewsEmptyState />
         ) : (
           <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">

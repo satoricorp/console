@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Check } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
@@ -15,32 +16,32 @@ import {
   TWITTER_URL,
 } from "@/lib/site-links";
 
+const BONUS_DAYS = 2;
+
 function BonusRow({
   claimed,
-  bonusDays,
   href,
   icon,
   label,
   onClaim,
 }: {
   claimed: boolean;
-  bonusDays: number;
   href: string;
   icon: ReactNode;
   label: string;
   onClaim: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <p className="flex items-center gap-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         <span className="text-zinc-950 dark:text-zinc-50">{icon}</span>
         {label}
-        <span className="text-[11px] text-zinc-500">+{bonusDays} days</span>
+        <span className="text-[11px] text-zinc-500">+{BONUS_DAYS} days</span>
       </p>
       {claimed ? (
         <p className="flex items-center gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
           <Check className="h-3 w-3 shrink-0" />
-          Bonus added
+          Thank you
         </p>
       ) : (
         <a
@@ -67,10 +68,23 @@ export function CommunityBonusStep() {
     api.userAppState.completeCommunityScreen,
   );
 
-  const trialDaysTotal = appState?.trialDaysTotal ?? 7;
-  const githubStarBonusDays = appState?.githubStarBonusDays ?? 2;
-  const discordBonusDays = appState?.discordBonusDays ?? 2;
-  const twitterBonusDays = appState?.twitterBonusDays ?? 2;
+  const [claimedGithub, setClaimedGithub] = useState(false);
+  const [claimedDiscord, setClaimedDiscord] = useState(false);
+  const [claimedTwitter, setClaimedTwitter] = useState(false);
+
+  const githubStarBonusClaimed =
+    Boolean(appState?.githubStarBonusClaimed) || claimedGithub;
+  const discordBonusClaimed =
+    Boolean(appState?.discordBonusClaimed) || claimedDiscord;
+  const twitterBonusClaimed =
+    Boolean(appState?.twitterBonusClaimed) || claimedTwitter;
+
+  const baseTrialDays = appState?.trialDaysTotal ?? 7;
+  const trialDaysTotal =
+    baseTrialDays +
+    (claimedGithub && !appState?.githubStarBonusClaimed ? BONUS_DAYS : 0) +
+    (claimedDiscord && !appState?.discordBonusClaimed ? BONUS_DAYS : 0) +
+    (claimedTwitter && !appState?.twitterBonusClaimed ? BONUS_DAYS : 0);
 
   function markCommunityScreenComplete() {
     void completeCommunityScreen({}).catch((error: unknown) => {
@@ -94,32 +108,32 @@ export function CommunityBonusStep() {
     <div className="space-y-4">
       <div className="space-y-3">
         <BonusRow
-          claimed={appState.githubStarBonusClaimed}
-          bonusDays={githubStarBonusDays}
+          claimed={githubStarBonusClaimed}
           href={GITHUB_REPO_URL}
           icon={<GitHubIcon className="h-3.5 w-3.5" />}
           label="Star on GitHub"
           onClaim={() => {
+            setClaimedGithub(true);
             void claimGithubStarBonus({});
           }}
         />
         <BonusRow
-          claimed={appState.discordBonusClaimed}
-          bonusDays={discordBonusDays}
+          claimed={discordBonusClaimed}
           href={DISCORD_URL}
           icon={<DiscordIcon className="h-3.5 w-3.5" />}
           label="Join Discord"
           onClaim={() => {
+            setClaimedDiscord(true);
             void claimDiscordBonus({});
           }}
         />
         <BonusRow
-          claimed={appState.twitterBonusClaimed}
-          bonusDays={twitterBonusDays}
+          claimed={twitterBonusClaimed}
           href={TWITTER_URL}
           icon={<TwitterIcon className="h-3.5 w-3.5" />}
           label={`Follow ${TWITTER_HANDLE}`}
           onClaim={() => {
+            setClaimedTwitter(true);
             void claimTwitterBonus({});
           }}
         />

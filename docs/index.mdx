@@ -5,37 +5,55 @@ description: GX is the quality layer for agent-written code — capture coding s
 
 GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
 
-The open-source `gx` CLI captures coding sessions, turns staged changes into reviewable revisions and stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add PR summaries and `@gx` chat inside GitHub pull requests.
+The open-source `gx` CLI captures coding sessions, records staged changes as reviewable revisions inside stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add [PR Summaries and `@gx` chat](/docs/github) inside GitHub pull requests.
 
 ## Start here
 
 - [Get started](/docs/getting-started): install GX, sign in, and publish your first revision.
-- [How it works](/docs/how-it-works): why GX stores more context than Git and why GX says stacks and revisions.
-- [CLI](/docs/cli): commands, shortcuts, and the [MCP setup](/docs/mcp) path.
+- [How it works](/docs/how-it-works): why GX stores more context than Git, and what stacks and revisions are.
+- [CLI](/docs/cli): every command with flags, examples, and exit codes.
+- [MCP setup](/docs/mcp): let coding agents commit, inspect, review, and push through MCP tools.
 - [Pull Requests](/docs/github): PR Summaries, `@gx` chat, and paid GitHub review features.
+- [Troubleshooting](/docs/troubleshooting): common errors and how to fix them.
 
 ## Core workflow
 
-Most users and agents should start with:
+GX keeps the Git staging mental model: `git add` chooses the scope, and `gx commit` replaces `git commit`.
 
 ```bash
-git add <files>
-gx commit -m "describe this revision"
-gx status   # gxs
-git push    # or gx push — hook publishes sessions and PR metadata
+git add <files>                        # choose the scope of the revision
+gx commit -m "describe this revision"  # record it as a GX revision
+gx status                              # inspect stacks before publishing (alias: gxs)
+git push                               # the GX pre-push hook publishes sessions + metadata
 ```
 
-The shortcuts are:
+A first commit looks like this:
 
-```bash
-gxs # gx status
-gxr # gx review
+```text
+$ git add src/retry.js
+$ gx commit -m "add retry helper with attempt limit"
+
+Revision recorded
+Message       add retry helper with attempt limit
+Revision      qltmnmynnyzk
+Commit        b694d3be
+Stack         main
+Provenance    absent
 ```
 
-For a large messy working copy, use the advanced bulk organizer:
+Every `gx commit` produces a normal Git commit (`b694d3be` above) plus a GX **revision** (`qltmnmynnyzk`) that stays editable and carries review context: which captured session produced it, what the agent reported doing, and where it sits in its stack. `Provenance` shows whether a captured coding session was linked to the revision — `absent` here because no agent session was running.
+
+The CLI installer also adds two shortcuts:
 
 ```bash
-gx generate   # hidden from gx --help; organizes into smaller revisions
+gxs   # gx status
+gxr   # gx review
+```
+
+For a large messy working copy, the advanced bulk organizer can split the work into smaller revisions automatically:
+
+```bash
+gx generate   # hidden from gx --help; see CLI → Bulk organize
 gx status
 gx push
 ```

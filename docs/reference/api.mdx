@@ -9,6 +9,23 @@ GX Cloud APIs use bearer-token authentication.
 export GX_API_URL="https://api.gx.run"
 ```
 
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | API and database reachability |
+| `GET /v1/auth/me` | inspect the authenticated caller |
+| `POST /v1/publish` | publish a GX review bundle (what `gx push` sends) |
+| `GET /bookmarks` | list bookmark metadata for sync and review |
+| `GET /v1/review/context` | review context for a repo/ref range |
+| `GET /v1/reviews/:bookmarkId` (+ `/plan`, `/decision`) | Console review experience |
+| `POST /v1/summaries/generate` | generate and store a PR Summary |
+| `POST /github/webhook` | GitHub App webhook (PR Summaries, `@gx` chat) |
+| `POST /v1/extracts` | ingest hunk links and push metadata |
+| `POST /v1/sessions` | ingest raw captured session content |
+| `GET /v1/activity` | recent summaries, sessions, learned rules |
+| `POST /v1/code-review-history/record` / `/search` | record and search review findings |
+| `POST /v1/reported-logs` | upload CLI logs for support |
+| `POST /gx/openai/responses` / `/chat-completions` | OpenAI proxy through GX Cloud |
+
 ## Authentication
 
 `requireAuth` accepts these modes:
@@ -115,7 +132,9 @@ Without `event: "gx.pr"`, the same route accepts a lighter **registration-only**
 
 ## GET /bookmarks
 
-List bookmark metadata for sync and review surfaces.
+List bookmark metadata for sync and review surfaces, newest first.
+
+Query parameters: `merge_status` (`open`, `merged`, or `closed`; any other value is a `400`) and `repo_full_name`. Both optional.
 
 ```bash
 curl "$GX_API_URL/bookmarks?merge_status=open" \
@@ -127,6 +146,24 @@ Filter to one repository:
 ```bash
 curl "$GX_API_URL/bookmarks?repo_full_name=org/repo&merge_status=open" \
   -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+Response: an array of bookmarks.
+
+```json
+[
+  {
+    "id": "bm_123",
+    "repo_full_name": "org/repo",
+    "branch_name": "feature/retry-backoff",
+    "title": "Add retry/backoff utilities",
+    "revision": 3,
+    "head_commit_id": "ae0d5b62...",
+    "remote_head_sha": "ae0d5b62...",
+    "merge_status": "open",
+    "updated_at_ms": 1760000000000
+  }
+]
 ```
 
 ## GET /v1/review/context
@@ -237,7 +274,7 @@ curl "$GX_API_URL/v1/sessions" \
 
 ## GET /v1/activity
 
-Read recent summaries, sessions, and learned rules.
+Read recent summaries, sessions, and learned rules. `limit` accepts 1–100 (default 20); page with the returned `nextCursor`.
 
 ```bash
 curl "$GX_API_URL/v1/activity?limit=20" \

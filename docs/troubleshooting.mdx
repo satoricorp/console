@@ -1,0 +1,121 @@
+---
+title: Troubleshooting
+description: Diagnose and fix common GX problems — and know exactly what each error is telling you.
+---
+
+Start with the built-in doctor:
+
+```bash
+gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
+gx doctor --fix    # apply safe repairs automatically
+```
+
+If something still misbehaves, `gx report` uploads recent GX logs to support and prints a report ID you can share.
+
+## Common errors
+
+### `no staged changes; run git add first`
+
+`gx commit` records **staged** changes only, and exits with code `2` when the index is empty.
+
+```bash
+git add <files>     # or git add -p to select hunks
+gx commit -m "describe this revision"
+```
+
+Agents checking exit codes: `0` success, `1` general error, `2` nothing staged.
+
+### `Run gx init first.`
+
+The repository has no GX identity yet. Initialize it once:
+
+```bash
+gx init        # interactive
+gx init -y     # accept defaults, for scripts and agent sandboxes
+```
+
+### `gx commit -a is not supported`
+
+Deliberate. GX wants the revision scope to be explicit, so `-a`, `--amend`, and `-F` are rejected with the replacement in the message:
+
+- instead of `-a`: stage with `git add` first
+- instead of `--amend`: `gx edit <rev>` reopens a recorded revision
+- instead of `-F file`: pass the message with `-m`
+
+### Push reports remote divergence
+
+The remote moved since your last sync — a branch was merged, closed, or force-pushed. Reflect remote state locally, then retry:
+
+```bash
+gx sync
+gx push
+```
+
+`gx sync` also prunes stacks whose PRs were merged or closed, so status stops showing stale work.
+
+### `Could not upload GX review context ... GX Cloud is not configured`
+
+The push of Git refs succeeded, but the session/metadata upload was skipped because the CLI has no cloud endpoint. Released installs have the endpoint baked in, so this usually means a from-source build — set `GX_CLOUD_URL` or reinstall the released CLI:
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+gx auth status || gx auth login
+```
+
+Local remote metadata is still recorded, so nothing is lost. Queued uploads are drained on the next successful `gx sync` or `gx push`.
+
+### `gx-mcp not found; install GX CLI package first`
+
+`gx init` tried to register the MCP server but could not find the `gx-mcp` binary. Reinstall the CLI package, which places both binaries in `~/.local/bin`:
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+```
+
+Then re-run `gx init`, or register manually per [MCP setup](/docs/mcp).
+
+### No PR Summary appeared on my pull request
+
+Check, in order:
+
+1. The branch was pushed **through GX** — `gx push`, or `git push` with the GX pre-push hook installed. A PR created only in the GitHub UI has no capture metadata.
+2. The GX GitHub App is installed on the repository, with the webhook pointed at `https://api.gx.run/github/webhook`.
+3. Your org's trial window or paid plan is active — when quota blocks a summary, GX posts an upgrade comment instead. See [Pull Requests](/docs/github).
+
+### Sessions are not being captured
+
+`gx init` installs the capture hooks (Git pre-push, Claude Code `Stop`/`SessionEnd`). Verify and repair:
+
+```bash
+gx doctor          # shows capture and hook state
+gx doctor --fix
+gx capture sync    # advanced: force a capture sync
+```
+
+Captured sessions are retained locally for 30 days.
+
+## Environment
+
+| Variable | Meaning |
+| --- | --- |
+| `GX_HOME` | override GX's state directory (default `~/.gx`) — inference key, capture data, workspaces |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | model credentials for local inference; `gx set key` stores one persistently |
+| `GX_BINARY` | path to the `gx` binary the MCP server should run |
+| `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL` | identity for MCP's non-interactive `gx init` |
+| `GX_SESSION_ID` / `GX_SESSION_IDS` | session ids for MCP `gx_generate` workspace isolation |
+
+## Uninstall
+
+```bash
+rm -f ~/.local/bin/gx ~/.local/bin/gxr ~/.local/bin/gxs ~/.local/bin/gx-mcp
+```
+
+This removes the installed binaries only. Local GX data remains in `~/.gx`; delete that directory too if you want a clean slate. Your Git repositories are untouched — everything GX published is ordinary Git.
+
+## Send logs to support
+
+```bash
+gx report
+```
+
+Uploads recent GX logs (requires `gx auth login`) and prints a report ID and URL to share with the team.

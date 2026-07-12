@@ -5,7 +5,7 @@ description: Use paid GX Cloud features to generate PR Summaries and chat with @
 
 GX adds paid review features inside GitHub pull requests.
 
-The CLI can generate and publish stacks locally. GitHub PR Summaries and `@gx` chat run through GX Cloud and require the paid PR feature set (or an active free trial).
+The CLI can record and publish stacks locally for free. GitHub PR Summaries and `@gx` chat run through GX Cloud and require the paid PR feature set (or an active free trial).
 
 ## Prerequisites
 
@@ -37,10 +37,10 @@ The goal is to point reviewers to the important parts of the change instead of f
 
 GX posts summaries from these paths:
 
-- **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the bookmark already has a published GX event
+- **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the branch already has a published GX event
 - **After publish** — when `gx push` (or the publish hook path) has a PR number and the GitHub App is installed
 
-`POST /v1/summaries/generate` stores a summary in GX Cloud. It does **not** post the comment to GitHub by itself.
+The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** post the comment to GitHub by itself.
 
 ### Trial and paid access
 
@@ -74,7 +74,7 @@ Ask for risk or follow-up review:
 @gx is this related to the previous retry bug?
 ```
 
-GX answers from available review sources and cites the sources it used.
+GX answers from available review sources and cites the sources it used. Because published revisions carry session provenance, `@gx` can answer "why" questions — what the author asked for, which commands and tests ran — that a plain diff cannot.
 
 ### Override learned rules
 
@@ -95,4 +95,4 @@ When available, GX can also use captured coding-session context, indexed codebas
 
 ## GitHub App
 
-To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still generate and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
+To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still record and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.

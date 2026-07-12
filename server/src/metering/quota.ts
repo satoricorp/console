@@ -192,6 +192,19 @@ export async function checkPrSummaryQuota(
   };
 }
 
+/**
+ * Cloud-AI access gate for the OpenAI proxy routes. Same entitlement chain as
+ * PR Summaries (Convex trial entitlement, then org plan/trial window) without
+ * the per-bookmark usage bookkeeping.
+ */
+export async function checkCloudAIQuota(
+  db: postgres.Sql,
+  orgId: string,
+  userId?: string,
+): Promise<QuotaCheckResult> {
+  return checkPrSummaryQuota(db, orgId, undefined, userId);
+}
+
 export async function assertPrSummaryQuota(
   db: postgres.Sql,
   orgId: string,

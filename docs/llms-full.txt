@@ -1,39 +1,56 @@
 # Overview
 
-
 GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
 
-The open-source `gx` CLI captures coding sessions, turns staged changes into reviewable revisions and stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add PR summaries and `@gx` chat inside GitHub pull requests.
+The open-source `gx` CLI captures coding sessions, records staged changes as reviewable revisions inside stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add [PR Summaries and `@gx` chat](/docs/github) inside GitHub pull requests.
 
 ## Start here
 
 - [Get started](/docs/getting-started): install GX, sign in, and publish your first revision.
-- [How it works](/docs/how-it-works): why GX stores more context than Git and why GX says stacks and revisions.
-- [CLI](/docs/cli): commands, shortcuts, and the [MCP setup](/docs/mcp) path.
+- [How it works](/docs/how-it-works): why GX stores more context than Git, and what stacks and revisions are.
+- [CLI](/docs/cli): every command with flags, examples, and exit codes.
+- [MCP setup](/docs/mcp): let coding agents commit, inspect, review, and push through MCP tools.
 - [Pull Requests](/docs/github): PR Summaries, `@gx` chat, and paid GitHub review features.
+- [Troubleshooting](/docs/troubleshooting): common errors and how to fix them.
 
 ## Core workflow
 
-Most users and agents should start with:
+GX keeps the Git staging mental model: `git add` chooses the scope, and `gx commit` replaces `git commit`.
 
 ```bash
-git add <files>
-gx commit -m "describe this revision"
-gx status   # gxs
-git push    # or gx push — hook publishes sessions and PR metadata
+git add <files>                        # choose the scope of the revision
+gx commit -m "describe this revision"  # record it as a GX revision
+gx status                              # inspect stacks before publishing (alias: gxs)
+git push                               # the GX pre-push hook publishes sessions + metadata
 ```
 
-The shortcuts are:
+A first commit looks like this:
 
-```bash
-gxs # gx status
-gxr # gx review
+```text
+$ git add src/retry.js
+$ gx commit -m "add retry helper with attempt limit"
+
+Revision recorded
+Message       add retry helper with attempt limit
+Revision      qltmnmynnyzk
+Commit        b694d3be
+Stack         main
+Provenance    absent
 ```
 
-For a large messy working copy, use the advanced bulk organizer:
+Every `gx commit` produces a normal Git commit (`b694d3be` above) plus a GX **revision** (`qltmnmynnyzk`) that stays editable and carries review context: which captured session produced it, what the agent reported doing, and where it sits in its stack. `Provenance` shows whether a captured coding session was linked to the revision — `absent` here because no agent session was running.
+
+The CLI installer also adds two shortcuts:
 
 ```bash
-gx generate   # hidden from gx --help; organizes into smaller revisions
+gxs   # gx status
+gxr   # gx review
+```
+
+For a large messy working copy, the advanced bulk organizer can split the work into smaller revisions automatically:
+
+```bash
+gx generate   # hidden from gx --help; see CLI → Bulk organize
 gx status
 gx push
 ```
@@ -55,44 +72,42 @@ A GX revision is the review unit. It can become a Git commit, but it carries ric
 
 A Git branch is a pointer in a repository. A GX stack is the product shape of the work: ordered revisions, their dependencies, and the context needed to understand them. GX exports stacks to branches because GitHub and Git still expect branches, but agents and reviewers work better with stacks because they can see the sequence of intent instead of only the final branch state.
 
----
-
 # Get started
-
 
 Start with GX when you want coding agents to produce reviewable work instead of one large undifferentiated diff.
 
 The usual path is:
 
-1. Install GX.
+1. Install the CLI.
 2. Sign in with GitHub.
 3. Initialize GX in a repository.
 4. Stage, commit with GX, inspect, and push.
 
 ## Install
 
-> Windows is not supported yet.
-
-### macOS
-
-Install the [Mac app](/download) if you want the menu-bar app to manage local setup for you. The app installs or updates the CLI, installs the `gxs` and `gxr` shortcuts, and shows local setup status.
-
-### Linux / CLI-only
-
-Install the CLI directly:
+The CLI runs on macOS and Linux (arm64 / amd64):
 
 ```bash
 curl -fsSL https://download.gx.run/install.sh | sh
 ```
 
-After installation, verify that `gx` is on your path:
+On Windows, run GX inside WSL. You can request a native Windows build from the [download page](/download).
+
+The installer places four binaries in `~/.local/bin`:
+
+| Binary | Purpose |
+| --- | --- |
+| `gx` | the CLI |
+| `gx-mcp` | stdio MCP server for coding agents ([MCP setup](/docs/mcp)) |
+| `gxs` | shortcut for `gx status` |
+| `gxr` | shortcut for `gx review` |
+
+Verify the install:
 
 ```bash
-gx version
-gx doctor
+gx version   # prints the installed version
+gx doctor    # checks capture, hooks, and workflow state
 ```
-
-The CLI installer places `gx`, `gx-mcp`, `gxs`, and `gxr` in `~/.local/bin`.
 
 ## Sign in
 
@@ -103,7 +118,11 @@ gx auth login
 gx auth status
 ```
 
-The web app sign-in and CLI sign-in are linked through your GitHub account. After signing in from the CLI, you can see signed-in CLI devices in the web app, including machine name, GX version, last-used time, and session expiry.
+The web app sign-in and CLI sign-in are linked through your GitHub account. After signing in from the CLI, you can see signed-in CLI devices in the web app, including machine name, GX version, last-used time, and session expiry. Pass `--name` to control how the machine appears there:
+
+```bash
+gx auth login --name "work-laptop"
+```
 
 Log out with:
 
@@ -113,71 +132,137 @@ gx auth logout
 
 ## Initialize a repo
 
-Run `gx init` from the repository you want GX to manage.
+Run `gx init` once, from the repository you want GX to manage:
 
-```bash
-gx init
+```text
+$ gx init
+
+Configured     gx identity as Ada Doc <ada@example.com>
+Pre-push hook  ok: capture on git push
+Claude hooks   ok: Stop/SessionEnd transcript capture
+Session        30 days retention
+MCP            ok: claude
+AGENTS.md      ok: added GX workflow instructions
+
+Next           git add <files> && gx commit -m "..."
 ```
 
-Initialization:
+Line by line:
 
-- Configures local GX identity
-- Installs a Git pre-push hook that captures session data and publishes GX metadata
-- Registers the GX MCP server with supported agents when possible
-- Offers to add GX workflow instructions to `AGENTS.md`
+- **gx identity** — the name and email recorded on GX revisions. Defaults to your Git identity; override with `gx init --name "..." --email "..."`.
+- **Pre-push hook** — a Git pre-push hook, so plain `git push` also captures sessions and publishes GX metadata on the way out.
+- **Claude hooks** — Claude Code `Stop`/`SessionEnd` hooks, so agent transcripts are captured as GX sessions.
+- **Session retention** — captured sessions are kept locally for 30 days.
+- **MCP** — registers the [GX MCP server](/docs/mcp) with supported agent CLIs found on the machine.
+- **AGENTS.md** — offers to append GX workflow instructions so agents working in this repo use `gx commit` instead of `git commit`.
 
-## Set an API key
+For scripts and agent sandboxes, `gx init -y` accepts all defaults and suppresses interactive prompts.
 
-The open-source CLI can use model credentials for local inference (for example bulk organize with `gx generate`).
+## Optional: bring your own model key
 
-Prefer the interactive setup:
+You do not need a model API key to use GX. The core workflow is fully deterministic, and once you sign in, AI features like `gx review` run through GX Cloud on your plan or free trial.
 
-```bash
-gx set key
-```
-
-GX looks for an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` first. If none is found, choose a provider and paste a key.
-
-You can also export keys in the environment before running inference-heavy commands:
+Set your own key only when you want GX to call a specific provider or model directly:
 
 ```bash
-export OPENAI_API_KEY="..."
-export ANTHROPIC_API_KEY="..."
+gx set key                                              # interactive: pick provider, paste key
+gx set key --provider anthropic --key "$ANTHROPIC_API_KEY"   # scripts
 ```
 
-Paid pull request features run through GX Cloud, not these local keys.
+GX looks for an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the environment first, and stores a pasted key in `~/.gx/inference.json` (or `$GX_HOME/inference.json`). When both are available, your own key takes precedence over GX Cloud.
+
+Paid pull request features (PR Summaries, `@gx` chat) always run through GX Cloud, never your local keys.
 
 ## First revision
 
-After making changes:
+After making changes, stage the files that belong together and record them:
 
-```bash
-git add <files>                 # or git add -p
-gx commit -m "describe this revision"
-gx status                       # gxs
-git push                        # GX pre-push hook captures sessions and publishes metadata
+```text
+$ git add src/retry.js
+$ gx commit -m "add retry helper with attempt limit"
+
+Revision recorded
+Message       add retry helper with attempt limit
+Revision      qltmnmynnyzk
+Commit        b694d3be
+Stack         main
+Provenance    absent
 ```
 
-`git add` chooses the scope. `gx commit` records staged changes as a GX revision (JJ-backed, editable later). `gx status` shows unstaged files, local stacks/features, revisions, and remote state. `git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out.
+What happened:
 
-You can also publish explicitly with:
+- `git add` chose the scope — only `src/retry.js` is part of this revision. Use `git add -p` to select individual hunks.
+- `gx commit` recorded the staged changes as a GX revision. Like `git commit`, it landed on the current branch and `HEAD` did not move.
+- The revision is JJ-backed, so it stays editable through GX tools later — no interactive rebase needed.
+- `Provenance: absent` means no captured coding session was linked. When an agent session is captured, GX matches it automatically and this shows the linked status instead.
+
+If nothing is staged, `gx commit` refuses with exit code `2`:
+
+```text
+$ gx commit -m "nothing staged"
+no staged changes; run git add first
+```
+
+Then publish:
 
 ```bash
-gx push
+gx status   # inspect first (alias: gxs)
+git push    # the GX pre-push hook captures sessions and publishes metadata
 ```
+
+`git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out. You can also publish explicitly with `gx push`, which prints GitHub and review URLs when available.
+
+## Build a stack
+
+Pass `-b` to start a new branch for a line of work, then keep committing to grow the stack:
+
+```text
+$ git add src/backoff.js
+$ gx commit -m "add exponential backoff helper" -b feature/retry-backoff
+
+Revision recorded
+Created branch feature/retry-backoff (from main)
+Message       add exponential backoff helper
+Revision      qlmmuyyyupkm
+Commit        14c101a1
+Stack         feature/retry-backoff
+
+$ git add src/jitter.js
+$ gx commit -m "add jitter to backoff delays"
+
+Revision recorded
+Message       add jitter to backoff delays
+Revision      zlsrnukorkyz
+Commit        ae0d5b62
+Stack         feature/retry-backoff
+```
+
+`gx status` now shows one stack with two ordered revisions, newest first:
+
+```text
+$ gx status
+
+demo-repo  ● retry-backoff
+
+› ● retry-backoff  s1 · feature/retry-backoff · main · draft · ↑2
+        ↑ zlsrnuk  add jitter to backoff delays  latest
+        ↑ qlmmuyy  add exponential backoff helper
+```
+
+Reading the stack line: `s1` is a short alias you can use in commands, `feature/retry-backoff` is the Git branch it exports to, `main` is the base, `draft` means it has not been published, and `↑2` means two revisions are ahead of the remote.
 
 ## Agent workflow
 
 Prefer MCP tools over asking agents to run the CLI directly. The expected save flow is:
 
 1. Stage with `git add`
-2. `gx_commit` — record the revision
+2. `gx_commit` — record the revision (agents can attach a task summary and the commands/tests they ran)
 3. `gx_status` — inspect before publish
 4. `gx_push` — publish ready stacks (or `git push` when the hook is enough)
 
 Use `gx_sync` first when remote GitHub or GX state may have moved. Use `gx_generate` only to bulk-organize a large messy working copy.
 
-See [MCP setup](/docs/mcp) for client registration.
+See [MCP setup](/docs/mcp) for client registration and per-tool parameters.
 
 ## Optional: first-run demo
 
@@ -185,42 +270,56 @@ See [MCP setup](/docs/mcp) for client registration.
 gx demo
 ```
 
-Walks through how GX works in an interactive scratch session.
-
----
+Walks through how GX works in an interactive scratch session, without touching your repository.
 
 # How it works
 
-
-Many changes that happen during a coding session are otherwise lost. Those details can help teammates and other agents understand the intent and decisions behind the work. Alongside Git history and other resources, GX gives your team a stronger review system for moving faster while maintaining high-quality software.
+GX adds a context layer around your existing Git workflow. It captures what happened during coding sessions, attaches that context to reviewable revisions, and publishes normal Git branches and commits — so reviewers see the intent behind a change, not just the final diff.
 
 ## The problem
 
-Git was not built for LLMs. Git works great for humans, where you can attach a message to code changes to review later, but with AI we now have additional artifacts, like session context, that can save work in an organized way and supplement your pull requests.
+Git was built for humans typing commits one at a time. A commit stores a snapshot and a short message, and for human-paced work that is usually enough.
 
-Many changes that happen during a coding session are otherwise lost. Those details can help teammates and other agents understand the intent and decisions behind the work.
+Agent-written code breaks two of Git's assumptions:
 
-The second problem is that code review is becoming more of a bottleneck. The cost to generate code is quickly dropping to zero, while teams still require developers to review code changes manually, reading line by line.
+1. **The context that explains a change never makes it into the repo.** The prompt that asked for the change, the commands the agent ran, the tests it executed, the dead ends it backed out of — all of that lives in a session transcript that is gone by review time. The commit message is whatever one line survived.
+2. **Review is now the bottleneck.** The cost of generating code is dropping toward zero, but teams still review line by line. When a pull request is one large undifferentiated diff with a thin message, the reviewer has to reconstruct intent from scratch.
 
-## The benefits of GX
+## What GX captures
 
-Alongside Git history and other resources, GX gives your team a stronger review system for moving faster while maintaining high-quality software. GX records your session context (alongside other context resources) to supplement both your git record and context for pull requests.
+GX records work at three levels:
 
-In any coding session, you might request changes to multiple areas of code, and it can be hard to unravel that work into reasonable commits. Many will yolo commits using their codegen, and while this does save your work, we can leverage VCS systems to help create a database to better understand changes for our codebase indefinitely.
+- **Sessions** — transcripts from coding agents (for example, Claude Code transcripts via `Stop`/`SessionEnd` hooks that `gx init` installs). Sessions are retained locally for 30 days and published alongside the code they produced.
+- **Revisions** — each `gx commit` records the staged changes as one reviewable unit, down to individual [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (a few changed lines, not whole files). GX links each revision to the session that produced it — automatically when it can match one, or explicitly when an agent declares it.
+- **Agent self-reports** — through the [MCP tools](/docs/mcp), an agent can attach a task summary and the commands and tests it ran directly to the revision it is committing.
 
-In short, GX saves your coding session and organizes your work by creating [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (think of a hunk like several lines of code vs. storing an entire file in a commit). This context is stored in metadata and is saved using GX.
+Because changes are stored as described hunks with linked sessions, GX can point reviewers at the parts that matter and let them skim the mechanical rest — instead of forcing a line-by-line read of everything.
 
-Because work is saved in hunks with clear descriptions alongside the coding session, we can extract the most important parts of the code changes to review, shortening review time. This removes the bottleneck of code review while providing a reliable system of record.
+## Stacks and revisions
 
-## What are stacks and revisions?
+You are likely used to the Git mental model of branches and commits. These work great until you need to edit a commit, rebase, or reorder work — then the tooling gets sharp.
 
-You are likely used to the git mental model of branches and commits. These work great, but become unwieldy if you need to edit a commit, rebase, or do more involved work.
+- A **revision** is analogous to a commit, but it can be edited and updated after it is recorded. Revisions are JJ-backed, so amending one never requires an interactive rebase.
+- A **stack** is analogous to a branch, but with metadata: an ordered line of revisions, their base, publish state, and remote sync status. Status output also calls a stack a **feature**.
 
-Think of a revision as analogous to a commit. The main difference is that a revision can easily be edited and updated. A collection of revisions are collected in a stack (status output may also say **feature**). Think of a stack as analogous to a branch, but with metadata.
+Here is a stack as `gx status` shows it — two revisions built on `main`, not yet published:
 
-Stacks allow you to easily stack PRs and organize code changes in a way that improves review.
+```text
+› ● retry-backoff  s1 · feature/retry-backoff · main · draft · ↑2
+        ↑ zlsrnuk  add jitter to backoff delays  latest
+        ↑ qlmmuyy  add exponential backoff helper
+```
 
-While GX maintains these artifacts, when you push (via `git push` with the GX hook, or `gx push`), GX publishes branches and commits so your git log stays up to date and you can interface with GitHub.
+Each revision is separately reviewable, and the order tells the story of the work. Stacks also make stacked PRs natural: each stack exports to a branch, and dependent work stays in sequence instead of piling into one giant diff.
+
+## Everything still exports to Git
+
+GX maintains revisions and stacks locally. When you push — via `git push` with the GX pre-push hook, or `gx push` — GX publishes:
+
+- normal Git **branches and commits**, so your Git log and GitHub stay standard;
+- the linked **sessions and metadata** to GX Cloud as a review bundle.
+
+Nothing about your repository becomes GX-specific. If you stopped using GX tomorrow, your branches and commits remain ordinary Git.
 
 ## Replace your git workflow
 
@@ -237,21 +336,26 @@ Start with:
 
 ```bash
 git add <files>
-gx commit -m "describe this revision"
-gx status   # alias `gxs`
-git push    # or `gx push`
+gx commit -m "describe this revision"   # add -b feature/my-change for a new branch
+gx status                               # alias: gxs
+git push                                # or gx push
 ```
 
 `gx commit` records staged work as a GX revision. `gx status` shows local stacks and remote state. `git push` (with the GX pre-push hook) or `gx push` publishes code plus session data and metadata to GitHub and GX Cloud.
 
 For a large messy working copy, agents can still run `gx generate` to bulk-organize changes into smaller revisions, then inspect with `gx status` and push when ready.
 
-The recommended way to use GX with agents is through the [MCP](/docs/mcp). That lets you generate and save work from your coding tool without touching the terminal.
+## Where the context goes
 
----
+The published review bundle powers the review surfaces:
+
+- [PR Summaries](/docs/github) tell reviewers what changed, why, and which files deserve attention first.
+- [`@gx` chat](/docs/github) answers questions inside the pull request, citing the sessions and diffs it used.
+- [`gx review`](/docs/cli) runs a local review using the same captured context before you ever open a PR.
+
+The recommended way to use GX with agents is through the [MCP server](/docs/mcp). That lets your coding tool record and publish work without touching the terminal.
 
 # CLI
-
 
 `gx` is the local CLI. It is open source and runs on your machine. It adds a quality and workflow layer around your existing repo instead of replacing GitHub.
 
@@ -260,10 +364,10 @@ GX still produces ordinary Git branches and commits as output. The difference is
 ## Core loop
 
 ```bash
-git add <files>
-gx commit -m "describe this revision"
-gx status
-git push    # GX pre-push hook captures sessions and publishes metadata
+git add <files>                        # choose the scope of the revision
+gx commit -m "describe this revision"  # record it
+gx status                              # inspect stacks (alias: gxs)
+git push                               # GX pre-push hook captures sessions and publishes metadata
 ```
 
 Or publish explicitly with `gx push` instead of `git push`.
@@ -274,107 +378,235 @@ Or publish explicitly with `gx push` instead of `git push`.
 gx init
 ```
 
-Prepares the current repository for GX. It configures local identity, installs a Git pre-push hook, registers the MCP server when possible, and can offer to update `AGENTS.md`.
+Prepares the current repository for GX: configures local identity, installs a Git pre-push hook, installs Claude Code transcript-capture hooks, registers the MCP server with supported agent CLIs, and offers to add GX workflow instructions to `AGENTS.md`.
 
 Run it once per repository.
+
+| Flag | Meaning |
+| --- | --- |
+| `--name <name>` | user name to store in GX and JJ config (defaults to Git identity) |
+| `--email <email>` | user email to store in GX and JJ config |
+| `-y`, `--yes` | accept defaults and suppress prompts — use in scripts and agent sandboxes |
+
+```text
+$ gx init
+
+Configured     gx identity as Ada Doc <ada@example.com>
+Pre-push hook  ok: capture on git push
+Claude hooks   ok: Stop/SessionEnd transcript capture
+Session        30 days retention
+MCP            ok: claude
+AGENTS.md      ok: added GX workflow instructions
+
+Next           git add <files> && gx commit -m "..."
+```
 
 ## gx commit
 
 ```bash
-git add <files>    # or git add -p
+git add <files>    # or git add -p to pick hunks
 gx commit -m "describe this revision"
 ```
 
-Records **staged** Git changes as a GX revision. Like `git commit`, the revision lands on the current branch. Pass `-b` to create and switch to a new branch first.
+Records **staged** Git changes as a GX revision. Like `git commit`, the revision lands on the current branch and `HEAD` does not move. The revision is JJ-backed, so it stays editable through GX tools later.
 
-Exit codes: `0` success, `1` usage error, `2` no staged changes.
+| Flag | Meaning |
+| --- | --- |
+| `-m`, `--message <msg>` | commit message (required) |
+| `-b`, `--branch <name>` | create this branch at `HEAD` and record the revision onto it |
+| `--context-file <path>` | JSON file with agent-declared provenance (see below) |
+| `--json` | print machine-readable JSON (repo, change, stack, provenance status) |
 
-Useful flags:
+Exit codes: `0` success, `1` general error, `2` no staged changes.
+
+```text
+$ gx commit -m "add exponential backoff helper" -b feature/retry-backoff
+
+Revision recorded
+Created branch feature/retry-backoff (from main)
+Message       add exponential backoff helper
+Revision      qlmmuyyyupkm
+Commit        14c101a1
+Stack         feature/retry-backoff
+Provenance    absent
+```
+
+`Revision` is the stable GX change id; `Commit` is the Git commit it exported. `Provenance` reports session linkage: `absent` when no captured session matched, or a linked status when GX matched a captured session or one was attached explicitly (agents attach sessions through [MCP `gx_commit`](/docs/mcp)).
+
+Some `git commit` flags are intentionally rejected, with the replacement in the error message:
+
+- `gx commit -a` — not supported; stage with `git add` first, so the revision scope is explicit.
+- `gx commit --amend` — not supported; use `gx edit <rev>` to modify a recorded revision.
+- `gx commit -F <file>` — not supported yet; pass the message with `-m`.
+- `gx commit <path>` — path arguments are rejected; choose scope with `git add` or `git add -p`.
+
+### Agent-declared provenance
+
+`--context-file` attaches a self-report to the revision. All fields are optional:
+
+```json
+{
+  "task_summary": "Add retry/backoff utilities requested in TICKET-482",
+  "commands_run": ["bun test retry.test.js"],
+  "tests_run": ["bun test"]
+}
+```
 
 ```bash
-gx commit -m "message" --json
-gx commit -m "message" -b feature/new-branch
-gx commit -m "message" --context-file provenance.json
+gx commit -m "retry: honor attempt limit" --context-file context.json
 ```
+
+This is how a coding agent records *what it did* alongside *what changed*. Reviewers see the summary and the tests that ran next to the diff. MCP's `gx_commit` tool exposes these as first-class parameters, so agents rarely need to write the file themselves.
 
 ## gx status
 
 ```bash
-gx status
+gx status        # alias: gxs
 ```
 
-Shows unstaged changes, local stacks/features, revisions, and remote sync status.
+Shows unstaged changes, local stacks (features), their revisions, and remote sync status.
+
+```text
+$ gx status
+
+demo-repo  ● retry-backoff
+
+› ● retry-backoff  s1 · feature/retry-backoff · main · draft · ↑2
+        ↑ zlsrnuk  add jitter to backoff delays  latest
+        ↑ qlmmuyy  add exponential backoff helper
+```
+
+Reading the stack header, left to right: stack name, `s1` short alias (usable in commands like `gx push s1`), the Git branch it exports to, the base branch, publish state (`draft` until pushed), and `↑2` — two revisions ahead of the remote.
+
+| Flag | Meaning |
+| --- | --- |
+| `--json` | machine-readable stack summary |
+| `--agent` | stable, line-oriented text for agents (see below) |
+| `--all` | list all changed files in the git working tree sections |
+| `-i`, `--interactive` | open the interactive status browser |
+
+`--agent` is the format coding agents should parse when not using MCP — one `key=value` line per stack and revision:
+
+```text
+$ gx status --agent
+next: "git add"
+repo=demo-repo stacks=1 current=retry-backoff
+stack name=retry-backoff alias=s1 ref=feature/retry-backoff base=main status=draft changes=2 published=0/2 sync=local current=true
+revision id=qlmmuyyyupkm message="add exponential backoff helper" status=draft commit=14c101a1
+revision id=zlsrnukorkyz message="add jitter to backoff delays" status=draft commit=ae0d5b62
+```
+
+### Subcommands
 
 ```bash
-gx status --json
-gx status --all
-gx status list          # non-merged GX features
+gx status list                     # all non-merged GX features (--json, --agent)
+gx status edit <revision>          # reopen a recorded revision to keep working on it
+gx status diff <revision-or-stack> # show the JJ diff for a revision or stack
 ```
 
-Alias: `gxs`.
+```text
+$ gx status diff zlsrnukorkyz
+Added regular file jitter.js:
+        1: export function jitter(ms) {
+        2:   return ms / 2 + Math.random() * (ms / 2);
+        3: }
+```
+
+## gx review
+
+```bash
+gx review                                 # alias: gxr
+gx review "check auth rollback risks"
+```
+
+Reviews local changes using codebase context, captured sessions, review resources, and optional prompt guidance. Findings are printed as markdown and recorded to review history so future reviews can retrieve previous decisions.
+
+AI reviewers are optional and resolve credentials in this order: your own key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, or `gx set key`), then GX Cloud when you are signed in (on your plan or free trial), then deterministic checks only — the review always completes, with a warning naming what was unavailable.
+
+| Flag | Meaning |
+| --- | --- |
+| `[prompt]` | optional positional prompt to steer the review |
+| `--scope <scope>` | focused review scope: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `--focus <path>` | limit review to files under this path prefix |
+| `--deep` | full-spectrum review with more local and indexed context |
+| `--verbose` | include repo facts, docs, and changed files in the output |
+
+Examples:
+
+```bash
+gx review --scope security                  # security-focused pass over the current changes
+gx review --focus src/auth --deep           # deep review of just the auth directory
+gx review "did we break the retry contract?"
+```
 
 ## gx push
 
 ```bash
-gx push
-gx push --all           # every accepted stack
+gx push              # push the current stack, like git push
+gx push s1           # push a specific stack by name or alias
+gx push --all        # push every accepted stack
 ```
 
-Publishes stacks: normal Git branches and commits, linked sessions, and review metadata. Prints GitHub/Review URLs when available.
+Publishes stacks: normal Git branches and commits, linked sessions, and review metadata. Prints branch, GitHub push status, PR status/URL, and an Actions link when available. When an edited revision rewrites a stack, GX uses a guarded force-push with lease.
+
+Like `git push`, the default is only the current stack — pushing everything requires the explicit `--all` so GX never publishes branches you did not ask to share.
 
 With the pre-push hook from `gx init`, plain `git push` also triggers capture and cloud publish for the pushed refs.
 
 ## gx sync
 
 ```bash
-gx sync
+gx sync              # sync the default remote
+gx sync upstream     # sync a specific remote
 ```
 
-Fetches remote Git and GX state before committing or pushing. Use it when GitHub moved, a branch was merged, or push reports remote divergence.
+Fetches remote Git and GX state before committing or pushing: updates remote bookmarks, catches up local state to merged/closed PRs, prunes stacks whose PRs reached a terminal state, and drains any queued cloud uploads.
 
-## gx review
-
-```bash
-gx review
-gx review "check auth rollback risks"
-```
-
-Reviews local changes using codebase context, captured sessions, review resources, and optional prompt guidance.
-
-Alias: `gxr`.
-
-## gx set key
-
-```bash
-gx set key
-```
-
-Stores the API key GX uses for local inference. GX prefers an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` when present.
+Use it when GitHub moved (a branch was merged or closed), or when `gx push` reports remote divergence.
 
 ## gx auth
 
 ```bash
-gx auth login
-gx auth status
+gx auth login                     # sign in through GitHub
+gx auth login --name "work-mbp"   # set the machine name shown in the console
+gx auth status                    # show current auth state (--json for scripts)
 gx auth logout
 ```
 
-Signs the CLI into GX Cloud through GitHub and shows or clears the current auth state.
+Signs the CLI into GX Cloud through GitHub. Signed-in devices appear in the web app with machine name, GX version, last-used time, and session expiry.
+
+## gx set key
+
+```bash
+gx set key                                            # interactive: pick provider, paste key
+gx set key --provider anthropic --key "$ANTHROPIC_API_KEY"
+```
+
+Optional — GX works without a key, and signed-in users get AI features through GX Cloud. Set one when you want GX to call a specific provider or model directly. Stores the key in `~/.gx/inference.json` (or `$GX_HOME/inference.json`); an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the environment is preferred when present. Providers: `anthropic`, `openai`.
 
 ## gx doctor
 
 ```bash
-gx doctor
-gx doctor --fix
+gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
+gx doctor --fix    # apply safe repairs
+gx doctor --json   # machine-readable report
 ```
 
-Checks local GX setup and workflow state. `--fix` applies safe repairs.
+Checks local GX setup and workflow state: session capture health, Codex config routing, stacks whose base ref went missing, and stale stacks. `--fix` cleans up stale stacks, repairs missing base refs, and rewires configuration where it is safe to do so.
+
+## gx report
+
+```bash
+gx report          # --json for the report id/URL
+```
+
+Uploads recent GX logs to support and prints a report ID and URL. Use it when something misbehaves and you want the team to see what happened. Needs GX Cloud: use a released install and `gx auth login`.
 
 ## gx version
 
 ```bash
 gx version
-gx version --json
+gx version --json   # machine-readable build metadata
 ```
 
 ## gx demo
@@ -383,15 +615,15 @@ gx version --json
 gx demo
 ```
 
-Interactive first-run walkthrough.
+Interactive first-run walkthrough in a scratch session — safe to run anywhere; it does not touch your repository.
 
 ## Shortcuts
 
 The CLI installer installs:
 
 ```bash
-gxs # gx status
-gxr # gx review
+gxs   # gx status
+gxr   # gx review
 ```
 
 They are symlinks to the same `gx` binary.
@@ -406,24 +638,49 @@ gx status
 gx push
 ```
 
-For most day-to-day work, prefer `git add` + `gx commit`.
+| Flag | Meaning |
+| --- | --- |
+| `[filesets...]` | limit generation to these changed files or directories |
+| `--exclude <path>` | exclude a changed file or directory; may be repeated |
+| `--intent <text>` | intent prefix attached to generated revisions |
+| `--json` | machine-readable plan and result |
+| `--raw` | show full generate diagnostics in human output |
+
+For most day-to-day work, prefer `git add` + `gx commit` — explicit scope beats bulk organization when you already know what belongs together.
+
+## Surgery commands (advanced)
+
+Hidden commands for explicit repair work, not the default flow:
+
+```bash
+gx edit            # pick a recorded revision to reopen and keep working on
+gx edit <rev>      # reopen a specific revision
+gx base            # show the GX authoring base and current ref
+gx base --set main # return the authoring base to the default branch
+```
+
+```text
+$ gx base
+GX base
+Base          main
+Current       feature/retry-backoff
+On base       no
+
+Return        gx base --set main
+```
 
 ## Diagnostics (advanced)
 
 Hidden utility commands for capture and support:
 
 ```bash
-gx report
-gx capture sync
-gx ops diagnose doctor
+gx capture sync         # force a session capture sync
+gx ops diagnose doctor  # deeper ops diagnosis surface
 ```
 
 Prefer the public `gx doctor` and `gx report` unless you need the deeper ops surface.
 
----
-
 # MCP Setup
-
 
 The GX MCP server is installed with the CLI. It shells out to your local `gx` binary, so repo state stays on your machine.
 
@@ -436,22 +693,22 @@ gx auth login
 
 The installer places `gx-mcp` next to `gx` in `~/.local/bin`.
 
-If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue (using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`).
+If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue — using Git identity when available, or the `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL` environment variables.
 
 ## Register the MCP server
 
-The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use. `gx init` can also register supported clients for you.
-
-### Cursor
-
-```bash
-cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
-```
+The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use. `gx init` also registers supported clients automatically when it finds them.
 
 ### Claude Code
 
 ```bash
 claude mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Cursor
+
+```bash
+cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
 ```
 
 ### Codex CLI and Codex app
@@ -490,35 +747,139 @@ env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
 | `gx_status` | `gx status --json` | Inspect unstaged work, features, revisions, and remote state |
 | `gx_push` | `gx push [stack]` | Publish stacks, sessions, and metadata |
 | `gx_sync` | `gx sync` | Reflect remote GitHub and GX state locally |
-| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
 | `gx_review` | `gx review [prompt]` | Review using local and cloud context |
+| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
 | `gx_set_base` | `gx base --set <default>` | Return authoring base to the repo default branch |
+
+All tools accept an optional `cwd` (repository working directory; defaults to the MCP server process cwd). Long-running tools (`gx_push`, `gx_sync`, `gx_review`, `gx_generate`) allow up to 5 minutes.
+
+### gx_commit
+
+The default save verb. Stage files with `git add` first.
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `message` | string (required) | commit message for the staged revision |
+| `branch` | string | create this branch at `HEAD` and record onto it; default: current branch |
+| `task_summary` | string | agent-declared summary of the work being committed |
+| `commands_run` | string[] | shell commands the agent ran while doing this work |
+| `tests_run` | string[] | test commands the agent ran |
+| `session_id` | string | captured GX session id to attach as provenance |
+
+The provenance fields are the reason to prefer `gx_commit` over shelling out: they attach *what the agent did* to the revision, and reviewers see it next to the diff.
+
+```json
+{
+  "message": "retry: honor attempt limit",
+  "task_summary": "Add retry/backoff utilities requested in TICKET-482",
+  "commands_run": ["bun test retry.test.js"],
+  "tests_run": ["bun test"]
+}
+```
+
+### gx_status
+
+Read-only. Returns the `gx status --json` stack summary: unstaged files, features, revisions, publish counts, and remote sync state. Optional `show_all` includes hidden compatibility state.
+
+### gx_push
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `stack` | string | stack/feature name to push; omit to push the current stack, like `git push` |
+| `all` | boolean | push every accepted stack instead of only the current one |
+
+If the result reports remote divergence, run `gx_sync` and retry the push for that stack.
+
+### gx_sync
+
+Optional `remote` selects a specific remote. Run it before committing or pushing when remote GitHub merges may have landed.
+
+### gx_review
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `prompt` | string | reviewer prompt, e.g. `"check auth rollback risks"` |
+| `scope` | enum | `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `focus` | string | limit review to files under this path prefix |
+| `deep` | boolean | full-spectrum review with more local and indexed context |
+| `verbose` | boolean | include repo facts, docs, and changed files |
+
+### gx_generate
+
+Bulk organizer for a large messy working copy — secondary to `gx_commit`.
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `intent` | string | intent prefix for generated revisions |
+| `filesets` | string[] | changed files or directories to include |
+| `exclude` | string[] | changed files or directories to exclude |
+| `session_id` / `session_ids` | string / string[] | captured GX session ids to include as provenance |
+
+`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. It requires a session id: pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS` in the server environment.
+
+### gx_set_base
+
+Returns the GX authoring base to the repository default branch. It intentionally does not accept an arbitrary branch target.
 
 ## Agent workflow
 
 When a user says "save work", "save using gx", or "save with gx", run:
 
-1. Stage with `git add`
-2. `gx_commit`
-3. `gx_status`
+1. Stage with `git add` (choose the scope — one logical change per revision)
+2. `gx_commit` with a message and, when available, `task_summary` / `commands_run` / `tests_run`
+3. `gx_status` — inspect before publish
 4. `gx_push` for ready stacks (unless they ask to keep work local)
 
 Use `gx_sync` first when remote merges may have landed. Use `gx_generate` only for bulk organization of large working copies.
 
+A typical save sequence, as tool calls:
+
+```jsonc
+// 1. after: git add src/backoff.js
+{ "tool": "gx_commit", "arguments": {
+  "message": "add exponential backoff helper",
+  "branch": "feature/retry-backoff",
+  "task_summary": "Backoff helper for the retry work in TICKET-482",
+  "tests_run": ["bun test"]
+} }
+
+// 2. verify the stack looks right
+{ "tool": "gx_status", "arguments": {} }
+
+// 3. publish the current stack
+{ "tool": "gx_push", "arguments": {} }
+```
+
 GX PR summaries are posted for PRs published or adopted through GX push. A PR created only with the GitHub UI will not get a GX summary until that branch is pushed through GX.
 
-### Session workspaces
+## AGENTS.md instructions
 
-`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. Pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS`.
+`gx init` offers to append these instructions to your repo's `AGENTS.md`, so agents that read repo instructions use GX by default. If you skipped that step, add them manually:
 
----
+```markdown
+Version control: use GX, not `git commit`.
+
+Default flow:
+- Run `git add` to stage the files for this revision.
+- Run `gx commit` (or MCP `gx_commit`) to record staged work as a GX revision.
+- Run `gx status` to inspect staged files, local features/revisions, and remote state.
+- Run `gx push` to push code changes, sessions, and GX metadata to GitHub/origin
+  and GX Cloud. Plain `git push` also works when the GX pre-push hook is installed.
+
+Use GX MCP first: `gx_sync`, `gx_status`, then `gx_commit` / `gx_push`.
+If MCP is unavailable, use the CLI fallback: `git add`, `gx commit`, `gx status`, then `git push`.
+
+Use hidden utility commands such as `gx base` or `gx edit` only for explicit
+surgery or user-directed repair.
+
+Use `gx generate` only for bulk organization of large working copies.
+```
 
 # Interact with GX in GitHub PRs
 
-
 GX adds paid review features inside GitHub pull requests.
 
-The CLI can generate and publish stacks locally. GitHub PR Summaries and `@gx` chat run through GX Cloud and require the paid PR feature set (or an active free trial).
+The CLI can record and publish stacks locally for free. GitHub PR Summaries and `@gx` chat run through GX Cloud and require the paid PR feature set (or an active free trial).
 
 ## Prerequisites
 
@@ -550,10 +911,10 @@ The goal is to point reviewers to the important parts of the change instead of f
 
 GX posts summaries from these paths:
 
-- **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the bookmark already has a published GX event
+- **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the branch already has a published GX event
 - **After publish** — when `gx push` (or the publish hook path) has a PR number and the GitHub App is installed
 
-`POST /v1/summaries/generate` stores a summary in GX Cloud. It does **not** post the comment to GitHub by itself.
+The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** post the comment to GitHub by itself.
 
 ### Trial and paid access
 
@@ -587,7 +948,7 @@ Ask for risk or follow-up review:
 @gx is this related to the previous retry bug?
 ```
 
-GX answers from available review sources and cites the sources it used.
+GX answers from available review sources and cites the sources it used. Because published revisions carry session provenance, `@gx` can answer "why" questions — what the author asked for, which commands and tests ran — that a plain diff cannot.
 
 ### Override learned rules
 
@@ -608,18 +969,151 @@ When available, GX can also use captured coding-session context, indexed codebas
 
 ## GitHub App
 
-To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still generate and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
+To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still record and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
 
----
+# Troubleshooting
+
+Start with the built-in doctor:
+
+```bash
+gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
+gx doctor --fix    # apply safe repairs automatically
+```
+
+If something still misbehaves, `gx report` uploads recent GX logs to support and prints a report ID you can share.
+
+## Common errors
+
+### `no staged changes; run git add first`
+
+`gx commit` records **staged** changes only, and exits with code `2` when the index is empty.
+
+```bash
+git add <files>     # or git add -p to select hunks
+gx commit -m "describe this revision"
+```
+
+Agents checking exit codes: `0` success, `1` general error, `2` nothing staged.
+
+### `Run gx init first.`
+
+The repository has no GX identity yet. Initialize it once:
+
+```bash
+gx init        # interactive
+gx init -y     # accept defaults, for scripts and agent sandboxes
+```
+
+### `gx commit -a is not supported`
+
+Deliberate. GX wants the revision scope to be explicit, so `-a`, `--amend`, and `-F` are rejected with the replacement in the message:
+
+- instead of `-a`: stage with `git add` first
+- instead of `--amend`: `gx edit <rev>` reopens a recorded revision
+- instead of `-F file`: pass the message with `-m`
+
+### Push reports remote divergence
+
+The remote moved since your last sync — a branch was merged, closed, or force-pushed. Reflect remote state locally, then retry:
+
+```bash
+gx sync
+gx push
+```
+
+`gx sync` also prunes stacks whose PRs were merged or closed, so status stops showing stale work.
+
+### `Could not upload GX review context ... GX Cloud is not configured`
+
+The push of Git refs succeeded, but the session/metadata upload was skipped because the CLI has no cloud endpoint. Released installs have the endpoint baked in, so this usually means a from-source build — set `GX_CLOUD_URL` or reinstall the released CLI:
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+gx auth status || gx auth login
+```
+
+Local remote metadata is still recorded, so nothing is lost. Queued uploads are drained on the next successful `gx sync` or `gx push`.
+
+### `gx-mcp not found; install GX CLI package first`
+
+`gx init` tried to register the MCP server but could not find the `gx-mcp` binary. Reinstall the CLI package, which places both binaries in `~/.local/bin`:
+
+```bash
+curl -fsSL https://download.gx.run/install.sh | sh
+```
+
+Then re-run `gx init`, or register manually per [MCP setup](/docs/mcp).
+
+### No PR Summary appeared on my pull request
+
+Check, in order:
+
+1. The branch was pushed **through GX** — `gx push`, or `git push` with the GX pre-push hook installed. A PR created only in the GitHub UI has no capture metadata.
+2. The GX GitHub App is installed on the repository, with the webhook pointed at `https://api.gx.run/github/webhook`.
+3. Your org's trial window or paid plan is active — when quota blocks a summary, GX posts an upgrade comment instead. See [Pull Requests](/docs/github).
+
+### Sessions are not being captured
+
+`gx init` installs the capture hooks (Git pre-push, Claude Code `Stop`/`SessionEnd`). Verify and repair:
+
+```bash
+gx doctor          # shows capture and hook state
+gx doctor --fix
+gx capture sync    # advanced: force a capture sync
+```
+
+Captured sessions are retained locally for 30 days.
+
+## Environment
+
+| Variable | Meaning |
+| --- | --- |
+| `GX_HOME` | override GX's state directory (default `~/.gx`) — inference key, capture data, workspaces |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | model credentials for local inference; `gx set key` stores one persistently |
+| `GX_BINARY` | path to the `gx` binary the MCP server should run |
+| `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL` | identity for MCP's non-interactive `gx init` |
+| `GX_SESSION_ID` / `GX_SESSION_IDS` | session ids for MCP `gx_generate` workspace isolation |
+
+## Uninstall
+
+```bash
+rm -f ~/.local/bin/gx ~/.local/bin/gxr ~/.local/bin/gxs ~/.local/bin/gx-mcp
+```
+
+This removes the installed binaries only. Local GX data remains in `~/.gx`; delete that directory too if you want a clean slate. Your Git repositories are untouched — everything GX published is ordinary Git.
+
+## Send logs to support
+
+```bash
+gx report
+```
+
+Uploads recent GX logs (requires `gx auth login`) and prints a report ID and URL to share with the team.
 
 # API
-
 
 GX Cloud APIs use bearer-token authentication.
 
 ```bash
 export GX_API_URL="https://api.gx.run"
 ```
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | API and database reachability |
+| `GET /v1/auth/me` | inspect the authenticated caller |
+| `POST /v1/publish` | publish a GX review bundle (what `gx push` sends) |
+| `GET /bookmarks` | list bookmark metadata for sync and review |
+| `GET /v1/review/context` | review context for a repo/ref range |
+| `GET /v1/reviews/:bookmarkId` (+ `/plan`, `/decision`) | Console review experience |
+| `POST /v1/summaries/generate` | generate and store a PR Summary |
+| `POST /github/webhook` | GitHub App webhook (PR Summaries, `@gx` chat) |
+| `POST /v1/extracts` | ingest hunk links and push metadata |
+| `POST /v1/sessions` | ingest raw captured session content |
+| `GET /v1/activity` | recent summaries, sessions, learned rules |
+| `POST /v1/code-review-history/record` / `/search` | record and search review findings |
+| `POST /v1/reported-logs` | upload CLI logs for support |
+| `POST /gx/openai/responses` / `/chat-completions` | OpenAI proxy through GX Cloud |
 
 ## Authentication
 
@@ -727,7 +1221,9 @@ Without `event: "gx.pr"`, the same route accepts a lighter **registration-only**
 
 ## GET /bookmarks
 
-List bookmark metadata for sync and review surfaces.
+List bookmark metadata for sync and review surfaces, newest first.
+
+Query parameters: `merge_status` (`open`, `merged`, or `closed`; any other value is a `400`) and `repo_full_name`. Both optional.
 
 ```bash
 curl "$GX_API_URL/bookmarks?merge_status=open" \
@@ -739,6 +1235,24 @@ Filter to one repository:
 ```bash
 curl "$GX_API_URL/bookmarks?repo_full_name=org/repo&merge_status=open" \
   -H "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+Response: an array of bookmarks.
+
+```json
+[
+  {
+    "id": "bm_123",
+    "repo_full_name": "org/repo",
+    "branch_name": "feature/retry-backoff",
+    "title": "Add retry/backoff utilities",
+    "revision": 3,
+    "head_commit_id": "ae0d5b62...",
+    "remote_head_sha": "ae0d5b62...",
+    "merge_status": "open",
+    "updated_at_ms": 1760000000000
+  }
+]
 ```
 
 ## GET /v1/review/context
@@ -849,7 +1363,7 @@ curl "$GX_API_URL/v1/sessions" \
 
 ## GET /v1/activity
 
-Read recent summaries, sessions, and learned rules.
+Read recent summaries, sessions, and learned rules. `limit` accepts 1–100 (default 20); page with the returned `nextCursor`.
 
 ```bash
 curl "$GX_API_URL/v1/activity?limit=20" \

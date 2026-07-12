@@ -14,22 +14,22 @@ gx auth login
 
 The installer places `gx-mcp` next to `gx` in `~/.local/bin`.
 
-If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue (using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`).
+If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue — using Git identity when available, or the `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL` environment variables.
 
 ## Register the MCP server
 
-The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use. `gx init` can also register supported clients for you.
-
-### Cursor
-
-```bash
-cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
-```
+The released CLI installs a stdio MCP server at `~/.local/bin/gx-mcp`. Register that binary with each agent you use. `gx init` also registers supported clients automatically when it finds them.
 
 ### Claude Code
 
 ```bash
 claude mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
+```
+
+### Cursor
+
+```bash
+cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
 ```
 
 ### Codex CLI and Codex app
@@ -68,23 +68,130 @@ env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
 | `gx_status` | `gx status --json` | Inspect unstaged work, features, revisions, and remote state |
 | `gx_push` | `gx push [stack]` | Publish stacks, sessions, and metadata |
 | `gx_sync` | `gx sync` | Reflect remote GitHub and GX state locally |
-| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
 | `gx_review` | `gx review [prompt]` | Review using local and cloud context |
+| `gx_generate` | `gx generate --json` | Bulk-organize a large working copy (secondary) |
 | `gx_set_base` | `gx base --set <default>` | Return authoring base to the repo default branch |
+
+All tools accept an optional `cwd` (repository working directory; defaults to the MCP server process cwd). Long-running tools (`gx_push`, `gx_sync`, `gx_review`, `gx_generate`) allow up to 5 minutes.
+
+### gx_commit
+
+The default save verb. Stage files with `git add` first.
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `message` | string (required) | commit message for the staged revision |
+| `branch` | string | create this branch at `HEAD` and record onto it; default: current branch |
+| `task_summary` | string | agent-declared summary of the work being committed |
+| `commands_run` | string[] | shell commands the agent ran while doing this work |
+| `tests_run` | string[] | test commands the agent ran |
+| `session_id` | string | captured GX session id to attach as provenance |
+
+The provenance fields are the reason to prefer `gx_commit` over shelling out: they attach *what the agent did* to the revision, and reviewers see it next to the diff.
+
+```json
+{
+  "message": "retry: honor attempt limit",
+  "task_summary": "Add retry/backoff utilities requested in TICKET-482",
+  "commands_run": ["bun test retry.test.js"],
+  "tests_run": ["bun test"]
+}
+```
+
+### gx_status
+
+Read-only. Returns the `gx status --json` stack summary: unstaged files, features, revisions, publish counts, and remote sync state. Optional `show_all` includes hidden compatibility state.
+
+### gx_push
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `stack` | string | stack/feature name to push; omit to push the current stack, like `git push` |
+| `all` | boolean | push every accepted stack instead of only the current one |
+
+If the result reports remote divergence, run `gx_sync` and retry the push for that stack.
+
+### gx_sync
+
+Optional `remote` selects a specific remote. Run it before committing or pushing when remote GitHub merges may have landed.
+
+### gx_review
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `prompt` | string | reviewer prompt, e.g. `"check auth rollback risks"` |
+| `scope` | enum | `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `focus` | string | limit review to files under this path prefix |
+| `deep` | boolean | full-spectrum review with more local and indexed context |
+| `verbose` | boolean | include repo facts, docs, and changed files |
+
+### gx_generate
+
+Bulk organizer for a large messy working copy — secondary to `gx_commit`.
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `intent` | string | intent prefix for generated revisions |
+| `filesets` | string[] | changed files or directories to include |
+| `exclude` | string[] | changed files or directories to exclude |
+| `session_id` / `session_ids` | string / string[] | captured GX session ids to include as provenance |
+
+`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. It requires a session id: pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS` in the server environment.
+
+### gx_set_base
+
+Returns the GX authoring base to the repository default branch. It intentionally does not accept an arbitrary branch target.
 
 ## Agent workflow
 
 When a user says "save work", "save using gx", or "save with gx", run:
 
-1. Stage with `git add`
-2. `gx_commit`
-3. `gx_status`
+1. Stage with `git add` (choose the scope — one logical change per revision)
+2. `gx_commit` with a message and, when available, `task_summary` / `commands_run` / `tests_run`
+3. `gx_status` — inspect before publish
 4. `gx_push` for ready stacks (unless they ask to keep work local)
 
 Use `gx_sync` first when remote merges may have landed. Use `gx_generate` only for bulk organization of large working copies.
 
+A typical save sequence, as tool calls:
+
+```jsonc
+// 1. after: git add src/backoff.js
+{ "tool": "gx_commit", "arguments": {
+  "message": "add exponential backoff helper",
+  "branch": "feature/retry-backoff",
+  "task_summary": "Backoff helper for the retry work in TICKET-482",
+  "tests_run": ["bun test"]
+} }
+
+// 2. verify the stack looks right
+{ "tool": "gx_status", "arguments": {} }
+
+// 3. publish the current stack
+{ "tool": "gx_push", "arguments": {} }
+```
+
 GX PR summaries are posted for PRs published or adopted through GX push. A PR created only with the GitHub UI will not get a GX summary until that branch is pushed through GX.
 
-### Session workspaces
+## AGENTS.md instructions
 
-`gx_generate` runs in a session-isolated JJ workspace under `$GX_HOME/workspaces/...` so concurrent MCP sessions do not generate each other's dirty checkout. Pass `session_id` / `session_ids`, or set `GX_SESSION_ID` / `GX_SESSION_IDS`.
+`gx init` offers to append these instructions to your repo's `AGENTS.md`, so agents that read repo instructions use GX by default. If you skipped that step, add them manually:
+
+```markdown
+Version control: use GX, not `git commit`.
+
+Default flow:
+- Run `git add` to stage the files for this revision.
+- Run `gx commit` (or MCP `gx_commit`) to record staged work as a GX revision.
+- Run `gx status` to inspect staged files, local features/revisions, and remote state.
+- Run `gx push` to push code changes, sessions, and GX metadata to GitHub/origin
+  and GX Cloud. Plain `git push` also works when the GX pre-push hook is installed.
+
+Use GX MCP first: `gx_sync`, `gx_status`, then `gx_commit` / `gx_push`.
+If MCP is unavailable, use the CLI fallback: `git add`, `gx commit`, `gx status`, then `git push`.
+
+Use hidden utility commands such as `gx base` or `gx edit` only for explicit
+surgery or user-directed repair.
+
+Use `gx generate` only for bulk organization of large working copies.
+```

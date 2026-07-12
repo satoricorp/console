@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { getSql } from "../db";
+import { checkCloudAIQuota } from "../metering/quota";
 import type { AppEnv } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
 import { logTiming, timingNow } from "../timing";
@@ -6,6 +8,28 @@ import { logTiming, timingNow } from "../timing";
 export const openAIRoutes = new Hono<AppEnv>();
 
 openAIRoutes.use("*", requireAuth);
+
+// Cloud AI is a paid feature (with a free-trial window). Past-trial free orgs
+// get a clean 402 the CLI can turn into an upgrade hint instead of burning
+// tokens on the shared key.
+openAIRoutes.use("*", async (c, next) => {
+  const auth = c.get("auth");
+  const quota = await checkCloudAIQuota(getSql(), auth.orgId, auth.userId);
+  if (!quota.allowed) {
+    return c.json(
+      {
+        error: "payment_required",
+        reason: quota.reason ?? "trial_expired",
+        message:
+          "GX free trial has ended for this org. Upgrade to keep using GX Cloud AI, or set your own model key with `gx set key`.",
+        upgrade_url: quota.upgradeUrl,
+        trial_ends_at: quota.trialEndsAt ?? null,
+      },
+      402,
+    );
+  }
+  await next();
+});
 
 const defaultOpenAIBaseURL = "https://api.openai.com/v1";
 const defaultOpenAITimeoutMs = 300_000;

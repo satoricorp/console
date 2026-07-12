@@ -7,16 +7,17 @@
 ```bash
 git add <files>
 gx commit -m "describe this revision"
-gx status
+gx status   # gxs
 git push    # or gx push
 ```
 
 ## Docs
 
 - [Overview](/docs): Product model — sessions, revisions, stacks, review bundles
-- [Get started](/docs/getting-started): Install, auth, first revision
-- [How it works](/docs/how-it-works): Why GX, stacks vs commits
-- [CLI](/docs/cli): gx commit, status, push, sync, review, set key
-- [MCP Setup](/docs/mcp): gx_commit, gx_status, gx_push, and more
+- [Get started](/docs/getting-started): Install, auth, gx init, first revision, build a stack
+- [How it works](/docs/how-it-works): What GX captures, stacks vs commits, Git export
+- [CLI](/docs/cli): Every command with flags, examples, and exit codes
+- [MCP Setup](/docs/mcp): gx_commit provenance, gx_status, gx_push, agent save workflow
 - [GitHub PRs](/docs/github): PR Summaries and @gx chat (paid / trial)
+- [Troubleshooting](/docs/troubleshooting): Common errors, environment variables, uninstall
 - [API](/docs/reference/api): GX Cloud HTTP APIs
