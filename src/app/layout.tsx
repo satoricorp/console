@@ -46,7 +46,15 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col font-sans">
-        <RootProvider theme={{ enabled: false, defaultTheme: "light" }}>
+        <RootProvider
+          theme={{
+            attribute: "class",
+            defaultTheme: "system",
+            enableSystem: true,
+            disableTransitionOnChange: true,
+          }}
+          search={{ enabled: false }}
+        >
           <Suspense fallback={null}>
             <GoogleAnalytics />
           </Suspense>
