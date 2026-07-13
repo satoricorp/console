@@ -1,4 +1,5 @@
 /** Markers for GX-owned PR description blocks. */
+/** E2E probe: GX PR summary links + /reviews diffs (test/gx-e2e-summary-links). */
 export const GX_PR_BODY_MARKER = "<!-- gx:pr-summary:v1 -->";
 /** @deprecated Legacy CLI put human notes under this marker below the GX block. */
 export const GX_AUTHOR_NOTES_MARKER = "<!-- gx:author-notes -->";
