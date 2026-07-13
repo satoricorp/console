@@ -5,7 +5,7 @@ export function userFacingActionError(error: unknown, fallback: string): string 
   }
   const message = error.message.trim();
   const uncaught = message.match(
-    /Uncaught (?:Error|ConvexError):\s*(.+?)(?:\n|$)/s,
+    /Uncaught (?:Error|ConvexError):\s*([\s\S]+?)(?:\n|$)/,
   );
   if (uncaught?.[1]?.trim()) {
     return uncaught[1].trim();
