@@ -444,6 +444,7 @@ function makeContext(overrides: Partial<ExtractContext> = {}): ExtractContext {
     orgId: "org",
     repoRootPath: "/repo",
     headCommitId: "head",
+    githubPrUrl: null,
     refRange: null,
     fileStats: null,
     intentCandidates: [],
