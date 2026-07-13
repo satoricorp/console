@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   bookmarksMissingFromOpenSet,
   groupBookmarksByRepo,
+  isNonPrBranch,
   mapPool,
   mergeStatusFromGithubPull,
   parseGithubPrNumber,
@@ -59,6 +60,16 @@ describe("parseGithubPrNumber / resolveGithubPrNumber", () => {
         github_pr_url: "https://github.com/acme/gx/pull/99",
       }),
     ).toBe(99);
+  });
+});
+
+describe("isNonPrBranch", () => {
+  test("flags default and placeholder branches", () => {
+    expect(isNonPrBranch("main")).toBe(true);
+    expect(isNonPrBranch("HEAD")).toBe(true);
+    expect(isNonPrBranch("unknown")).toBe(true);
+    expect(isNonPrBranch("")).toBe(true);
+    expect(isNonPrBranch("feature/test-minimal")).toBe(false);
   });
 });
 

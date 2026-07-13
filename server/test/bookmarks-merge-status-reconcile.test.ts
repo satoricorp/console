@@ -377,6 +377,149 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
     expect(Number(stored?.github_pr_number)).toBe(urlOnlyPr);
   });
 
+  test("no-PR open bookmarks are closed when branch has no GitHub PR", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const [noPr] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        ${userId},
+        ${repoFullName},
+        'feature/test-minimal',
+        'test minimal',
+        1,
+        'open',
+        NULL,
+        NULL,
+        ${now},
+        ${now},
+        ${orgId}
+      )
+      RETURNING id
+    `;
+
+    const branchLookups: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token-test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        url.includes(`/repos/${repoFullName}/pulls?`) &&
+        url.includes("state=open") &&
+        !url.includes("head=")
+      ) {
+        return new Response(JSON.stringify([{ number: openPrNumber }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("head=") && url.includes("/pulls?")) {
+        branchLookups.push(url);
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes(`/repos/${repoFullName}/pulls/`)) {
+        return new Response(
+          JSON.stringify({ merged: false, state: "open" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+
+    const closed = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=closed`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(closed.status).toBe(200);
+    const rows = (await closed.json()) as Array<{ id: string; merge_status: string }>;
+    expect(rows.some((row) => row.id === noPr.id && row.merge_status === "closed")).toBe(
+      true,
+    );
+    expect(
+      branchLookups.some(
+        (url) =>
+          url.includes("feature/test-minimal") ||
+          url.includes("feature%2Ftest-minimal"),
+      ),
+    ).toBe(true);
+
+    const [stored] = await db<{ merge_status: string }[]>`
+      SELECT merge_status FROM bookmarks WHERE id = ${noPr.id}::uuid
+    `;
+    expect(stored?.merge_status).toBe("closed");
+  });
+
+  test("main/HEAD/unknown no-PR bookmarks close without branch PR lookup", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const [mainBookmark] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        ${userId},
+        ${repoFullName},
+        'main',
+        'main publish',
+        1,
+        'open',
+        NULL,
+        NULL,
+        ${now},
+        ${now},
+        ${orgId}
+      )
+      RETURNING id
+    `;
+
+    let headQueryCount = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token-test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("head=")) {
+        headQueryCount += 1;
+      }
+      if (
+        url.includes(`/repos/${repoFullName}/pulls?`) &&
+        url.includes("state=open")
+      ) {
+        return new Response(JSON.stringify([{ number: openPrNumber }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ merged: false, state: "open" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const closed = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=closed`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(closed.status).toBe(200);
+    const rows = (await closed.json()) as Array<{ id: string }>;
+    expect(rows.some((row) => row.id === mainBookmark.id)).toBe(true);
+    expect(headQueryCount).toBe(0);
+  });
+
   test("merge_status=archived returns only archived bookmarks", async () => {
     const db = getSql();
     const now = Date.now();
