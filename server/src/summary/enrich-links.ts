@@ -31,6 +31,14 @@ const ATTRIBUTION_KINDS = new Set([
   "heuristic",
 ]);
 
+/** Kinds that should resolve to a concrete file:line when left bare. */
+const FILE_BACKED_KINDS = new Set([
+  "codebase",
+  "heuristic",
+  "agent-sessions",
+  "docs",
+]);
+
 const FILE_EXT_RE =
   /\.(go|md|json|ya?ml|tsx?|jsx?|py|rs|toml|sql|sh|css|html|txt)$/i;
 const FILE_LINE_RE = /^(.+?):(\d+)$/;
@@ -51,6 +59,7 @@ export function enrichSummaryLinks(
 ): string {
   const lines = summary.split("\n");
   let inNotable = false;
+  let lastBulletText: string | null = null;
   const out: string[] = [];
 
   for (const line of lines) {
@@ -58,24 +67,58 @@ export function enrichSummaryLinks(
     const heading = trimmed.replace(/^#+\s*/, "").toLowerCase();
     if (heading === "notable changes") {
       inNotable = true;
+      lastBulletText = null;
       out.push(line);
       continue;
     }
     if (inNotable && /^#{1,3}\s+\S/.test(trimmed)) {
       inNotable = false;
+      lastBulletText = null;
     }
     if (inNotable && /^\s*Attribution:/i.test(line)) {
-      out.push(enrichAttributionLine(line, ctx));
+      out.push(enrichAttributionLine(line, ctx, lastBulletText));
       continue;
     }
-    if (inNotable && /^-\s+/.test(trimmed) && !trimmed.includes("<a ")) {
-      out.push(enrichNotableBullet(line, ctx));
+    if (inNotable && /^-\s+/.test(trimmed)) {
+      const bulletMatch = /^(-\s+)(⚠\s+)?(.+)$/.exec(line);
+      lastBulletText = bulletMatch
+        ? stripHtmlAnchors(bulletMatch[3]!.trim())
+        : null;
+      if (!trimmed.includes("<a ")) {
+        out.push(enrichNotableBullet(line, ctx));
+        continue;
+      }
+      out.push(line);
       continue;
     }
     out.push(line);
   }
 
-  return out.join("\n");
+  return ensureNewTabAnchors(out.join("\n"));
+}
+
+/** Ensure every summary `<a>` opens in a new tab (GitHub LOC hashes need it). */
+export function ensureNewTabAnchors(html: string): string {
+  return html.replace(/<a\s+([^>]*?)>/gi, (full, attrs: string) => {
+    if (/\btarget\s*=/i.test(attrs) && /\brel\s*=/i.test(attrs)) {
+      return full;
+    }
+    let next = attrs.trim();
+    if (!/\btarget\s*=/i.test(next)) {
+      next += ` target="_blank"`;
+    }
+    if (!/\brel\s*=/i.test(next)) {
+      next += ` rel="noopener noreferrer"`;
+    }
+    return `<a ${next}>`;
+  });
+}
+
+function stripHtmlAnchors(text: string): string {
+  return text
+    .replace(/<a\s+[^>]*>/gi, "")
+    .replace(/<\/a>/gi, "")
+    .trim();
 }
 
 function enrichNotableBullet(line: string, ctx: SummaryLinkContext): string {
@@ -92,24 +135,41 @@ function enrichNotableBullet(line: string, ctx: SummaryLinkContext): string {
   return `${prefix}${flagged}${formatPRSummaryLink(title, url)}`;
 }
 
-function enrichAttributionLine(line: string, ctx: SummaryLinkContext): string {
+function enrichAttributionLine(
+  line: string,
+  ctx: SummaryLinkContext,
+  bulletText: string | null,
+): string {
   const match = /^(\s*Attribution:\s*)(.+)$/i.exec(line);
   if (!match) return line;
   const prefix = match[1]!;
   const rest = match[2]!.trim();
-  if (!rest || rest.includes("<a ")) return line;
+  if (!rest) return line;
+  if (rest.includes("<a ")) {
+    return `${prefix}${ensureNewTabAnchors(rest)}`;
+  }
 
   const parts = rest.split(/\s*;\s*/).map((p) => p.trim()).filter(Boolean);
-  const rendered = parts.map((part) => renderAttributionPart(part, ctx));
+  const rendered = parts.map((part) =>
+    renderAttributionPart(part, ctx, bulletText),
+  );
   return `${prefix}${rendered.join("; ")}`;
 }
 
-function renderAttributionPart(part: string, ctx: SummaryLinkContext): string {
+function renderAttributionPart(
+  part: string,
+  ctx: SummaryLinkContext,
+  bulletText: string | null,
+): string {
   const tokens = part.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return part;
 
   const kind = tokens[0]!;
   if (ATTRIBUTION_KINDS.has(kind) && tokens.length === 1) {
+    const concrete = resolveBareKindConcreteRef(kind, ctx, bulletText);
+    if (concrete) {
+      return `${kind} ${formatPRSummaryLink(concrete.display, concrete.url)}`;
+    }
     const labelUrl = ctx.labelUrls?.[kind];
     return labelUrl ? formatPRSummaryLink(kind, labelUrl) : kind;
   }
@@ -117,10 +177,73 @@ function renderAttributionPart(part: string, ctx: SummaryLinkContext): string {
   if (ATTRIBUTION_KINDS.has(kind) && tokens.length > 1) {
     const remainder = tokens.slice(1).join(" ");
     const linked = linkifyAttributionText(remainder, ctx);
+    // If the model left a vague note (no file/PR link), still attach a concrete ref.
+    if (
+      FILE_BACKED_KINDS.has(kind) &&
+      linked === remainder &&
+      !looksLikeFilePath(remainder.split(/\s+/)[0] ?? "")
+    ) {
+      const concrete = resolveBareKindConcreteRef(kind, ctx, bulletText);
+      if (concrete) {
+        return `${kind} ${formatPRSummaryLink(concrete.display, concrete.url)}; ${linked}`;
+      }
+    }
     return `${kind} ${linked}`;
   }
 
   return linkifyAttributionText(part, ctx);
+}
+
+function resolveBareKindConcreteRef(
+  kind: string,
+  ctx: SummaryLinkContext,
+  bulletText: string | null,
+): { display: string; url: string } | null {
+  if (kind === "previous-prs") {
+    const fromBullet = bulletText ? extractPrRef(bulletText) : null;
+    if (fromBullet) {
+      const url = resolvePRRefURL(fromBullet, ctx);
+      if (url) return { display: fromBullet, url };
+    }
+    return null;
+  }
+
+  if (!FILE_BACKED_KINDS.has(kind)) return null;
+
+  const fromBullet = bulletText ? findBestFileRef(bulletText, ctx) : null;
+  const ref = fromBullet ?? firstHunkRef(ctx);
+  if (!ref) return null;
+
+  const line =
+    ref.line > 0
+      ? ref.line
+      : (ctx.hunks.find((h) => h.file === ref.file && h.lineStart > 0)
+          ?.lineStart ?? 0);
+  const display = line > 0 ? `${ref.file}:${line}` : ref.file;
+  const url = resolveFileRefURL(ctx, ref.file, line);
+  if (!url) return null;
+  return { display, url };
+}
+
+function firstHunkRef(
+  ctx: SummaryLinkContext,
+): { file: string; line: number } | null {
+  const hunk = ctx.hunks.find((h) => h.file.trim());
+  if (hunk) {
+    return { file: hunk.file.trim(), line: hunk.lineStart > 0 ? hunk.lineStart : 0 };
+  }
+  const file = (ctx.changedFiles ?? []).find((f) => f.trim());
+  return file ? { file: file.trim(), line: 0 } : null;
+}
+
+function extractPrRef(text: string): string | null {
+  const ownerRepo = /([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)/.exec(text);
+  if (ownerRepo) return `${ownerRepo[1]}#${ownerRepo[2]}`;
+  const prNum = /\bPR\s*#(\d+)\b/i.exec(text);
+  if (prNum) return `PR #${prNum[1]}`;
+  const hash = /(?:^|[^\w/])#(\d+)\b/.exec(text);
+  if (hash) return `PR #${hash[1]}`;
+  return null;
 }
 
 function linkifyAttributionText(text: string, ctx: SummaryLinkContext): string {
@@ -153,7 +276,21 @@ function linkifyAttributionText(text: string, ctx: SummaryLinkContext): string {
     if (url) return formatPRSummaryLink(result, url);
   }
 
+  result = linkifyFilePathTokens(result, ctx);
   return result;
+}
+
+function linkifyFilePathTokens(text: string, ctx: SummaryLinkContext): string {
+  if (!text || text.includes("<a ")) return text;
+  PATH_TOKEN_RE.lastIndex = 0;
+  return text.replace(PATH_TOKEN_RE, (full, pathToken: string) => {
+    const { file, line } = parseFileLineRef(pathToken);
+    if (!looksLikeFilePath(file)) return full;
+    const url = resolveFileRefURL(ctx, file, line);
+    if (!url) return full;
+    const prefix = full.slice(0, full.length - pathToken.length);
+    return `${prefix}${formatPRSummaryLink(pathToken, url)}`;
+  });
 }
 
 function resolveRefURL(ref: string, ctx: SummaryLinkContext): string {
@@ -290,6 +427,8 @@ export function parseFileLineRef(ref: string): { file: string; line: number } {
 export function looksLikeFilePath(value: string): boolean {
   const v = value.trim();
   if (!v) return false;
+  // Free-text notes may contain a path token; the whole string is not a path.
+  if (/\s/.test(v)) return false;
   if (v.includes("/")) return true;
   return FILE_EXT_RE.test(v);
 }

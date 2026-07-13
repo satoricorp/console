@@ -23,7 +23,7 @@ GX Cloud writes exactly one rich summary into the PR body. Match this format:
 ## Notable Changes
 
 - <most important change; include path when known>
-  Attribution: <agent-sessions|codebase|previous-prs|docs|heuristic> <optional path or note>
+  Attribution: <agent-sessions|codebase|previous-prs|docs|heuristic> <concrete ref>
 - <next important change>
   Attribution: …
 
@@ -33,10 +33,15 @@ Rules:
 - At most 40 lines total including blank lines
 - Be concise; prefer 3–7 Notable Changes bullets
 - Every Notable Changes bullet must include an Attribution line
+- Attribution must name a concrete source — never a bare kind alone:
+  - codebase / heuristic: \`path\` or \`path:line\` from the change or Codebase context
+  - agent-sessions: session id and/or \`path:line\` from hunk links
+  - previous-prs: \`PR #N\` (or owner/repo#N)
+  - docs: doc path or title from Independent resources
 - Never use the word "brief"
 - Only cite indexed buckets that appear in "Context provided"; never name a bucket with provided=0
 - Prefer concrete files and behaviors over vague claims
-- Do not invent GitHub deep links; plain path text is fine`;
+- Do not invent GitHub deep links; plain path / path:line / PR #N text is fine`;
 
 const maxPatchCharsPerRevision = 3000;
 const maxPatchCharsTotal = 12000;
@@ -133,6 +138,7 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
         sourceKind: snip.sourceKind ?? "unknown",
         text: snip.text,
         score: snip.score,
+        file: snip.file,
       });
       byBucket.set(bucket, list);
       manifest[bucket] = {

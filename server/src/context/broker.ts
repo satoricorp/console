@@ -401,13 +401,21 @@ export function formatBucketPromptSections(
 /** Flatten broker buckets into legacy IndexSnippetRow-shaped objects. */
 export function flattenBrokerSnippets(
   result: ReviewContextBrokerResult,
-): Array<{ id: string; text: string; score?: number; sourceKind?: string; bucket?: ContextBucket }> {
+): Array<{
+  id: string;
+  text: string;
+  score?: number;
+  sourceKind?: string;
+  bucket?: ContextBucket;
+  file?: string;
+}> {
   const out: Array<{
     id: string;
     text: string;
     score?: number;
     sourceKind?: string;
     bucket?: ContextBucket;
+    file?: string;
   }> = [];
   for (const bucket of Object.keys(result.buckets) as ContextBucket[]) {
     for (const snip of result.buckets[bucket]) {
@@ -417,6 +425,7 @@ export function flattenBrokerSnippets(
         score: snip.score,
         sourceKind: snip.sourceKind,
         bucket,
+        file: snip.file,
       });
     }
   }
