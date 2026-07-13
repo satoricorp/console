@@ -11,7 +11,13 @@ import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
 import { QuotaExceededError } from "../metering/quota";
-import { generateSummary } from "../summary/generate";
+import { enrichSummaryLinks } from "../summary/enrich-links";
+import {
+  generateSummary,
+  loadExtractContext,
+  resolveSummaryTarget,
+  summaryLinkContextFromExtract,
+} from "../summary/generate";
 import { capture, Events } from "../telemetry/posthog";
 import type { PublishRegistration, PushBundle } from "../types";
 
@@ -418,12 +424,18 @@ async function postMissingPrSummaryAfterPublish(
     ? {
         summaryId: existingSummary.id,
         eventId: input.bookmark.latest_event_id,
-        content: existingSummary.content,
+        content: await enrichExistingSummary(db, {
+          orgId: input.orgId,
+          bookmarkId: input.bookmark.id,
+          content: existingSummary.content,
+          githubPrUrl: input.bookmark.github_pr_url,
+        }),
       }
     : await generateMissingSummary(db, {
         orgId: input.orgId,
         userId: input.userId,
         bookmarkId: input.bookmark.id,
+        githubPrUrl: input.bookmark.github_pr_url,
       });
   if (!summary) return;
 
@@ -498,6 +510,7 @@ async function generateMissingSummary(
     orgId: string;
     userId: string;
     bookmarkId: string;
+    githubPrUrl?: string | null;
   },
 ): Promise<{ summaryId: string; eventId: string; content: string } | null> {
   try {
@@ -506,6 +519,7 @@ async function generateMissingSummary(
       userId: input.userId,
       bookmarkId: input.bookmarkId,
       quotaSkipSource: "publish",
+      githubPrUrl: input.githubPrUrl,
     });
     return {
       summaryId: result.summaryId,
@@ -527,6 +541,33 @@ async function generateMissingSummary(
       error,
     });
     return null;
+  }
+}
+
+async function enrichExistingSummary(
+  db: postgres.Sql,
+  input: {
+    orgId: string;
+    bookmarkId: string;
+    content: string;
+    githubPrUrl: string | null;
+  },
+): Promise<string> {
+  try {
+    const target = await resolveSummaryTarget(db, input.orgId, {
+      bookmarkId: input.bookmarkId,
+    });
+    const ctx = await loadExtractContext(db, input.orgId, target);
+    return enrichSummaryLinks(
+      input.content,
+      summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+    );
+  } catch {
+    return enrichSummaryLinks(input.content, {
+      prUrl: input.githubPrUrl,
+      headSha: null,
+      hunks: [],
+    });
   }
 }
 

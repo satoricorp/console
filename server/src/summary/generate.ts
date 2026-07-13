@@ -15,6 +15,10 @@ import {
   buildPRSummaryUserPrompt,
   PR_SUMMARY_SYSTEM_PROMPT,
 } from "../llm/prompts/pr-summary";
+import {
+  enrichSummaryLinks,
+  type SummaryLinkContext,
+} from "./enrich-links";
 import { assertValidSummary, validateSummary } from "./validate";
 
 export type HunkLinkRow = {
@@ -83,6 +87,7 @@ export type ExtractContext = {
   orgId: string;
   repoRootPath: string | null;
   headCommitId: string | null;
+  githubPrUrl: string | null;
   refRange: string | null;
   fileStats: unknown;
   intentCandidates: unknown[];
@@ -106,6 +111,8 @@ export type GenerateSummaryInput = {
   skipQuotaCheck?: boolean;
   /** Where to attribute a quota skip row when posting is blocked. */
   quotaSkipSource?: GithubPostSkipSource;
+  /** Prefer this PR URL when bookmark row is missing github_pr_url. */
+  githubPrUrl?: string | null;
 };
 
 export type GenerateSummaryResult = {
@@ -290,8 +297,12 @@ export async function loadExtractContext(
   }
 
   let indexSnippets: IndexSnippetRow[] | undefined;
-  const [bookmarkMeta] = await db<{ repo_full_name: string; branch_name: string }[]>`
-    SELECT repo_full_name, branch_name
+  const [bookmarkMeta] = await db<{
+    repo_full_name: string;
+    branch_name: string;
+    github_pr_url: string | null;
+  }[]>`
+    SELECT repo_full_name, branch_name, github_pr_url
     FROM bookmarks
     WHERE id = ${target.bookmarkId} AND org_id = ${orgId}
   `;
@@ -318,6 +329,7 @@ export async function loadExtractContext(
     orgId,
     repoRootPath: event.repo_root_path,
     headCommitId: event.head_commit_id,
+    githubPrUrl: bookmarkMeta?.github_pr_url ?? null,
     refRange: payload.refRange ?? null,
     fileStats: payload.fileStats ?? null,
     intentCandidates: payload.intentCandidates ?? [],
@@ -437,6 +449,10 @@ export async function generateSummary(
     assertValidSummary(completion.text);
   }
   const lineCount = validation.ok ? validation.lineCount : 0;
+  const content = enrichSummaryLinks(
+    completion.text,
+    summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+  );
 
   const postedAt = Date.now();
   const latencyMs = postedAt - startedAt;
@@ -447,7 +463,7 @@ export async function generateSummary(
     ) VALUES (
       ${input.orgId},
       ${target.bookmarkId},
-      ${completion.text},
+      ${content},
       ${completion.model},
       ${latencyMs},
       ${postedAt}
@@ -491,9 +507,33 @@ export async function generateSummary(
     summaryId: summary.id,
     bookmarkId: target.bookmarkId,
     eventId: target.eventId,
-    content: completion.text,
+    content,
     model: completion.model,
     latencyMs,
     lineCount,
+  };
+}
+
+/** Build link context for enriching Notable Changes + Attribution lines. */
+export function summaryLinkContextFromExtract(
+  ctx: Pick<
+    ExtractContext,
+    "githubPrUrl" | "headCommitId" | "hunkLinks" | "publishedRevisions"
+  >,
+  prUrlOverride?: string | null,
+): SummaryLinkContext {
+  const changedFiles = [
+    ...ctx.hunkLinks.map((h) => h.file),
+    ...(ctx.publishedRevisions ?? []).flatMap((r) => r.files),
+  ];
+  return {
+    prUrl: prUrlOverride ?? ctx.githubPrUrl,
+    headSha: ctx.headCommitId,
+    hunks: ctx.hunkLinks.map((h) => ({
+      file: h.file,
+      lineStart: h.lineStart,
+      lineEnd: h.lineEnd,
+    })),
+    changedFiles,
   };
 }
