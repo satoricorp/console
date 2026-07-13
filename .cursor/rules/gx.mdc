@@ -9,7 +9,7 @@ This repo uses GX (`.gx/` present). Do not use `git commit` for normal work.
 - Stage: `git add`
 - Record: `gx commit -m "…"` (never `git commit`)
 - Publish: plain `git push` (pre-push hook runs capture). Do not run `gx push`.
-- Open PRs: `gh pr create`
+- Open PRs: `gh pr create` (human notes only — do not seed `## Summary`; GX appends below)
 - Inspect: `git status`, `git diff`, `git log`, `gx status`
 
 Read the gx skill before any commit, push, or PR.
