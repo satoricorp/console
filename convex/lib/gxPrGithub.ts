@@ -183,9 +183,8 @@ export function mergeBlockedReason(pull: GithubPullDetails): string | null {
     }
     return `PR #${pull.number} is not mergeable (${pull.mergeable_state ?? "unknown state"}).`;
   }
-  if (pull.mergeable == null) {
-    return `PR #${pull.number} merge status is still being computed by GitHub. Try again in a moment.`;
-  }
+  // mergeable == null means GitHub is still computing. Callers should
+  // waitForMergeability first, then let the merge API report if needed.
   return null;
 }
 
@@ -1047,12 +1046,15 @@ export async function mergePullRequestOnGithub(
       repoFullName,
       current.number,
     );
-    current = await waitForMergeability(
-      accessToken,
-      repoFullName,
-      current.number,
-    );
   }
+
+  // GitHub often returns mergeable=null until a background job finishes.
+  // Wait for all PRs (not only drafts) before checking definitive blockers.
+  current = await waitForMergeability(
+    accessToken,
+    repoFullName,
+    current.number,
+  );
 
   const blockedReason = mergeBlockedReason(current);
   if (blockedReason) {

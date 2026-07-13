@@ -248,8 +248,15 @@
     background: var(--gx-btn-bg); color: var(--gx-btn-fg);
   }
   .btn-approve:hover { background: transparent; color: var(--gx-fg); }
-  .approve-note { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 10.5px; color: var(--gx-faint); }
-  @media (max-width: 700px) { .approve-note { display: none; } .btn-secondary { padding: 9px 12px; } }
+  .approve-hint,
+  .approve-feedback {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10.5px;
+    color: var(--gx-faint);
+  }
+  .approve-feedback { line-height: 1.35; word-break: break-word; }
+  /* Hide the helper hint on narrow screens, but never hide merge errors/notices. */
+  @media (max-width: 700px) { .approve-hint { display: none; } .btn-secondary { padding: 9px 12px; } }
 
   /* ── pending state ────────────────────────────────── */
   .pending-hero {

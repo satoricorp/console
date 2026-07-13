@@ -205,18 +205,18 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
             </button>
           )}
           {canMerge ? (
-            <span className="approve-note">
+            <span className="approve-hint">
               Approves PR{prNumber ? ` #${prNumber}` : ""} as you on GitHub, then
               merges. Your decision is recorded to the review ledger.
             </span>
           ) : null}
           {error ? (
-            <span className="approve-note" style={{ color: "var(--gx-risk)" }}>
+            <span className="approve-feedback" style={{ color: "var(--gx-risk)" }}>
               {error}
             </span>
           ) : null}
           {notice ? (
-            <span className="approve-note" style={{ color: "var(--gx-warn)" }}>
+            <span className="approve-feedback" style={{ color: "var(--gx-warn)" }}>
               {notice}
             </span>
           ) : null}
