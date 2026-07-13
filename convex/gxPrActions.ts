@@ -390,11 +390,20 @@ async function loadAuthorizedPublishContext(
   };
   const localHeadSha = publishContext.localHeadSha;
 
-  const accessToken = await getGithubAccessToken(ctx, user._id);
-  const access = await verifyGithubRepoAccessWithToken(
+  let accessToken = await getGithubAccessToken(ctx, user._id);
+  let access = await verifyGithubRepoAccessWithToken(
     accessToken,
     target.repoFullName,
   );
+  if (!access.ok && access.status === 401) {
+    accessToken = await getGithubAccessToken(ctx, user._id, {
+      forceRefresh: true,
+    });
+    access = await verifyGithubRepoAccessWithToken(
+      accessToken,
+      target.repoFullName,
+    );
+  }
   if (!access.ok) {
     throw new Error(access.message);
   }
@@ -405,6 +414,24 @@ async function loadAuthorizedPublishContext(
     localHeadSha,
   };
 }
+
+function alreadyMergedResult(pull: {
+  number: number;
+  html_url: string;
+  head: { sha: string };
+}) {
+  return {
+    approved: false,
+    merged: true,
+    selfApproval: false,
+    notice: "Pull request was already merged.",
+    pullRequestNumber: pull.number,
+    pullRequestUrl: pull.html_url,
+    sha: pull.head.sha,
+    alreadyMerged: true,
+  };
+}
+
 
 /** Approve the PR as the signed-in user, then merge. */
 export const approveAndMergePullRequest = action({
@@ -430,6 +457,25 @@ export const approveAndMergePullRequest = action({
       args.publishContext,
     );
 
+    // resolvePullForPush only returns *open* PRs. Check the explicit PR
+    // number first so already-merged / closed PRs get a clear outcome
+    // instead of "No open PR for …".
+    if (args.pullRequestNumber != null) {
+      const current = await getPullRequest(
+        accessToken,
+        target.repoFullName,
+        args.pullRequestNumber,
+      );
+      if (current.merged) {
+        return alreadyMergedResult(current);
+      }
+      if (current.state === "closed") {
+        throw new Error(
+          `Pull request #${current.number} is closed and cannot be merged.`,
+        );
+      }
+    }
+
     const resolution = await resolvePullForPush(
       accessToken,
       target.repoFullName,
@@ -439,25 +485,13 @@ export const approveAndMergePullRequest = action({
     );
     const pull = activePullFromResolution(resolution);
 
-    if (pull.merged || pull.state === "closed") {
-      // Re-fetch to confirm merged
-      const current = await getPullRequest(
-        accessToken,
-        target.repoFullName,
-        pull.number,
+    if (pull.merged) {
+      return alreadyMergedResult(pull);
+    }
+    if (pull.state === "closed") {
+      throw new Error(
+        `Pull request #${pull.number} is closed and cannot be merged.`,
       );
-      if (current.merged) {
-        return {
-          approved: false,
-          merged: true,
-          selfApproval: false,
-          notice: "Pull request was already merged.",
-          pullRequestNumber: current.number,
-          pullRequestUrl: current.html_url,
-          sha: current.head.sha,
-          alreadyMerged: true,
-        };
-      }
     }
 
     const review = await submitApprovingReview(

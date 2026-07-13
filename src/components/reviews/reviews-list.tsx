@@ -14,6 +14,7 @@ export type ReviewListItem = {
   updated_at_ms: number;
   github_pr_url: string | null;
   github_pr_number: number | null;
+  latest_event_id: string | null;
   file_count: number;
   archived_at_ms: number | null;
   plan_status: string | null;
@@ -36,8 +37,16 @@ function displayTitle(bookmark: ReviewListItem) {
   return title;
 }
 
+/** True when GX published evidence for this bookmark (not webhook-only junk). */
+export function isGxSupportedReview(bookmark: ReviewListItem) {
+  return Boolean(bookmark.latest_event_id);
+}
+
 /** Reviews where GX has nothing useful to show in the main list. */
 export function isNoDataReview(bookmark: ReviewListItem) {
+  if (!isGxSupportedReview(bookmark)) {
+    return true;
+  }
   if (bookmark.plan_status !== "failed") return false;
   return (
     bookmark.plan_error === "no_surviving_changes" || bookmark.file_count === 0
@@ -242,8 +251,8 @@ export function ReviewsList({
         <details className="group border border-zinc-200 dark:border-zinc-800">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 [&::-webkit-details-marker]:hidden">
             <span>
-              Hid {noData.length} review{noData.length === 1 ? "" : "s"} GX
-              doesn&apos;t have data for
+              Hid {noData.length} review{noData.length === 1 ? "" : "s"} without
+              GX publish data
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
           </summary>

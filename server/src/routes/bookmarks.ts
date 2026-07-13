@@ -19,6 +19,7 @@ type BookmarkListRow = {
   updated_at_ms: number | string;
   github_pr_url: string | null;
   github_pr_number: number | null;
+  latest_event_id: string | null;
   app_file_count: number | string | null;
   archived_at_ms: number | string | null;
   plan_status: string | null;
@@ -41,6 +42,7 @@ function mapBookmarkRow(row: BookmarkListRow) {
       row.github_pr_number === null || row.github_pr_number === undefined
         ? null
         : Number(row.github_pr_number),
+    latest_event_id: row.latest_event_id,
     file_count: Number(row.app_file_count) || 0,
     archived_at_ms:
       row.archived_at_ms === null || row.archived_at_ms === undefined
@@ -84,6 +86,7 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
       b.updated_at_ms,
       b.github_pr_url,
       b.github_pr_number,
+      b.latest_event_id,
       b.app_file_count,
       b.archived_at_ms,
       rp.status AS plan_status,
@@ -130,6 +133,7 @@ bookmarksRoutes.post("/bookmarks/:id/archive", async (c) => {
       b.updated_at_ms,
       b.github_pr_url,
       b.github_pr_number,
+      b.latest_event_id,
       b.app_file_count,
       b.archived_at_ms,
       NULL::text AS plan_status,
@@ -167,6 +171,7 @@ bookmarksRoutes.post("/bookmarks/:id/unarchive", async (c) => {
       b.updated_at_ms,
       b.github_pr_url,
       b.github_pr_number,
+      b.latest_event_id,
       b.app_file_count,
       b.archived_at_ms,
       NULL::text AS plan_status,

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getSql } from "../db";
+import { getInstallationTokenForRepo } from "../github/app";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import {
   enqueueReviewPlanGeneration,
@@ -49,6 +50,117 @@ type BookmarkAccessRow = {
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Map a GitHub PR payload to the bookmark merge_status we store. */
+export function mergeStatusFromGithubPull(pull: {
+  merged?: boolean;
+  state?: string;
+}): "merged" | "closed" | "open" {
+  if (pull.merged) return "merged";
+  if (pull.state === "closed") return "closed";
+  return "open";
+}
+
+/** When local merge_status looks stale, refresh from GitHub via the app install. */
+export async function syncBookmarkMergeStatusFromGithub(
+  db: ReturnType<typeof getSql>,
+  bookmark: BookmarkAccessRow,
+): Promise<BookmarkAccessRow> {
+  if (
+    bookmark.merge_status === "merged" ||
+    bookmark.merge_status === "closed" ||
+    bookmark.github_pr_number == null
+  ) {
+    return bookmark;
+  }
+
+  let token: string | null = null;
+  try {
+    token = await getInstallationTokenForRepo(db, bookmark.repo_full_name);
+  } catch (error) {
+    console.warn("merge status sync: installation token failed", {
+      bookmarkId: bookmark.id,
+      error: error instanceof Error ? error.message : error,
+    });
+    return bookmark;
+  }
+  if (!token) return bookmark;
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${bookmark.repo_full_name}/pulls/${bookmark.github_pr_number}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "gx-cloud",
+        },
+      },
+    );
+    if (!response.ok) {
+      console.warn("merge status sync: GitHub PR lookup failed", {
+        bookmarkId: bookmark.id,
+        status: response.status,
+      });
+      return bookmark;
+    }
+
+    const pull = (await response.json()) as {
+      merged?: boolean;
+      state?: string;
+      merged_at?: string | null;
+      html_url?: string;
+    };
+
+    const nextStatus = mergeStatusFromGithubPull(pull);
+    if (nextStatus === "open") {
+      return bookmark;
+    }
+
+    const now = Date.now();
+    if (nextStatus === "merged") {
+      const mergedAt =
+        (typeof pull.merged_at === "string" ? Date.parse(pull.merged_at) : now) ||
+        now;
+      await db`
+        UPDATE bookmarks SET
+          merge_status = 'merged',
+          merged_at_ms = ${mergedAt},
+          github_pr_url = COALESCE(bookmarks.github_pr_url, ${pull.html_url ?? null}),
+          updated_at_ms = ${now}
+        WHERE id = ${bookmark.id}::uuid
+      `;
+      return {
+        ...bookmark,
+        merge_status: "merged",
+        github_pr_url: bookmark.github_pr_url ?? pull.html_url ?? null,
+        updated_at_ms: now,
+      };
+    }
+
+    await db`
+      UPDATE bookmarks SET
+        merge_status = 'closed',
+        github_pr_url = COALESCE(bookmarks.github_pr_url, ${pull.html_url ?? null}),
+        updated_at_ms = ${now}
+      WHERE id = ${bookmark.id}::uuid
+    `;
+    return {
+      ...bookmark,
+      merge_status: "closed",
+      github_pr_url: bookmark.github_pr_url ?? pull.html_url ?? null,
+      updated_at_ms: now,
+    };
+  } catch (error) {
+    console.warn("merge status sync failed", {
+      bookmarkId: bookmark.id,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+
+  return bookmark;
+}
+
 async function loadAccessibleBookmark(
   bookmarkId: string,
   auth: { userId: string; orgId: string },
@@ -74,12 +186,13 @@ async function loadAccessibleBookmark(
 reviewsRoutes.get("/v1/reviews/:bookmarkId", async (c) => {
   const auth = c.get("auth");
   const bookmarkId = c.req.param("bookmarkId");
-  const bookmark = await loadAccessibleBookmark(bookmarkId, auth);
+  let bookmark = await loadAccessibleBookmark(bookmarkId, auth);
   if (!bookmark) {
     return c.json({ error: "Review not found" }, 404);
   }
 
   const db = getSql();
+  bookmark = await syncBookmarkMergeStatusFromGithub(db, bookmark);
   const headCommitId = bookmark.head_commit_id ?? "";
   const response = await buildReviewResponse(db, bookmark, headCommitId);
 
