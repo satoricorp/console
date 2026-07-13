@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import { syncBookmarkMergeStatusFromGithub } from "../bookmarks/merge-status";
+import { reviewEligibilitySql } from "../bookmarks/eligibility";
+import {
+  reconcileReviewBookmarkMergeStatuses,
+  syncBookmarkMergeStatusFromGithub,
+} from "../bookmarks/merge-status";
 import { getSql } from "../db";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import {
@@ -23,6 +27,7 @@ import type {
 
 export const reviewsRoutes = new Hono<AppEnv>();
 
+reviewsRoutes.use("/v1/reviews", requireAuth);
 reviewsRoutes.use("/v1/reviews/*", requireAuth);
 
 type BookmarkAccessRow = {
@@ -47,8 +52,50 @@ type BookmarkAccessRow = {
   app_token_count: number | string | null;
 };
 
+type ReviewListRow = {
+  id: string;
+  repo_full_name: string;
+  branch_name: string;
+  title: string | null;
+  revision: number | string;
+  merge_status: string;
+  updated_at_ms: number | string;
+  github_pr_url: string | null;
+  github_pr_number: number | null;
+  latest_event_id: string | null;
+  app_file_count: number | string | null;
+  archived_at_ms: number | string | null;
+  plan_status: string | null;
+  plan_error: string | null;
+};
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function mapReviewListRow(row: ReviewListRow) {
+  return {
+    id: row.id,
+    repo_full_name: row.repo_full_name,
+    branch_name: row.branch_name,
+    title: row.title,
+    revision: Number(row.revision),
+    merge_status: row.merge_status,
+    updated_at_ms: Number(row.updated_at_ms),
+    github_pr_url: row.github_pr_url,
+    github_pr_number:
+      row.github_pr_number === null || row.github_pr_number === undefined
+        ? null
+        : Number(row.github_pr_number),
+    latest_event_id: row.latest_event_id,
+    file_count: Number(row.app_file_count) || 0,
+    archived_at_ms:
+      row.archived_at_ms === null || row.archived_at_ms === undefined
+        ? null
+        : Number(row.archived_at_ms),
+    plan_status: row.plan_status,
+    plan_error: row.plan_error,
+  };
+}
 
 async function loadAccessibleBookmark(
   bookmarkId: string,
@@ -60,17 +107,81 @@ async function loadAccessibleBookmark(
   const db = getSql();
   const [row] = await db<BookmarkAccessRow[]>`
     SELECT
-      id, org_id, user_id, repo_full_name, branch_name, title, revision,
-      head_commit_id, remote_head_sha, merge_status, github_pr_url, github_pr_number,
-      published_at_ms, updated_at_ms, latest_event_id,
-      app_base_branch, app_file_count, app_stack_count, app_token_count
-    FROM bookmarks
-    WHERE id = ${bookmarkId}::uuid
-      AND (user_id = ${auth.userId} OR org_id = ${auth.orgId}::uuid)
+      b.id, b.org_id, b.user_id, b.repo_full_name, b.branch_name, b.title, b.revision,
+      b.head_commit_id, b.remote_head_sha, b.merge_status, b.github_pr_url, b.github_pr_number,
+      b.published_at_ms, b.updated_at_ms, b.latest_event_id,
+      b.app_base_branch, b.app_file_count, b.app_stack_count, b.app_token_count
+    FROM bookmarks b
+    WHERE b.id = ${bookmarkId}::uuid
+      AND (b.user_id = ${auth.userId} OR b.org_id = ${auth.orgId}::uuid)
+      AND ${reviewEligibilitySql(db)}
     LIMIT 1
   `;
   return row ?? null;
 }
+
+reviewsRoutes.get("/v1/reviews", async (c) => {
+  const auth = c.get("auth");
+  const status = (c.req.query("status") ?? c.req.query("merge_status") ?? "open")
+    .trim();
+  const includeArchived = c.req.query("include_archived") === "1";
+  const archivedOnly = status === "archived";
+
+  if (
+    status !== "open" &&
+    status !== "merged" &&
+    status !== "closed" &&
+    status !== "archived"
+  ) {
+    return c.json({ error: "Invalid status" }, 400);
+  }
+
+  const db = getSql();
+  await reconcileReviewBookmarkMergeStatuses(db, auth);
+
+  const rows = await db<ReviewListRow[]>`
+    SELECT
+      b.id,
+      b.repo_full_name,
+      b.branch_name,
+      b.title,
+      b.revision,
+      b.merge_status,
+      b.updated_at_ms,
+      b.github_pr_url,
+      b.github_pr_number,
+      b.latest_event_id,
+      b.app_file_count,
+      b.archived_at_ms,
+      rp.status AS plan_status,
+      rp.error AS plan_error
+    FROM bookmarks b
+    LEFT JOIN LATERAL (
+      SELECT status, error
+      FROM review_plans
+      WHERE bookmark_id = b.id
+      ORDER BY updated_at_ms DESC
+      LIMIT 1
+    ) rp ON true
+    WHERE (b.org_id = ${auth.orgId} OR b.user_id = ${auth.userId})
+      AND ${reviewEligibilitySql(db)}
+      ${
+        archivedOnly
+          ? db`AND b.archived_at_ms IS NOT NULL`
+          : status
+            ? db`AND b.merge_status = ${status}`
+            : db``
+      }
+      ${
+        archivedOnly || includeArchived
+          ? db``
+          : db`AND b.archived_at_ms IS NULL`
+      }
+    ORDER BY b.updated_at_ms DESC
+  `;
+
+  return c.json(rows.map(mapReviewListRow));
+});
 
 reviewsRoutes.get("/v1/reviews/:bookmarkId", async (c) => {
   const auth = c.get("auth");

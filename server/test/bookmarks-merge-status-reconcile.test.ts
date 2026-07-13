@@ -377,7 +377,7 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
     expect(Number(stored?.github_pr_number)).toBe(urlOnlyPr);
   });
 
-  test("no-PR open bookmarks are closed when branch has no GitHub PR", async () => {
+  test("no-PR open bookmarks stay open when branch has no GitHub PR", async () => {
     const db = getSql();
     const now = Date.now();
     const [noPr] = await db<{ id: string }[]>`
@@ -442,24 +442,25 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
     );
     expect(closed.status).toBe(200);
     const rows = (await closed.json()) as Array<{ id: string; merge_status: string }>;
-    expect(rows.some((row) => row.id === noPr.id && row.merge_status === "closed")).toBe(
+    expect(rows.some((row) => row.id === noPr.id)).toBe(false);
+
+    const open = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=open`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(open.status).toBe(200);
+    const openRows = (await open.json()) as Array<{ id: string; merge_status: string }>;
+    expect(openRows.some((row) => row.id === noPr.id && row.merge_status === "open")).toBe(
       true,
     );
-    expect(
-      branchLookups.some(
-        (url) =>
-          url.includes("feature/test-minimal") ||
-          url.includes("feature%2Ftest-minimal"),
-      ),
-    ).toBe(true);
 
     const [stored] = await db<{ merge_status: string }[]>`
       SELECT merge_status FROM bookmarks WHERE id = ${noPr.id}::uuid
     `;
-    expect(stored?.merge_status).toBe("closed");
+    expect(stored?.merge_status).toBe("open");
   });
 
-  test("main/HEAD/unknown no-PR bookmarks close without branch PR lookup", async () => {
+  test("main/HEAD/unknown no-PR bookmarks stay open without branch PR lookup", async () => {
     const db = getSql();
     const now = Date.now();
     const [mainBookmark] = await db<{ id: string }[]>`
@@ -516,8 +517,13 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
     );
     expect(closed.status).toBe(200);
     const rows = (await closed.json()) as Array<{ id: string }>;
-    expect(rows.some((row) => row.id === mainBookmark.id)).toBe(true);
+    expect(rows.some((row) => row.id === mainBookmark.id)).toBe(false);
     expect(headQueryCount).toBe(0);
+
+    const [stored] = await db<{ merge_status: string }[]>`
+      SELECT merge_status FROM bookmarks WHERE id = ${mainBookmark.id}::uuid
+    `;
+    expect(stored?.merge_status).toBe("open");
   });
 
   test("merge_status=archived returns only archived bookmarks", async () => {

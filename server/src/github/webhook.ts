@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import type postgres from "postgres";
+import {
+  fetchVerifiedGithubPull,
+  linkVerifiedPullToBookmark,
+} from "../bookmarks/canonical-pr";
+import { WEBHOOK_BOOKMARK_USER } from "../bookmarks/eligibility";
 import { getSql } from "../db";
 import { containsGxMention, handleGxMention } from "../gx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
@@ -52,6 +57,7 @@ type GitHubUser = {
 
 type GitHubPullRequest = {
   number?: number;
+  node_id?: string;
   title?: string;
   html_url?: string;
   state?: string;
@@ -268,13 +274,15 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const bookmark = await findOrCreateBookmark(db, {
+  const bookmark = await resolveCanonicalBookmarkForPull(db, {
     orgId,
     repoFullName: repo.full_name,
     branchName: pr.head?.ref ?? `pr-${pr.number}`,
     prNumber: pr.number,
     prUrl: pr.html_url ?? null,
     headSha: pr.head?.sha ?? null,
+    nodeId: typeof pr.node_id === "string" ? pr.node_id : null,
+    repoId: typeof repo.id === "number" ? repo.id : null,
   });
 
   const quota = await checkPrSummaryQuota(db, orgId, bookmark.id);
@@ -311,17 +319,11 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const resolved = await adoptLatestEventFromBranchSibling(db, {
-    orgId,
-    bookmarkId: bookmark.id,
-    repoFullName: repo.full_name,
-    branchName: pr.head?.ref ?? `pr-${pr.number}`,
-    latestEventId: bookmark.latest_event_id,
-  });
-
-  if (!resolved.latest_event_id) {
-    console.info("PR Summary skipped: bookmark has no latest_event_id", {
+  if (!bookmark.latest_event_id) {
+    console.info("PR Summary skipped: no GX push evidence for PR", {
       bookmarkId: bookmark.id,
+      prNumber: pr.number,
+      repo: repo.full_name,
     });
     return;
   }
@@ -329,7 +331,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const result = await generateSummary(db, {
     orgId,
     userId: "github-webhook",
-    bookmarkId: resolved.id,
+    bookmarkId: bookmark.id,
     provider: createLLMProvider(),
     githubPrUrl: pr.html_url ?? null,
   });
@@ -475,13 +477,15 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
   const orgId = await resolveOrgIdForInstallation(db, installationId);
   if (!orgId) return;
 
-  const bookmark = await findOrCreateBookmark(db, {
+  const bookmark = await resolveCanonicalBookmarkForPull(db, {
     orgId,
     repoFullName: repo.full_name,
     branchName: pr.head?.ref ?? `pr-${pr.number}`,
     prNumber: pr.number,
     prUrl: pr.html_url ?? null,
     headSha: pr.head?.sha ?? null,
+    nodeId: typeof pr.node_id === "string" ? pr.node_id : null,
+    repoId: typeof repo.id === "number" ? repo.id : null,
   });
 
   const body = review.body?.trim() ?? "";
@@ -694,13 +698,15 @@ async function ingestLineComment(
     }
   }
 
-  const bookmark = await findOrCreateBookmark(db, {
+  const bookmark = await resolveCanonicalBookmarkForPull(db, {
     orgId,
     repoFullName: input.repoFullName,
     branchName: input.branchName,
     prNumber: input.pullNumber,
     prUrl: input.prUrl,
     headSha: input.headSha,
+    nodeId: null,
+    repoId: null,
   });
 
   const now = Date.now();
@@ -894,7 +900,13 @@ async function processGxMention(
   }
 }
 
-async function findOrCreateBookmark(
+/**
+ * Resolve the single bookmark for a GitHub PR.
+ * Prefers a real GX publisher row with push evidence; never copies events onto
+ * webhook shells. Webhook-only rows remain internal bookkeeping until a GX push
+ * arrives (and stay invisible to /reviews).
+ */
+async function resolveCanonicalBookmarkForPull(
   db: postgres.Sql,
   input: {
     orgId: string;
@@ -903,9 +915,74 @@ async function findOrCreateBookmark(
     prNumber: number;
     prUrl: string | null;
     headSha: string | null;
+    nodeId: string | null;
+    repoId: number | null;
   },
 ): Promise<{ id: string; latest_event_id: string | null }> {
-  const [existing] = await db<{ id: string; latest_event_id: string | null }[]>`
+  // Prefer an existing publisher row already owning this PR.
+  const [publisherOnPr] = await db<
+    { id: string; latest_event_id: string | null; user_id: string }[]
+  >`
+    SELECT id, latest_event_id, user_id
+    FROM bookmarks
+    WHERE org_id = ${input.orgId}
+      AND repo_full_name = ${input.repoFullName}
+      AND github_pr_number = ${input.prNumber}
+      AND user_id <> ${WEBHOOK_BOOKMARK_USER}
+    ORDER BY
+      CASE WHEN latest_event_id IS NOT NULL THEN 0 ELSE 1 END,
+      updated_at_ms DESC
+    LIMIT 1
+  `;
+  if (publisherOnPr) {
+    await verifyAndLinkIfPossible(db, {
+      orgId: input.orgId,
+      bookmarkId: publisherOnPr.id,
+      repoFullName: input.repoFullName,
+      prNumber: input.prNumber,
+      nodeId: input.nodeId,
+      repoId: input.repoId,
+      prUrl: input.prUrl,
+      headSha: input.headSha,
+    });
+    return {
+      id: publisherOnPr.id,
+      latest_event_id: publisherOnPr.latest_event_id,
+    };
+  }
+
+  // Claim a same-branch GX push that has not linked a PR yet.
+  const [publisherOnBranch] = await db<{ id: string; latest_event_id: string | null }[]>`
+    SELECT id, latest_event_id
+    FROM bookmarks
+    WHERE org_id = ${input.orgId}
+      AND repo_full_name = ${input.repoFullName}
+      AND branch_name = ${input.branchName}
+      AND github_pr_number IS NULL
+      AND user_id <> ${WEBHOOK_BOOKMARK_USER}
+      AND latest_event_id IS NOT NULL
+    ORDER BY updated_at_ms DESC
+    LIMIT 1
+  `;
+  if (publisherOnBranch) {
+    await verifyAndLinkIfPossible(db, {
+      orgId: input.orgId,
+      bookmarkId: publisherOnBranch.id,
+      repoFullName: input.repoFullName,
+      prNumber: input.prNumber,
+      nodeId: input.nodeId,
+      repoId: input.repoId,
+      prUrl: input.prUrl,
+      headSha: input.headSha,
+    });
+    const [refreshed] = await db<{ id: string; latest_event_id: string | null }[]>`
+      SELECT id, latest_event_id FROM bookmarks WHERE id = ${publisherOnBranch.id}::uuid
+    `;
+    return refreshed ?? publisherOnBranch;
+  }
+
+  // Fall back to existing webhook shell or create an invisible one.
+  const [existingWebhook] = await db<{ id: string; latest_event_id: string | null }[]>`
     SELECT id, latest_event_id
     FROM bookmarks
     WHERE org_id = ${input.orgId}
@@ -914,35 +991,11 @@ async function findOrCreateBookmark(
     ORDER BY updated_at_ms DESC
     LIMIT 1
   `;
-  if (existing) {
-    return existing;
+  if (existingWebhook) {
+    return existingWebhook;
   }
 
   const now = Date.now();
-
-  // A CLI publish for this branch creates a bookmark before the PR exists
-  // (and so without a PR number). Claim it rather than minting a second
-  // bookmark, so the PR keeps the publish event evidence.
-  const [claimed] = await db<{ id: string; latest_event_id: string | null }[]>`
-    UPDATE bookmarks
-    SET github_pr_number = ${input.prNumber},
-        github_pr_url = COALESCE(${input.prUrl}, bookmarks.github_pr_url),
-        remote_head_sha = COALESCE(${input.headSha}, bookmarks.remote_head_sha),
-        updated_at_ms = ${now}
-    WHERE id = (
-      SELECT id FROM bookmarks
-      WHERE org_id = ${input.orgId}
-        AND repo_full_name = ${input.repoFullName}
-        AND branch_name = ${input.branchName}
-        AND github_pr_number IS NULL
-      ORDER BY updated_at_ms DESC
-      LIMIT 1
-    )
-    RETURNING id, latest_event_id
-  `;
-  if (claimed) {
-    return claimed;
-  }
   const [created] = await db<{ id: string; latest_event_id: string | null }[]>`
     INSERT INTO bookmarks (
       user_id,
@@ -950,16 +1003,20 @@ async function findOrCreateBookmark(
       branch_name,
       github_pr_url,
       github_pr_number,
+      github_repo_id,
+      github_pr_node_id,
       remote_head_sha,
       published_at_ms,
       updated_at_ms,
       org_id
     ) VALUES (
-      'github-webhook',
+      ${WEBHOOK_BOOKMARK_USER},
       ${input.repoFullName},
       ${input.branchName},
       ${input.prUrl},
       ${input.prNumber},
+      ${input.repoId},
+      ${input.nodeId},
       ${input.headSha},
       ${now},
       ${now},
@@ -970,52 +1027,45 @@ async function findOrCreateBookmark(
   return created;
 }
 
-async function adoptLatestEventFromBranchSibling(
+async function verifyAndLinkIfPossible(
   db: postgres.Sql,
   input: {
     orgId: string;
     bookmarkId: string;
     repoFullName: string;
-    branchName: string;
-    latestEventId: string | null;
+    prNumber: number;
+    nodeId: string | null;
+    repoId: number | null;
+    prUrl: string | null;
+    headSha: string | null;
   },
-): Promise<{ id: string; latest_event_id: string | null }> {
-  if (input.latestEventId) {
-    return { id: input.bookmarkId, latest_event_id: input.latestEventId };
+): Promise<void> {
+  const verified = await fetchVerifiedGithubPull(
+    db,
+    input.repoFullName,
+    input.prNumber,
+  );
+  if (verified !== "not_found" && verified !== "error") {
+    await linkVerifiedPullToBookmark(db, {
+      orgId: input.orgId,
+      bookmarkId: input.bookmarkId,
+      pull: verified,
+    });
+    return;
   }
 
-  const [sibling] = await db<
-    { id: string; latest_event_id: string; head_commit_id: string | null }[]
-  >`
-    SELECT id, latest_event_id, head_commit_id
-    FROM bookmarks
-    WHERE org_id = ${input.orgId}
-      AND repo_full_name = ${input.repoFullName}
-      AND branch_name = ${input.branchName}
-      AND latest_event_id IS NOT NULL
-      AND id <> ${input.bookmarkId}
-    ORDER BY updated_at_ms DESC
-    LIMIT 1
-  `;
-  if (!sibling) {
-    return { id: input.bookmarkId, latest_event_id: null };
-  }
-
+  // Soft attach PR number without claiming verification when GitHub is unreachable.
   const now = Date.now();
-  const [updated] = await db<{ id: string; latest_event_id: string | null }[]>`
-    UPDATE bookmarks
-    SET latest_event_id = ${sibling.latest_event_id},
-        head_commit_id = COALESCE(bookmarks.head_commit_id, ${sibling.head_commit_id}),
-        updated_at_ms = ${now}
-    WHERE id = ${input.bookmarkId}
-    RETURNING id, latest_event_id
+  await db`
+    UPDATE bookmarks SET
+      github_pr_number = ${input.prNumber},
+      github_pr_url = COALESCE(${input.prUrl}, bookmarks.github_pr_url),
+      github_repo_id = COALESCE(${input.repoId}, bookmarks.github_repo_id),
+      github_pr_node_id = COALESCE(${input.nodeId}, bookmarks.github_pr_node_id),
+      remote_head_sha = COALESCE(${input.headSha}, bookmarks.remote_head_sha),
+      updated_at_ms = ${now}
+    WHERE id = ${input.bookmarkId}::uuid
   `;
-  console.info("PR Summary adopted latest_event_id from branch sibling", {
-    bookmarkId: input.bookmarkId,
-    siblingId: sibling.id,
-    eventId: sibling.latest_event_id,
-  });
-  return updated ?? { id: input.bookmarkId, latest_event_id: sibling.latest_event_id };
 }
 
 async function upsertOrgForInstallation(

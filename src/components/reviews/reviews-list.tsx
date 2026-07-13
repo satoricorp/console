@@ -53,9 +53,12 @@ function displayTitle(bookmark: ReviewListItem) {
   return title;
 }
 
-/** True when GX published evidence for this bookmark (not webhook-only junk). */
+/** True when this row is a GX-backed GitHub PR review. */
 export function isGxSupportedReview(bookmark: ReviewListItem) {
-  return Boolean(bookmark.latest_event_id);
+  return (
+    Boolean(bookmark.latest_event_id) &&
+    bookmark.github_pr_number != null
+  );
 }
 
 /** Reviews where GX has nothing useful to show in the main list. */
@@ -122,9 +125,9 @@ export function groupReviewsByRepo(
   return groups;
 }
 
-async function fetchBookmarks(filter: ReviewsListFilter): Promise<ReviewListItem[]> {
+async function fetchReviews(filter: ReviewsListFilter): Promise<ReviewListItem[]> {
   const response = await fetch(
-    `/api/bookmarks?merge_status=${encodeURIComponent(filter)}`,
+    `/api/reviews?status=${encodeURIComponent(filter)}`,
     { credentials: "include", cache: "no-store" },
   );
   if (!response.ok) {
@@ -171,7 +174,7 @@ export function ReviewsList({
 
     let cancelled = false;
     setListLoading(true);
-    void fetchBookmarks(filter)
+    void fetchReviews(filter)
       .then((rows) => {
         if (!cancelled) setBookmarks(rows);
       })

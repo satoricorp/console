@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { reviewEligibilitySql } from "../bookmarks/eligibility";
 import { reconcileOpenBookmarkMergeStatuses } from "../bookmarks/merge-status";
 import { getSql } from "../db";
 import { requireAuth, type AppEnv } from "../middleware/auth";
@@ -141,6 +142,7 @@ bookmarksRoutes.post("/bookmarks/:id/archive", async (c) => {
         updated_at_ms = ${now}
     WHERE b.id = ${id}::uuid
       AND (b.org_id = ${auth.orgId} OR b.user_id = ${auth.userId})
+      AND ${reviewEligibilitySql(db)}
     RETURNING
       b.id,
       b.repo_full_name,
@@ -161,7 +163,7 @@ bookmarksRoutes.post("/bookmarks/:id/archive", async (c) => {
   `;
 
   if (!row) {
-    return c.json({ error: "Bookmark not found" }, 404);
+    return c.json({ error: "Review not found" }, 404);
   }
 
   return c.json(mapBookmarkRow(row));
@@ -179,6 +181,7 @@ bookmarksRoutes.post("/bookmarks/:id/unarchive", async (c) => {
         updated_at_ms = ${now}
     WHERE b.id = ${id}::uuid
       AND (b.org_id = ${auth.orgId} OR b.user_id = ${auth.userId})
+      AND ${reviewEligibilitySql(db)}
     RETURNING
       b.id,
       b.repo_full_name,
@@ -199,7 +202,7 @@ bookmarksRoutes.post("/bookmarks/:id/unarchive", async (c) => {
   `;
 
   if (!row) {
-    return c.json({ error: "Bookmark not found" }, 404);
+    return c.json({ error: "Review not found" }, 404);
   }
 
   return c.json(mapBookmarkRow(row));

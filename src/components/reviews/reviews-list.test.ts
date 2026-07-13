@@ -17,8 +17,8 @@ function item(
     revision: 1,
     merge_status: "open",
     updated_at_ms: 1,
-    github_pr_url: null,
-    github_pr_number: null,
+    github_pr_url: "https://github.com/acme/gx/pull/1",
+    github_pr_number: 1,
     latest_event_id: "event-1",
     file_count: 2,
     archived_at_ms: null,
@@ -39,6 +39,16 @@ describe("isGxSupportedReview / isNoDataReview", () => {
     });
     expect(isGxSupportedReview(webhookOnly)).toBe(false);
     expect(isNoDataReview(webhookOnly)).toBe(true);
+  });
+
+  test("GX captures without a GitHub PR are not reviews", () => {
+    const noPr = item({
+      id: "no-pr",
+      github_pr_number: null,
+      github_pr_url: null,
+    });
+    expect(isGxSupportedReview(noPr)).toBe(false);
+    expect(isNoDataReview(noPr)).toBe(true);
   });
 
   test("failed empty plans with GX evidence are no-data", () => {

@@ -1,14 +1,28 @@
 import { getSql } from "../db";
 import { getInstallationTokenForRepo } from "../github/app";
+import {
+  fetchVerifiedGithubPull,
+  linkVerifiedPullToBookmark,
+  lookupVerifiedOpenPullForBranch,
+  markGithubPullUnavailable,
+} from "./canonical-pr";
+import { reviewEligibilitySql, WEBHOOK_BOOKMARK_USER } from "./eligibility";
 
 /** Fields required to refresh bookmark merge_status from GitHub. */
 export type BookmarkMergeFields = {
   id: string;
+  org_id?: string;
+  user_id?: string;
   repo_full_name: string;
   branch_name: string;
   merge_status: string;
   github_pr_url: string | null;
   github_pr_number: number | null;
+  head_commit_id?: string | null;
+  github_repo_id?: number | null;
+  github_pr_node_id?: string | null;
+  github_verified_at_ms?: number | string | null;
+  github_unavailable_at_ms?: number | string | null;
   updated_at_ms: number | string;
 };
 
@@ -308,41 +322,48 @@ async function applyGithubPullToBookmark<T extends BookmarkMergeFields>(
 }
 
 /**
- * Open bookmarks with no resolvable PR number: attach a branch PR if one
- * exists, otherwise mark closed so they leave the Open filter.
+ * Open GX captures with no PR yet: try to attach a verified branch PR.
+ * If none exists, leave the row alone (internal/pre-PR) — never mislabel as closed.
  */
 export async function syncBookmarkWithoutPullRequest<
   T extends BookmarkMergeFields,
 >(
   db: ReturnType<typeof getSql>,
   bookmark: T,
-  existingToken?: string | null,
+  _existingToken?: string | null,
 ): Promise<T> {
   if (bookmark.merge_status === "merged" || bookmark.merge_status === "closed") {
     return bookmark;
   }
 
   if (isNonPrBranch(bookmark.branch_name)) {
-    return markBookmarkClosed(db, bookmark);
+    return bookmark;
   }
 
-  const token = await resolveInstallToken(
-    db,
-    bookmark.repo_full_name,
-    existingToken,
-    bookmark.id,
-  );
+  if (!bookmark.org_id) {
+    return bookmark;
+  }
 
   try {
-    const pull = await lookupPullRequestForBranch(
+    const pull = await lookupVerifiedOpenPullForBranch(
+      db,
       bookmark.repo_full_name,
       bookmark.branch_name,
-      token,
+      bookmark.head_commit_id ?? null,
     );
     if (!pull) {
-      return markBookmarkClosed(db, bookmark);
+      return bookmark;
     }
-    return await applyGithubPullToBookmark(db, bookmark, pull);
+    const linked = await linkVerifiedPullToBookmark(db, {
+      orgId: bookmark.org_id,
+      bookmarkId: bookmark.id,
+      pull,
+    });
+    if (!linked) return bookmark;
+    return {
+      ...bookmark,
+      ...linked,
+    };
   } catch (error) {
     console.warn("merge status branch sync failed", {
       bookmarkId: bookmark.id,
@@ -360,7 +381,14 @@ export async function syncBookmarkMergeStatusFromGithub<
   bookmark: T,
   existingToken?: string | null,
 ): Promise<T> {
-  if (bookmark.merge_status === "merged" || bookmark.merge_status === "closed") {
+  // Merged is terminal. Closed PRs are still reconciled (GitHub can reopen).
+  if (bookmark.merge_status === "merged") {
+    return bookmark;
+  }
+  if (
+    bookmark.github_unavailable_at_ms !== null &&
+    bookmark.github_unavailable_at_ms !== undefined
+  ) {
     return bookmark;
   }
 
@@ -369,40 +397,46 @@ export async function syncBookmarkMergeStatusFromGithub<
     return syncBookmarkWithoutPullRequest(db, bookmark, existingToken);
   }
 
-  // undefined = look up install token; null = unauthenticated (public repos).
-  const token = await resolveInstallToken(
-    db,
-    bookmark.repo_full_name,
-    existingToken,
-    bookmark.id,
-  );
-
   try {
-    const response = await fetch(
-      `https://api.github.com/repos/${bookmark.repo_full_name}/pulls/${prNumber}`,
-      { headers: githubHeaders(token) },
+    const verified = await fetchVerifiedGithubPull(
+      db,
+      bookmark.repo_full_name,
+      prNumber,
     );
-    // Missing PR (deleted / never existed) — treat as closed so it leaves Open.
-    if (response.status === 404) {
-      return markBookmarkClosed(db, bookmark, { github_pr_number: prNumber });
+    if (verified === "not_found") {
+      await markGithubPullUnavailable(db, bookmark.id);
+      return {
+        ...bookmark,
+        merge_status:
+          bookmark.merge_status === "merged" ? "merged" : "closed",
+        github_unavailable_at_ms: Date.now(),
+      };
     }
-    if (!response.ok) {
-      console.warn("merge status sync: GitHub PR lookup failed", {
-        bookmarkId: bookmark.id,
-        status: response.status,
-      });
+    if (verified === "error") {
+      // Preserve last known state on auth/rate-limit/5xx.
       return bookmark;
     }
 
-    const pull = (await response.json()) as GithubPullSummary & {
-      html_url?: string;
-    };
+    if (bookmark.org_id && bookmark.user_id !== WEBHOOK_BOOKMARK_USER) {
+      const linked = await linkVerifiedPullToBookmark(db, {
+        orgId: bookmark.org_id,
+        bookmarkId: bookmark.id,
+        pull: verified,
+      });
+      if (linked) {
+        return {
+          ...bookmark,
+          ...linked,
+        };
+      }
+    }
+
     return await applyGithubPullToBookmark(db, bookmark, {
-      number: prNumber,
-      html_url: pull.html_url ?? bookmark.github_pr_url ?? "",
-      merged: pull.merged,
-      merged_at: pull.merged_at,
-      state: pull.state,
+      number: verified.number,
+      html_url: verified.htmlUrl,
+      merged: verified.merged,
+      merged_at: verified.mergedAt,
+      state: verified.state,
     });
   } catch (error) {
     console.warn("merge status sync failed", {
@@ -466,9 +500,8 @@ async function reconcileRepoOpenBookmarks(
 /**
  * Refresh merge_status from GitHub for accessible bookmarks still marked open.
  * Groups by repo and lists open PRs once per repo; only PRs missing from that
- * set get a per-PR lookup. Bookmarks with no PR ref are resolved by branch
- * (or closed when no PR exists). Call before list filters so merged/closed
- * reviews leave merge_status=open.
+ * set get a per-PR lookup. Pre-PR GX captures attempt attach only (never closed).
+ * Kept for raw /bookmarks sync; Reviews UI uses reconcileReviewBookmarkMergeStatuses.
  */
 export async function reconcileOpenBookmarkMergeStatuses(
   db: ReturnType<typeof getSql>,
@@ -477,15 +510,69 @@ export async function reconcileOpenBookmarkMergeStatuses(
   const candidates = await db<BookmarkMergeFields[]>`
     SELECT
       id,
+      org_id,
+      user_id,
       repo_full_name,
       branch_name,
       merge_status,
       github_pr_url,
       github_pr_number,
+      head_commit_id,
+      github_repo_id,
+      github_pr_node_id,
+      github_verified_at_ms,
+      github_unavailable_at_ms,
       updated_at_ms
     FROM bookmarks
     WHERE (org_id = ${auth.orgId} OR user_id = ${auth.userId})
       AND merge_status = 'open'
+      AND user_id <> ${WEBHOOK_BOOKMARK_USER}
+  `;
+
+  if (candidates.length === 0) return;
+
+  const byRepo = groupBookmarksByRepo(candidates);
+  await mapPool([...byRepo.entries()], 4, async ([repoFullName, bookmarks]) => {
+    await reconcileRepoOpenBookmarks(db, repoFullName, bookmarks);
+  });
+}
+
+/**
+ * Reconcile eligible / near-eligible review bookmarks (non-merged) for /v1/reviews.
+ * Includes closed PRs so reopen is detected; skips merged and unavailable.
+ */
+export async function reconcileReviewBookmarkMergeStatuses(
+  db: ReturnType<typeof getSql>,
+  auth: { userId: string; orgId: string },
+): Promise<void> {
+  const candidates = await db<BookmarkMergeFields[]>`
+    SELECT
+      b.id,
+      b.org_id,
+      b.user_id,
+      b.repo_full_name,
+      b.branch_name,
+      b.merge_status,
+      b.github_pr_url,
+      b.github_pr_number,
+      b.head_commit_id,
+      b.github_repo_id,
+      b.github_pr_node_id,
+      b.github_verified_at_ms,
+      b.github_unavailable_at_ms,
+      b.updated_at_ms
+    FROM bookmarks b
+    WHERE (b.org_id = ${auth.orgId} OR b.user_id = ${auth.userId})
+      AND b.merge_status <> 'merged'
+      AND b.github_unavailable_at_ms IS NULL
+      AND (
+        (${reviewEligibilitySql(db)})
+        OR (
+          b.user_id <> ${WEBHOOK_BOOKMARK_USER}
+          AND b.latest_event_id IS NOT NULL
+          AND b.github_pr_number IS NULL
+        )
+      )
   `;
 
   if (candidates.length === 0) return;
