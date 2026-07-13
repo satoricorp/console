@@ -345,8 +345,14 @@ describeDb("GitHub webhook", () => {
       body?: string;
     };
     expect(patchBody.body).toContain("<!-- gx:pr-summary:v1 -->");
-    expect(patchBody.body).toContain("## Author Notes");
+    expect(patchBody.body?.startsWith("Please review the webhook path.")).toBe(
+      true,
+    );
     expect(patchBody.body).toContain("Please review the webhook path.");
+    expect(patchBody.body).not.toContain("## Author Notes");
+    expect(
+      patchBody.body!.indexOf("Please review the webhook path."),
+    ).toBeLessThan(patchBody.body!.indexOf("<!-- gx:pr-summary:v1 -->"));
 
     const db = getSql();
     const summaries = await db<{ content: string }[]>`

@@ -1,6 +1,8 @@
-/** Markers matching the former GX CLI PR body rewrite (`internal/publication/pr_body.go`). */
+/** Markers for GX-owned PR description blocks. */
 export const GX_PR_BODY_MARKER = "<!-- gx:pr-summary:v1 -->";
+/** @deprecated Legacy CLI put human notes under this marker below the GX block. */
 export const GX_AUTHOR_NOTES_MARKER = "<!-- gx:author-notes -->";
+/** @deprecated Legacy header under {@link GX_AUTHOR_NOTES_MARKER}. */
 export const GX_AUTHOR_NOTES_HEADER = "## Author Notes";
 
 function githubHeaders(accessToken: string): Record<string, string> {
@@ -20,6 +22,84 @@ export function ensurePrSummaryMarker(summary: string): string {
   return `${GX_PR_BODY_MARKER}\n\n${trimmed}`;
 }
 
+/**
+ * Strip a trailing legacy Author Notes section from a GX-owned block, returning
+ * the notes text (without header/marker).
+ */
+function extractLegacyAuthorNotes(gxOwnedBlock: string): {
+  gxOnly: string;
+  authorNotes: string;
+} {
+  const idx = gxOwnedBlock.indexOf(GX_AUTHOR_NOTES_MARKER);
+  if (idx < 0) {
+    return { gxOnly: gxOwnedBlock.trim(), authorNotes: "" };
+  }
+  let notes = gxOwnedBlock.slice(idx + GX_AUTHOR_NOTES_MARKER.length).trim();
+  if (notes.startsWith(GX_AUTHOR_NOTES_HEADER)) {
+    notes = notes.slice(GX_AUTHOR_NOTES_HEADER.length).trim();
+  }
+  return {
+    gxOnly: gxOwnedBlock.slice(0, idx).trim(),
+    authorNotes: notes,
+  };
+}
+
+/**
+ * Split an existing PR body into the human-written prefix and any GX-owned block.
+ *
+ * New layout: human text first, then `<!-- gx:pr-summary:v1 -->` … end.
+ * Legacy layout (CLI): GX block first, optional `<!-- gx:author-notes -->` below —
+ * those notes become the human prefix on the next merge.
+ */
+export function splitPrBody(existing: string): {
+  humanPrefix: string;
+  gxOwned: boolean;
+} {
+  const text = existing.replace(/\s+$/, "");
+  if (!text.trim()) {
+    return { humanPrefix: "", gxOwned: false };
+  }
+
+  const markerIdx = text.indexOf(GX_PR_BODY_MARKER);
+  if (markerIdx < 0) {
+    if (text.trimStart().startsWith("Published by GX.")) {
+      return { humanPrefix: "", gxOwned: true };
+    }
+    return { humanPrefix: text.trim(), gxOwned: false };
+  }
+
+  const before = text.slice(0, markerIdx).trim();
+  const fromMarker = text.slice(markerIdx);
+  const { authorNotes } = extractLegacyAuthorNotes(fromMarker);
+
+  if (!before) {
+    // Legacy GX-first body: promote Author Notes (if any) to the human prefix.
+    return { humanPrefix: authorNotes, gxOwned: true };
+  }
+
+  // Human-first body. Ignore a legacy Author Notes trailer if somehow present.
+  const human = authorNotes
+    ? `${before}\n\n${authorNotes}`.trim()
+    : before;
+  return { humanPrefix: human, gxOwned: true };
+}
+
+/**
+ * @deprecated Prefer {@link splitPrBody}. Kept for callers/tests that still use
+ * the old CLI-shaped `{ authorNotes, gxOwned }` result.
+ */
+export function splitGeneratedPRBody(existing: string): {
+  authorNotes: string;
+  gxOwned: boolean;
+} {
+  const split = splitPrBody(existing);
+  return { authorNotes: split.humanPrefix, gxOwned: split.gxOwned };
+}
+
+/**
+ * @deprecated Legacy helper that appended human notes *below* the GX block.
+ * New merges keep human text above via {@link mergePrSummaryIntoBody}.
+ */
 export function appendAuthorNotes(summary: string, notes: string): string {
   const trimmedNotes = notes.trim();
   if (!trimmedNotes) return summary.trim();
@@ -32,50 +112,19 @@ export function appendAuthorNotes(summary: string, notes: string): string {
 }
 
 /**
- * Split an existing PR body into preserved author notes vs GX-owned content.
- * Port of gx CLI `splitGeneratedPRBody`.
- */
-export function splitGeneratedPRBody(existing: string): {
-  authorNotes: string;
-  gxOwned: boolean;
-} {
-  const trimmed = existing.trim();
-  if (!trimmed) {
-    return { authorNotes: "", gxOwned: true };
-  }
-  if (trimmed.startsWith(GX_PR_BODY_MARKER)) {
-    const idx = trimmed.indexOf(GX_AUTHOR_NOTES_MARKER);
-    if (idx >= 0) {
-      let notes = trimmed.slice(idx + GX_AUTHOR_NOTES_MARKER.length).trim();
-      if (notes.startsWith(GX_AUTHOR_NOTES_HEADER)) {
-        notes = notes.slice(GX_AUTHOR_NOTES_HEADER.length).trim();
-      }
-      return { authorNotes: notes, gxOwned: true };
-    }
-    return { authorNotes: "", gxOwned: true };
-  }
-  if (trimmed.startsWith("Published by GX.")) {
-    return { authorNotes: "", gxOwned: true };
-  }
-  return { authorNotes: trimmed, gxOwned: false };
-}
-
-/**
- * Merge a fresh GX summary into an existing PR body, preserving human author notes.
- * Port of gx CLI `UpdateGitHubPullRequestBody` merge logic.
+ * Merge a fresh GX summary into an existing PR body.
+ * Preserves human text above the GX marker; replaces only the GX section.
  */
 export function mergePrSummaryIntoBody(
   existingBody: string,
   summary: string,
 ): string {
   const marked = ensurePrSummaryMarker(summary);
-  let { authorNotes, gxOwned } = splitGeneratedPRBody(existingBody);
-  let desired = appendAuthorNotes(marked, authorNotes);
-  if (!gxOwned && !authorNotes.trim()) {
-    authorNotes = existingBody.trim();
-    desired = appendAuthorNotes(marked, authorNotes);
+  const { humanPrefix } = splitPrBody(existingBody);
+  if (!humanPrefix) {
+    return marked;
   }
-  return desired;
+  return `${humanPrefix}\n\n${marked}`;
 }
 
 export async function getPullRequestBody(
@@ -123,7 +172,7 @@ export async function updatePullRequestBody(
 }
 
 /**
- * Write the GX rich summary into the PR description, preserving author notes.
+ * Write the GX rich summary into the PR description below any human text.
  * Returns whether the body changed.
  */
 export async function updatePullRequestWithSummary(

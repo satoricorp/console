@@ -17,11 +17,13 @@ The CLI can record and publish stacks locally for free. GitHub PR Summaries and 
 https://api.gx.run/github/webhook
 ```
 
-4. Publish work through GX (`gx push`, or `git push` with the GX pre-push hook). A PR created only in the GitHub UI will not get a GX summary until that branch is pushed through GX with capture metadata present.
+4. Publish work through GX (`git push` with the GX pre-push hook). A PR created only in the GitHub UI will not get a GX summary until that branch is pushed through GX with capture metadata present.
 
 ## PR Summaries
 
-GX can post a PR Summary comment on a GitHub pull request.
+GX writes one rich PR Summary into the **pull request description** (not a separate comment). Any human description already on the PR stays above the GX block; later regenerations replace only the GX section.
+
+When opening a PR (`gh pr create` or the GitHub UI), leave the body for your own notes — do **not** seed a `## Summary` section. GX Cloud appends the rich summary once the PR exists and publish metadata is available.
 
 The summary is intentionally short. It should tell reviewers:
 
@@ -38,9 +40,9 @@ The goal is to point reviewers to the important parts of the change instead of f
 GX posts summaries from these paths:
 
 - **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the branch already has a published GX event
-- **After publish** — when `gx push` (or the publish hook path) has a PR number and the GitHub App is installed
+- **After publish** — when plain `git push` (with the GX pre-push hook) has a PR number and the GitHub App is installed
 
-The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** post the comment to GitHub by itself.
+The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** write the PR description by itself.
 
 ### Trial and paid access
 
