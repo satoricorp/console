@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mergeStatusFromGithubPull } from "../src/routes/reviews";
+import { mergeStatusFromGithubPull } from "../src/bookmarks/merge-status";
 
 describe("mergeStatusFromGithubPull", () => {
   test("prefers merged over closed state", () => {
