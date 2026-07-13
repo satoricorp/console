@@ -325,6 +325,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     userId: "github-webhook",
     bookmarkId: resolved.id,
     provider: createLLMProvider(),
+    githubPrUrl: pr.html_url ?? null,
   });
 
   let bodyUpdated = false;
