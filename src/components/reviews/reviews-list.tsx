@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Archive, ChevronDown, Filter, Loader2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export type ReviewListItem = {
   id: string;
@@ -20,6 +27,15 @@ export type ReviewListItem = {
   plan_status: string | null;
   plan_error: string | null;
 };
+
+export type ReviewsListFilter = "open" | "merged" | "closed" | "archived";
+
+const FILTER_OPTIONS: { value: ReviewsListFilter; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "merged", label: "Merged" },
+  { value: "closed", label: "Closed" },
+  { value: "archived", label: "Archived" },
+];
 
 function formatDate(ms: number) {
   return new Date(ms).toLocaleDateString("en-US", {
@@ -53,31 +69,15 @@ export function isNoDataReview(bookmark: ReviewListItem) {
   );
 }
 
-export function isMergedReview(bookmark: ReviewListItem) {
-  return bookmark.merge_status === "merged";
-}
-
-/** Partition bookmarks for the reviews list (merged hidden by default). */
+/** Partition a status-filtered bookmark page into main list vs no-data. */
 export function partitionReviewsList(
   bookmarks: ReviewListItem[],
-  opts: { showArchived: boolean; showMerged: boolean },
+  _opts?: { showArchived?: boolean; showMerged?: boolean },
 ) {
   const noDataItems: ReviewListItem[] = [];
   const main: ReviewListItem[] = [];
-  let archived = 0;
-  let merged = 0;
 
   for (const bookmark of bookmarks) {
-    if (isMergedReview(bookmark)) {
-      merged += 1;
-    }
-    if (bookmark.archived_at_ms != null) {
-      archived += 1;
-      if (!opts.showArchived) continue;
-    }
-    if (isMergedReview(bookmark) && !opts.showMerged) {
-      continue;
-    }
     if (isNoDataReview(bookmark)) {
       noDataItems.push(bookmark);
       continue;
@@ -88,9 +88,21 @@ export function partitionReviewsList(
   return {
     visible: main,
     noData: noDataItems,
-    archivedCount: archived,
-    mergedCount: merged,
   };
+}
+
+async function fetchBookmarks(filter: ReviewsListFilter): Promise<ReviewListItem[]> {
+  const response = await fetch(
+    `/api/bookmarks?merge_status=${encodeURIComponent(filter)}`,
+    { credentials: "include", cache: "no-store" },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    throw new Error(body?.error ?? "Failed to load reviews");
+  }
+  return (await response.json()) as ReviewListItem[];
 }
 
 async function setArchived(bookmarkId: string, archived: boolean) {
@@ -109,33 +121,56 @@ async function setArchived(bookmarkId: string, archived: boolean) {
 
 export function ReviewsList({
   initialBookmarks,
+  initialFilter = "open",
 }: {
   initialBookmarks: ReviewListItem[];
+  initialFilter?: ReviewsListFilter;
 }) {
+  const [filter, setFilter] = useState<ReviewsListFilter>(initialFilter);
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
-  const [showArchived, setShowArchived] = useState(false);
-  const [showMerged, setShowMerged] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const { visible, noData, archivedCount, mergedCount } = useMemo(
-    () => partitionReviewsList(bookmarks, { showArchived, showMerged }),
-    [bookmarks, showArchived, showMerged],
+  useEffect(() => {
+    if (filter === initialFilter) {
+      setBookmarks(initialBookmarks);
+      return;
+    }
+
+    let cancelled = false;
+    setListLoading(true);
+    void fetchBookmarks(filter)
+      .then((rows) => {
+        if (!cancelled) setBookmarks(rows);
+      })
+      .catch((error) => {
+        console.error(error);
+      })
+      .finally(() => {
+        if (!cancelled) setListLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filter, initialBookmarks, initialFilter]);
+
+  const { visible, noData } = useMemo(
+    () => partitionReviewsList(bookmarks),
+    [bookmarks],
   );
+
+  const filterLabel =
+    FILTER_OPTIONS.find((option) => option.value === filter)?.label ?? "Open";
 
   async function toggleArchive(bookmark: ReviewListItem) {
     const nextArchived = bookmark.archived_at_ms == null;
     setPendingId(bookmark.id);
     const previous = bookmarks;
+    // Optimistically drop from the current exclusive filter view.
     setBookmarks((current) =>
-      current.map((item) =>
-        item.id === bookmark.id
-          ? {
-              ...item,
-              archived_at_ms: nextArchived ? Date.now() : null,
-            }
-          : item,
-      ),
+      current.filter((item) => item.id !== bookmark.id),
     );
     try {
       await setArchived(bookmark.id, nextArchived);
@@ -147,52 +182,57 @@ export function ReviewsList({
     }
   }
 
+  const emptyMessage =
+    filter === "archived"
+      ? "No archived reviews."
+      : noData.length > 0
+        ? "No reviews with GX data yet."
+        : filter === "open"
+          ? "No open reviews."
+          : `No ${filter} reviews.`;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end gap-1">
-        <button
-          type="button"
-          onClick={() => setShowMerged((value) => !value)}
-          aria-pressed={showMerged}
-          title={showMerged ? "Hide merged reviews" : "Show merged reviews"}
-          className={`inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium transition-colors ${
-            showMerged
-              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-              : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
-          }`}
-        >
-          <Filter className="h-3.5 w-3.5" />
-          {mergedCount > 0 ? `Merged (${mergedCount})` : "Merged"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowArchived((value) => !value)}
-          aria-pressed={showArchived}
-          title={showArchived ? "Hide archived reviews" : "Show archived reviews"}
-          className={`inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium transition-colors ${
-            showArchived
-              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-              : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
-          }`}
-        >
-          <Filter className="h-3.5 w-3.5" />
-          {showArchived
-            ? `Archived (${archivedCount})`
-            : archivedCount > 0
-              ? `Archived (${archivedCount})`
-              : "Archived"}
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title={`Filter: ${filterLabel}`}
+              aria-label={`Filter reviews by status, currently ${filterLabel}`}
+              className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950 data-[state=open]:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 dark:data-[state=open]:text-zinc-50"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span className="sr-only">{filterLabel}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[8.5rem]">
+            <DropdownMenuRadioGroup
+              value={filter}
+              onValueChange={(value) => setFilter(value as ReviewsListFilter)}
+            >
+              {FILTER_OPTIONS.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.value}
+                  value={option.value}
+                  className="text-[12px]"
+                >
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-          {visible.length === 0 ? (
+      {listLoading ? (
+        <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-zinc-500">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          Loading…
+        </div>
+      ) : visible.length === 0 ? (
         <p className="py-6 text-center text-[13px] text-zinc-500 dark:text-zinc-500">
-          {showArchived
-            ? "No archived reviews."
-            : noData.length > 0
-              ? "No reviews with GX data yet."
-              : showMerged
-                ? "No reviews."
-                : "No open reviews."}
+          {emptyMessage}
         </p>
       ) : (
         <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
@@ -211,7 +251,8 @@ export function ReviewsList({
                         archived
                       </span>
                     ) : null}
-                    {isMergedReview(bookmark) ? (
+                    {bookmark.merge_status === "merged" &&
+                    bookmark.archived_at_ms == null ? (
                       <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
                         merged
                       </span>
@@ -257,7 +298,7 @@ export function ReviewsList({
         </ul>
       )}
 
-      {noData.length > 0 ? (
+      {noData.length > 0 && !listLoading ? (
         <details className="group border border-zinc-200 dark:border-zinc-800">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 [&::-webkit-details-marker]:hidden">
             <span>

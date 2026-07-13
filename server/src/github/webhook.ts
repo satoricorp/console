@@ -394,19 +394,9 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
 
 /** Sync bookmark merge_status when a PR is closed on GitHub (merge or close). */
 async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload) {
-  const installationId = payload.installation?.id;
   const repo = payload.repository;
   const pr = payload.pull_request;
-  if (
-    typeof installationId !== "number" ||
-    !repo?.full_name ||
-    typeof pr?.number !== "number"
-  ) {
-    return;
-  }
-
-  const orgId = await resolveOrgIdForInstallation(db, installationId);
-  if (!orgId) {
+  if (!repo?.full_name || typeof pr?.number !== "number") {
     return;
   }
 
@@ -414,6 +404,9 @@ async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload
   const now = Date.now();
   const branchName = pr.head?.ref ?? null;
 
+  // Match by repo + PR (or branch when PR number was never stored). Do not
+  // require org_id — publish may have filed the bookmark under a different org
+  // than the installation org, which previously left merge_status stuck open.
   const updated =
     mergeStatus === "merged"
       ? await db`
@@ -427,8 +420,7 @@ async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload
             github_pr_url = COALESCE(bookmarks.github_pr_url, ${pr.html_url ?? null}),
             github_pr_number = COALESCE(bookmarks.github_pr_number, ${pr.number}),
             updated_at_ms = ${now}
-          WHERE org_id = ${orgId}
-            AND repo_full_name = ${repo.full_name}
+          WHERE repo_full_name = ${repo.full_name}
             AND (
               github_pr_number = ${pr.number}
               OR (
@@ -445,8 +437,7 @@ async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload
             github_pr_url = COALESCE(bookmarks.github_pr_url, ${pr.html_url ?? null}),
             github_pr_number = COALESCE(bookmarks.github_pr_number, ${pr.number}),
             updated_at_ms = ${now}
-          WHERE org_id = ${orgId}
-            AND repo_full_name = ${repo.full_name}
+          WHERE repo_full_name = ${repo.full_name}
             AND (
               github_pr_number = ${pr.number}
               OR (
@@ -459,7 +450,6 @@ async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload
 
   if (updated.count === 0) {
     console.info("PR closed webhook: no bookmark matched", {
-      orgId,
       repo: repo.full_name,
       prNumber: pr.number,
       branchName,

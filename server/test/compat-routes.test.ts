@@ -164,6 +164,15 @@ describeDb("compat bookmarks route", () => {
 
     expect(res.status).toBe(400);
   });
+
+  test("GET /bookmarks accepts merge_status=archived", async () => {
+    const res = await app.request("http://localhost/bookmarks?merge_status=archived", {
+      headers: authHeaders("compat-test-user", orgId),
+    });
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(await res.json())).toBe(true);
+  });
 });
 
 describeDb("compat OpenAI proxy routes", () => {
