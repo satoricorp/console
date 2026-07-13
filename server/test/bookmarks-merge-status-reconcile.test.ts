@@ -224,4 +224,202 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
     expect(openStored?.merge_status).toBe("open");
     expect(staleStored?.merge_status).toBe("merged");
   });
+
+  test("404 PR lookup marks stale open bookmark closed", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const missingPr = 4040;
+    const [missing] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        ${userId},
+        ${repoFullName},
+        'feature/deleted-pr',
+        'Deleted PR',
+        1,
+        'open',
+        ${missingPr},
+        ${`https://github.com/${repoFullName}/pull/${missingPr}`},
+        ${now},
+        ${now},
+        ${orgId}
+      )
+      RETURNING id
+    `;
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token-test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        url.includes(`/repos/${repoFullName}/pulls?`) &&
+        url.includes("state=open")
+      ) {
+        return new Response(JSON.stringify([{ number: openPrNumber }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes(`/repos/${repoFullName}/pulls/${missingPr}`)) {
+        return new Response("Not Found", { status: 404 });
+      }
+      if (url.includes(`/repos/${repoFullName}/pulls/${stalePrNumber}`)) {
+        return new Response(
+          JSON.stringify({
+            merged: true,
+            state: "closed",
+            merged_at: "2026-07-01T12:00:00Z",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+
+    // Reset stale bookmark to open so reconcile has work; missing is already open.
+    await db`
+      UPDATE bookmarks SET merge_status = 'open', merged_at_ms = NULL
+      WHERE id = ${staleBookmarkId}::uuid
+    `;
+
+    const res = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=closed`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{ id: string; merge_status: string }>;
+    expect(rows.some((row) => row.id === missing.id && row.merge_status === "closed")).toBe(
+      true,
+    );
+  });
+
+  test("URL-only github_pr_url reconciles without github_pr_number", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const urlOnlyPr = 77;
+    const [urlOnly] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        ${userId},
+        ${repoFullName},
+        'feature/url-only',
+        'URL only PR',
+        1,
+        'open',
+        NULL,
+        ${`https://github.com/${repoFullName}/pull/${urlOnlyPr}`},
+        ${now},
+        ${now},
+        ${orgId}
+      )
+      RETURNING id
+    `;
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token-test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        url.includes(`/repos/${repoFullName}/pulls?`) &&
+        url.includes("state=open")
+      ) {
+        return new Response(JSON.stringify([{ number: openPrNumber }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes(`/repos/${repoFullName}/pulls/${urlOnlyPr}`)) {
+        return new Response(
+          JSON.stringify({
+            merged: true,
+            state: "closed",
+            merged_at: "2026-07-02T12:00:00Z",
+            html_url: `https://github.com/${repoFullName}/pull/${urlOnlyPr}`,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes(`/repos/${repoFullName}/pulls/`)) {
+        return new Response(
+          JSON.stringify({ merged: false, state: "open" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+
+    const merged = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=merged`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(merged.status).toBe(200);
+    const mergedRows = (await merged.json()) as Array<{ id: string }>;
+    expect(mergedRows.some((row) => row.id === urlOnly.id)).toBe(true);
+
+    const [stored] = await db<{ merge_status: string; github_pr_number: number | null }[]>`
+      SELECT merge_status, github_pr_number FROM bookmarks WHERE id = ${urlOnly.id}::uuid
+    `;
+    expect(stored?.merge_status).toBe("merged");
+    expect(Number(stored?.github_pr_number)).toBe(urlOnlyPr);
+  });
+
+  test("merge_status=archived returns only archived bookmarks", async () => {
+    const db = getSql();
+    const now = Date.now();
+    await db`
+      UPDATE bookmarks
+      SET archived_at_ms = ${now}, merge_status = 'open'
+      WHERE id = ${openBookmarkId}::uuid
+    `;
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/access_tokens")) {
+        return new Response(JSON.stringify({ token: "installation-token-test" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        url.includes(`/repos/${repoFullName}/pulls?`) &&
+        url.includes("state=open")
+      ) {
+        return new Response(JSON.stringify([{ number: openPrNumber }]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ merged: false, state: "open" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const archived = await app.request(
+      `http://localhost/bookmarks?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=archived`,
+      { headers: authHeaders(userId, orgId) },
+    );
+    expect(archived.status).toBe(200);
+    const rows = (await archived.json()) as Array<{ id: string; archived_at_ms: number | null }>;
+    expect(rows.every((row) => row.archived_at_ms != null)).toBe(true);
+    expect(rows.some((row) => row.id === openBookmarkId)).toBe(true);
+
+    await db`
+      UPDATE bookmarks SET archived_at_ms = NULL WHERE id = ${openBookmarkId}::uuid
+    `;
+  });
 });

@@ -30,6 +30,7 @@ export async function gxApiRequest(
 
   return fetch(url, {
     ...init,
+    cache: "no-store",
     headers: {
       ...(init?.headers ?? {}),
       Authorization: `Bearer ${apiKey}`,

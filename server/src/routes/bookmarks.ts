@@ -59,12 +59,14 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   const mergeStatus = c.req.query("merge_status")?.trim();
   const repoFullName = c.req.query("repo_full_name")?.trim();
   const includeArchived = c.req.query("include_archived") === "1";
+  const archivedOnly = mergeStatus === "archived";
 
   if (
     mergeStatus &&
     mergeStatus !== "open" &&
     mergeStatus !== "merged" &&
-    mergeStatus !== "closed"
+    mergeStatus !== "closed" &&
+    mergeStatus !== "archived"
   ) {
     return c.json({ error: "Invalid merge_status" }, 400);
   }
@@ -78,6 +80,9 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   // org (resolvePublishOrgId), not the caller's org, so an org-only filter
   // hides the user's own publishes. Match the access model of
   // loadAccessibleBookmark in routes/reviews.ts: own bookmarks always show.
+  //
+  // merge_status=archived is soft-archive (archived_at_ms), not GitHub state.
+  // open|merged|closed exclude archived unless include_archived=1.
   const rows = await db<BookmarkListRow[]>`
     SELECT
       b.id,
@@ -105,9 +110,19 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
       LIMIT 1
     ) rp ON true
     WHERE (b.org_id = ${auth.orgId} OR b.user_id = ${auth.userId})
-      ${mergeStatus ? db`AND b.merge_status = ${mergeStatus}` : db``}
+      ${
+        archivedOnly
+          ? db`AND b.archived_at_ms IS NOT NULL`
+          : mergeStatus
+            ? db`AND b.merge_status = ${mergeStatus}`
+            : db``
+      }
       ${repoFullName ? db`AND b.repo_full_name = ${repoFullName}` : db``}
-      ${includeArchived ? db`` : db`AND b.archived_at_ms IS NULL`}
+      ${
+        archivedOnly || includeArchived
+          ? db``
+          : db`AND b.archived_at_ms IS NULL`
+      }
     ORDER BY b.updated_at_ms DESC
   `;
 

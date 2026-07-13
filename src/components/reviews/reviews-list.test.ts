@@ -55,13 +55,6 @@ describe("isGxSupportedReview / isNoDataReview", () => {
 describe("partitionReviewsList", () => {
   const open = item({ id: "open" });
   const merged = item({ id: "merged", merge_status: "merged" });
-  const closed = item({ id: "closed", merge_status: "closed" });
-  const archived = item({ id: "archived", archived_at_ms: 100 });
-  const archivedMerged = item({
-    id: "archived-merged",
-    merge_status: "merged",
-    archived_at_ms: 100,
-  });
   const noData = item({
     id: "no-data",
     plan_status: "failed",
@@ -75,33 +68,12 @@ describe("partitionReviewsList", () => {
     file_count: 0,
   });
 
-  test("hides merged by default and keeps closed visible", () => {
-    const result = partitionReviewsList(
-      [open, merged, closed, archived, archivedMerged, noData, webhookOnly],
-      { showArchived: false, showMerged: false },
-    );
-    expect(result.visible.map((b) => b.id)).toEqual(["open", "closed"]);
+  test("splits GX-supported rows from no-data rows", () => {
+    const result = partitionReviewsList([open, merged, noData, webhookOnly]);
+    expect(result.visible.map((b) => b.id)).toEqual(["open", "merged"]);
     expect(result.noData.map((b) => b.id).sort()).toEqual([
       "no-data",
       "webhook-only",
     ]);
-    expect(result.mergedCount).toBe(2);
-    expect(result.archivedCount).toBe(2);
-  });
-
-  test("showMerged includes merged non-archived reviews", () => {
-    const result = partitionReviewsList([open, merged, archivedMerged], {
-      showArchived: false,
-      showMerged: true,
-    });
-    expect(result.visible.map((b) => b.id)).toEqual(["open", "merged"]);
-  });
-
-  test("showArchived still respects merged filter", () => {
-    const result = partitionReviewsList([archived, archivedMerged], {
-      showArchived: true,
-      showMerged: false,
-    });
-    expect(result.visible.map((b) => b.id)).toEqual(["archived"]);
   });
 });

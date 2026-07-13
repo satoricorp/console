@@ -29,19 +29,28 @@ export default async function ReviewsPage() {
     );
   }
 
-  // First-time copy lives in ReviewsEmptyState. Prefer that over a dead-end
-  // error when the cloud API is unreachable or misconfigured.
+  // Default list is open (non-archived). If that is empty, probe for any
+  // bookmark so we still show the filter UI when the user only has
+  // merged/closed/archived reviews — instead of the first-run empty state.
   let bookmarks: ReviewListItem[] = [];
+  let isEmpty = true;
   try {
     bookmarks = await gxApiJson<ReviewListItem[]>(
       viewer.id,
-      "/bookmarks?include_archived=1",
+      "/bookmarks?merge_status=open",
     );
+    if (bookmarks.length > 0) {
+      isEmpty = false;
+    } else {
+      const any = await gxApiJson<ReviewListItem[]>(
+        viewer.id,
+        "/bookmarks?include_archived=1",
+      );
+      isEmpty = any.length === 0;
+    }
   } catch (error) {
     console.error("Failed to load reviews bookmarks", error);
   }
-
-  const isEmpty = bookmarks.length === 0;
 
   return (
     <AppPage>

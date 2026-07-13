@@ -598,7 +598,7 @@ describeDb("GitHub webhook", () => {
       SELECT merge_status, merged_at_ms FROM bookmarks WHERE id = ${bookmarkId}
     `;
     expect(row?.merge_status).toBe("merged");
-    expect(row?.merged_at_ms).toBe(Date.parse(mergedAt));
+    expect(Number(row?.merged_at_ms)).toBe(Date.parse(mergedAt));
   });
 
   test("pull_request closed without merge sets bookmark merge_status to closed", async () => {
@@ -634,6 +634,62 @@ describeDb("GitHub webhook", () => {
     `;
     expect(row?.merge_status).toBe("closed");
     expect(row?.merged_at_ms).toBeNull();
+  });
+
+  test("pull_request closed updates bookmark even when org_id differs from installation org", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const [otherOrg] = await db<{ id: string }[]>`
+      INSERT INTO orgs (plan, created_at_ms)
+      VALUES ('free', ${now})
+      RETURNING id
+    `;
+    const [foreignBookmark] = await db<{ id: string }[]>`
+      INSERT INTO bookmarks (
+        user_id, repo_full_name, branch_name, title, revision,
+        merge_status, github_pr_number, github_pr_url,
+        published_at_ms, updated_at_ms, org_id
+      ) VALUES (
+        ${`webhook-foreign-${crypto.randomUUID()}`},
+        ${REPO_FULL_NAME},
+        'feat/other-org',
+        'Other org bookmark',
+        1,
+        'open',
+        ${PR_NUMBER + 50},
+        ${`https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER + 50}`},
+        ${now},
+        ${now},
+        ${otherOrg.id}
+      )
+      RETURNING id
+    `;
+
+    const res = await postWebhook("pull_request", {
+      action: "closed",
+      installation: { id: INSTALLATION_ID },
+      repository: {
+        id: 999001,
+        full_name: REPO_FULL_NAME,
+        name: "gx",
+        owner: { login: "acme" },
+      },
+      pull_request: {
+        number: PR_NUMBER + 50,
+        title: "Other org",
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER + 50}`,
+        merged: true,
+        merged_at: "2026-07-12T19:00:00.000Z",
+        head: { ref: "feat/other-org", sha: "abc999" },
+        base: { ref: "main", sha: "def456" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const [row] = await db<{ merge_status: string }[]>`
+      SELECT merge_status FROM bookmarks WHERE id = ${foreignBookmark.id}::uuid
+    `;
+    expect(row?.merge_status).toBe("merged");
   });
 
   test("push webhook enqueues incremental index without blocking", async () => {
