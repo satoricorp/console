@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isGxSupportedReview,
+  isNoDataReview,
   partitionReviewsList,
   type ReviewListItem,
 } from "./reviews-list";
@@ -16,6 +18,7 @@ function item(
     updated_at_ms: 1,
     github_pr_url: null,
     github_pr_number: null,
+    latest_event_id: "event-1",
     file_count: 2,
     archived_at_ms: null,
     plan_status: null,
@@ -23,6 +26,31 @@ function item(
     ...overrides,
   };
 }
+
+describe("isGxSupportedReview / isNoDataReview", () => {
+  test("webhook-only shells without latest_event_id are not GX-supported", () => {
+    const webhookOnly = item({
+      id: "webhook",
+      latest_event_id: null,
+      github_pr_number: 12,
+      github_pr_url: "https://github.com/acme/gx/pull/12",
+      file_count: 0,
+    });
+    expect(isGxSupportedReview(webhookOnly)).toBe(false);
+    expect(isNoDataReview(webhookOnly)).toBe(true);
+  });
+
+  test("failed empty plans with GX evidence are no-data", () => {
+    const empty = item({
+      id: "empty",
+      plan_status: "failed",
+      plan_error: "no_surviving_changes",
+      file_count: 0,
+    });
+    expect(isGxSupportedReview(empty)).toBe(true);
+    expect(isNoDataReview(empty)).toBe(true);
+  });
+});
 
 describe("partitionReviewsList", () => {
   const open = item({ id: "open" });
@@ -40,14 +68,23 @@ describe("partitionReviewsList", () => {
     plan_error: "no_surviving_changes",
     file_count: 0,
   });
+  const webhookOnly = item({
+    id: "webhook-only",
+    latest_event_id: null,
+    github_pr_number: 99,
+    file_count: 0,
+  });
 
   test("hides merged by default and keeps closed visible", () => {
     const result = partitionReviewsList(
-      [open, merged, closed, archived, archivedMerged, noData],
+      [open, merged, closed, archived, archivedMerged, noData, webhookOnly],
       { showArchived: false, showMerged: false },
     );
     expect(result.visible.map((b) => b.id)).toEqual(["open", "closed"]);
-    expect(result.noData.map((b) => b.id)).toEqual(["no-data"]);
+    expect(result.noData.map((b) => b.id).sort()).toEqual([
+      "no-data",
+      "webhook-only",
+    ]);
     expect(result.mergedCount).toBe(2);
     expect(result.archivedCount).toBe(2);
   });
