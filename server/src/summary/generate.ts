@@ -62,6 +62,8 @@ export type IndexSnippetRow = {
   score?: number;
   sourceKind?: string;
   bucket?: string;
+  /** Repo-relative path when the snippet is file-backed. */
+  file?: string;
 };
 
 export type PublishedRevisionRow = {

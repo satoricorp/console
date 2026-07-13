@@ -16,6 +16,7 @@ export type AttachedBrokerContext = {
     score?: number;
     sourceKind?: string;
     bucket?: ContextBucket;
+    file?: string;
   }>;
   contextBuckets: Record<ContextBucket, ContextSnippet[]>;
   contextManifest: Record<ContextBucket, ContextManifestEntry>;
