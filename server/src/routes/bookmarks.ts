@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { reconcileOpenBookmarkMergeStatuses } from "../bookmarks/merge-status";
 import { getSql } from "../db";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 
@@ -69,6 +70,10 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   }
 
   const db = getSql();
+  // Backfill stale open merge_status before filtering so merged PRs that
+  // missed webhooks / never opened detail still match merge_status=merged.
+  await reconcileOpenBookmarkMergeStatuses(db, auth);
+
   // Publishes for GitHub-App-installed repos are filed under the installation
   // org (resolvePublishOrgId), not the caller's org, so an org-only filter
   // hides the user's own publishes. Match the access model of

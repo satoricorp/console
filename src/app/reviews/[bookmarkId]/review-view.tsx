@@ -1,6 +1,7 @@
 "use client";
 
 import { PatchDiff } from "@pierre/diffs/react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityPanel } from "@/components/reviews/activity-panel";
 import { ApproveMergeBar } from "@/components/reviews/approve-merge-bar";
@@ -73,6 +74,11 @@ export function ReviewView({
         <main className="wrap" style={{ textAlign: "center", paddingTop: 80 }}>
           <h1 style={{ fontSize: 19, fontWeight: 650 }}>Review not found</h1>
           <p style={{ color: "var(--gx-muted)", marginTop: 8 }}>{error}</p>
+          <p style={{ marginTop: 16 }}>
+            <Link href="/reviews" style={{ color: "var(--gx-muted)" }}>
+              ← Reviews
+            </Link>
+          </p>
         </main>
       </div>
     );

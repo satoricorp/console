@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Archive, ChevronDown, Filter } from "lucide-react";
+import { Archive, ChevronDown, Filter, Loader2 } from "lucide-react";
 
 export type ReviewListItem = {
   id: string;
@@ -116,6 +116,7 @@ export function ReviewsList({
   const [showArchived, setShowArchived] = useState(false);
   const [showMerged, setShowMerged] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const { visible, noData, archivedCount, mergedCount } = useMemo(
     () => partitionReviewsList(bookmarks, { showArchived, showMerged }),
@@ -199,6 +200,7 @@ export function ReviewsList({
             <li key={bookmark.id} className="flex items-stretch gap-1">
               <Link
                 href={`/reviews/${bookmark.id}`}
+                onClick={() => setLoadingId(bookmark.id)}
                 className="flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
               >
                 <span className="min-w-0">
@@ -219,10 +221,18 @@ export function ReviewsList({
                     {bookmark.repo_full_name} · {bookmark.branch_name}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                  {bookmark.merge_status}
-                  <span className="block">
-                    {formatDate(bookmark.updated_at_ms)}
+                <span className="flex shrink-0 items-center gap-2 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
+                  {loadingId === bookmark.id ? (
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin"
+                      aria-label="Loading review"
+                    />
+                  ) : null}
+                  <span>
+                    {bookmark.merge_status}
+                    <span className="block">
+                      {formatDate(bookmark.updated_at_ms)}
+                    </span>
                   </span>
                 </span>
               </Link>

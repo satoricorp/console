@@ -38,6 +38,8 @@ export function ReviewSiteHeader({ review }: { review: ReviewResponse }) {
         gx
       </Link>
       <div className="crumb">
+        <Link href="/reviews">Reviews</Link>
+        <span className="sep">/</span>
         <span>{org}</span>
         <span className="sep">/</span>
         <span>{repo}</span>
