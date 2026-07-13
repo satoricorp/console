@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  groupReviewsByRepo,
   isGxSupportedReview,
   isNoDataReview,
   partitionReviewsList,
@@ -75,5 +76,18 @@ describe("partitionReviewsList", () => {
       "no-data",
       "webhook-only",
     ]);
+  });
+});
+
+describe("groupReviewsByRepo", () => {
+  test("groups by repo while preserving first-seen repo order", () => {
+    const groups = groupReviewsByRepo([
+      item({ id: "a", repo_full_name: "acme/one", updated_at_ms: 3 }),
+      item({ id: "b", repo_full_name: "acme/two", updated_at_ms: 2 }),
+      item({ id: "c", repo_full_name: "acme/one", updated_at_ms: 1 }),
+    ]);
+    expect(groups.map((g) => g.repoFullName)).toEqual(["acme/one", "acme/two"]);
+    expect(groups[0]!.bookmarks.map((b) => b.id)).toEqual(["a", "c"]);
+    expect(groups[1]!.bookmarks.map((b) => b.id)).toEqual(["b"]);
   });
 });

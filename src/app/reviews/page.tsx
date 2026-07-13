@@ -66,7 +66,7 @@ export default async function ReviewsPage() {
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
             {isEmpty
               ? "How to review PRs with GX"
-              : "Published changes, most recent first."}
+              : "Published changes, grouped by repository."}
           </p>
         </div>
 

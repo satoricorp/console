@@ -91,6 +91,37 @@ export function partitionReviewsList(
   };
 }
 
+export type ReviewRepoGroup = {
+  repoFullName: string;
+  bookmarks: ReviewListItem[];
+};
+
+/**
+ * Group reviews by repo for the list UI. Repo order follows the most recent
+ * bookmark in each group (input is already updated_at DESC from the API).
+ */
+export function groupReviewsByRepo(
+  bookmarks: ReviewListItem[],
+): ReviewRepoGroup[] {
+  const groups: ReviewRepoGroup[] = [];
+  const indexByRepo = new Map<string, number>();
+
+  for (const bookmark of bookmarks) {
+    const existing = indexByRepo.get(bookmark.repo_full_name);
+    if (existing === undefined) {
+      indexByRepo.set(bookmark.repo_full_name, groups.length);
+      groups.push({
+        repoFullName: bookmark.repo_full_name,
+        bookmarks: [bookmark],
+      });
+    } else {
+      groups[existing]!.bookmarks.push(bookmark);
+    }
+  }
+
+  return groups;
+}
+
 async function fetchBookmarks(filter: ReviewsListFilter): Promise<ReviewListItem[]> {
   const response = await fetch(
     `/api/bookmarks?merge_status=${encodeURIComponent(filter)}`,
@@ -160,6 +191,7 @@ export function ReviewsList({
     () => partitionReviewsList(bookmarks),
     [bookmarks],
   );
+  const repoGroups = useMemo(() => groupReviewsByRepo(visible), [visible]);
 
   const filterLabel =
     FILTER_OPTIONS.find((option) => option.value === filter)?.label ?? "Open";
@@ -235,67 +267,78 @@ export function ReviewsList({
           {emptyMessage}
         </p>
       ) : (
-        <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-          {visible.map((bookmark) => (
-            <li key={bookmark.id} className="flex items-stretch gap-1">
-              <Link
-                href={`/reviews/${bookmark.id}`}
-                onClick={() => setLoadingId(bookmark.id)}
-                className="flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
-                    {displayTitle(bookmark)}
-                    {bookmark.archived_at_ms != null ? (
-                      <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
-                        archived
+        <div className="space-y-5">
+          {repoGroups.map((group) => (
+            <section key={group.repoFullName}>
+              <h2 className="mb-1 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500 dark:text-zinc-500">
+                {group.repoFullName}
+              </h2>
+              <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                {group.bookmarks.map((bookmark) => (
+                  <li key={bookmark.id} className="flex items-stretch gap-1">
+                    <Link
+                      href={`/reviews/${bookmark.id}`}
+                      onClick={() => setLoadingId(bookmark.id)}
+                      className="flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
+                          {displayTitle(bookmark)}
+                          {bookmark.archived_at_ms != null ? (
+                            <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
+                              archived
+                            </span>
+                          ) : null}
+                          {bookmark.merge_status === "merged" &&
+                          bookmark.archived_at_ms == null ? (
+                            <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
+                              merged
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="block truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
+                          {bookmark.branch_name}
+                        </span>
                       </span>
-                    ) : null}
-                    {bookmark.merge_status === "merged" &&
-                    bookmark.archived_at_ms == null ? (
-                      <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
-                        merged
+                      <span className="flex shrink-0 items-center gap-2 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
+                        {loadingId === bookmark.id ? (
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-label="Loading review"
+                          />
+                        ) : null}
+                        <span>
+                          {bookmark.merge_status}
+                          <span className="block">
+                            {formatDate(bookmark.updated_at_ms)}
+                          </span>
+                        </span>
                       </span>
-                    ) : null}
-                  </span>
-                  <span className="block truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                    {bookmark.repo_full_name} · {bookmark.branch_name}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                  {loadingId === bookmark.id ? (
-                    <Loader2
-                      className="h-3.5 w-3.5 animate-spin"
-                      aria-label="Loading review"
-                    />
-                  ) : null}
-                  <span>
-                    {bookmark.merge_status}
-                    <span className="block">
-                      {formatDate(bookmark.updated_at_ms)}
-                    </span>
-                  </span>
-                </span>
-              </Link>
-              <button
-                type="button"
-                disabled={pendingId === bookmark.id}
-                onClick={() => void toggleArchive(bookmark)}
-                title={
-                  bookmark.archived_at_ms != null
-                    ? "Unarchive review"
-                    : "Archive review"
-                }
-                className="inline-flex shrink-0 cursor-pointer items-center self-center px-2 py-2 text-zinc-500 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-500 dark:hover:text-zinc-50"
-              >
-                <Archive className="h-3.5 w-3.5" />
-                <span className="sr-only">
-                  {bookmark.archived_at_ms != null ? "Unarchive" : "Archive"}
-                </span>
-              </button>
-            </li>
+                    </Link>
+                    <button
+                      type="button"
+                      disabled={pendingId === bookmark.id}
+                      onClick={() => void toggleArchive(bookmark)}
+                      title={
+                        bookmark.archived_at_ms != null
+                          ? "Unarchive review"
+                          : "Archive review"
+                      }
+                      className="inline-flex shrink-0 cursor-pointer items-center self-center px-2 py-2 text-zinc-500 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-500 dark:hover:text-zinc-50"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      <span className="sr-only">
+                        {bookmark.archived_at_ms != null
+                          ? "Unarchive"
+                          : "Archive"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {noData.length > 0 && !listLoading ? (
