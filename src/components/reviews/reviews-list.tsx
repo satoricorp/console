@@ -44,6 +44,46 @@ export function isNoDataReview(bookmark: ReviewListItem) {
   );
 }
 
+export function isMergedReview(bookmark: ReviewListItem) {
+  return bookmark.merge_status === "merged";
+}
+
+/** Partition bookmarks for the reviews list (merged hidden by default). */
+export function partitionReviewsList(
+  bookmarks: ReviewListItem[],
+  opts: { showArchived: boolean; showMerged: boolean },
+) {
+  const noDataItems: ReviewListItem[] = [];
+  const main: ReviewListItem[] = [];
+  let archived = 0;
+  let merged = 0;
+
+  for (const bookmark of bookmarks) {
+    if (isMergedReview(bookmark)) {
+      merged += 1;
+    }
+    if (bookmark.archived_at_ms != null) {
+      archived += 1;
+      if (!opts.showArchived) continue;
+    }
+    if (isMergedReview(bookmark) && !opts.showMerged) {
+      continue;
+    }
+    if (isNoDataReview(bookmark)) {
+      noDataItems.push(bookmark);
+      continue;
+    }
+    main.push(bookmark);
+  }
+
+  return {
+    visible: main,
+    noData: noDataItems,
+    archivedCount: archived,
+    mergedCount: merged,
+  };
+}
+
 async function setArchived(bookmarkId: string, archived: boolean) {
   const path = archived ? "archive" : "unarchive";
   const response = await fetch(
@@ -65,30 +105,13 @@ export function ReviewsList({
 }) {
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
   const [showArchived, setShowArchived] = useState(false);
+  const [showMerged, setShowMerged] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const { visible, noData, archivedCount } = useMemo(() => {
-    const noDataItems: ReviewListItem[] = [];
-    const main: ReviewListItem[] = [];
-    let archived = 0;
-
-    for (const bookmark of bookmarks) {
-      if (bookmark.archived_at_ms != null) {
-        archived += 1;
-        if (showArchived && !isNoDataReview(bookmark)) {
-          main.push(bookmark);
-        }
-        continue;
-      }
-      if (isNoDataReview(bookmark)) {
-        noDataItems.push(bookmark);
-        continue;
-      }
-      main.push(bookmark);
-    }
-
-    return { visible: main, noData: noDataItems, archivedCount: archived };
-  }, [bookmarks, showArchived]);
+  const { visible, noData, archivedCount, mergedCount } = useMemo(
+    () => partitionReviewsList(bookmarks, { showArchived, showMerged }),
+    [bookmarks, showArchived, showMerged],
+  );
 
   async function toggleArchive(bookmark: ReviewListItem) {
     const nextArchived = bookmark.archived_at_ms == null;
@@ -119,6 +142,20 @@ export function ReviewsList({
       <div className="flex items-center justify-end gap-1">
         <button
           type="button"
+          onClick={() => setShowMerged((value) => !value)}
+          aria-pressed={showMerged}
+          title={showMerged ? "Hide merged reviews" : "Show merged reviews"}
+          className={`inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium transition-colors ${
+            showMerged
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+              : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50"
+          }`}
+        >
+          <Filter className="h-3.5 w-3.5" />
+          {mergedCount > 0 ? `Merged (${mergedCount})` : "Merged"}
+        </button>
+        <button
+          type="button"
           onClick={() => setShowArchived((value) => !value)}
           aria-pressed={showArchived}
           title={showArchived ? "Hide archived reviews" : "Show archived reviews"}
@@ -137,13 +174,15 @@ export function ReviewsList({
         </button>
       </div>
 
-      {visible.length === 0 ? (
+          {visible.length === 0 ? (
         <p className="py-6 text-center text-[13px] text-zinc-500 dark:text-zinc-500">
           {showArchived
             ? "No archived reviews."
             : noData.length > 0
               ? "No reviews with GX data yet."
-              : "No open reviews."}
+              : showMerged
+                ? "No reviews."
+                : "No open reviews."}
         </p>
       ) : (
         <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
@@ -159,6 +198,11 @@ export function ReviewsList({
                     {bookmark.archived_at_ms != null ? (
                       <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
                         archived
+                      </span>
+                    ) : null}
+                    {isMergedReview(bookmark) ? (
+                      <span className="ml-1.5 text-[11px] font-normal text-zinc-500">
+                        merged
                       </span>
                     ) : null}
                   </span>

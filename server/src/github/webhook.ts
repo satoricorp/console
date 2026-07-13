@@ -55,6 +55,8 @@ type GitHubPullRequest = {
   title?: string;
   html_url?: string;
   state?: string;
+  merged?: boolean;
+  merged_at?: string | null;
   head?: { ref?: string; sha?: string };
   base?: { ref?: string; sha?: string };
 };
@@ -246,6 +248,10 @@ async function handleInstallationRepositories(
 
 async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const action = payload.action ?? "";
+  if (action === "closed") {
+    await handlePullRequestClosed(db, payload);
+    return;
+  }
   if (action !== "opened" && action !== "synchronize") {
     return;
   }
@@ -384,6 +390,82 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       ${now}
     )
   `;
+}
+
+/** Sync bookmark merge_status when a PR is closed on GitHub (merge or close). */
+async function handlePullRequestClosed(db: postgres.Sql, payload: WebhookPayload) {
+  const installationId = payload.installation?.id;
+  const repo = payload.repository;
+  const pr = payload.pull_request;
+  if (
+    typeof installationId !== "number" ||
+    !repo?.full_name ||
+    typeof pr?.number !== "number"
+  ) {
+    return;
+  }
+
+  const orgId = await resolveOrgIdForInstallation(db, installationId);
+  if (!orgId) {
+    return;
+  }
+
+  const mergeStatus = pr.merged === true ? "merged" : "closed";
+  const now = Date.now();
+  const branchName = pr.head?.ref ?? null;
+
+  const updated =
+    mergeStatus === "merged"
+      ? await db`
+          UPDATE bookmarks
+          SET
+            merge_status = 'merged',
+            merged_at_ms = ${
+              (typeof pr.merged_at === "string" ? Date.parse(pr.merged_at) : now) ||
+              now
+            },
+            github_pr_url = COALESCE(bookmarks.github_pr_url, ${pr.html_url ?? null}),
+            github_pr_number = COALESCE(bookmarks.github_pr_number, ${pr.number}),
+            updated_at_ms = ${now}
+          WHERE org_id = ${orgId}
+            AND repo_full_name = ${repo.full_name}
+            AND (
+              github_pr_number = ${pr.number}
+              OR (
+                github_pr_number IS NULL
+                AND ${branchName}::text IS NOT NULL
+                AND branch_name = ${branchName}
+              )
+            )
+        `
+      : await db`
+          UPDATE bookmarks
+          SET
+            merge_status = 'closed',
+            github_pr_url = COALESCE(bookmarks.github_pr_url, ${pr.html_url ?? null}),
+            github_pr_number = COALESCE(bookmarks.github_pr_number, ${pr.number}),
+            updated_at_ms = ${now}
+          WHERE org_id = ${orgId}
+            AND repo_full_name = ${repo.full_name}
+            AND (
+              github_pr_number = ${pr.number}
+              OR (
+                github_pr_number IS NULL
+                AND ${branchName}::text IS NOT NULL
+                AND branch_name = ${branchName}
+              )
+            )
+        `;
+
+  if (updated.count === 0) {
+    console.info("PR closed webhook: no bookmark matched", {
+      orgId,
+      repo: repo.full_name,
+      prNumber: pr.number,
+      branchName,
+      mergeStatus,
+    });
+  }
 }
 
 async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload) {

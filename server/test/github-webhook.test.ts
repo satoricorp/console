@@ -564,6 +564,78 @@ describeDb("GitHub webhook", () => {
     expect(updatedRule.status).toBe("retired");
   });
 
+  test("pull_request closed with merged=true sets bookmark merge_status", async () => {
+    const db = getSql();
+    await db`
+      UPDATE bookmarks
+      SET merge_status = 'open', merged_at_ms = NULL
+      WHERE id = ${bookmarkId}
+    `;
+
+    const mergedAt = "2026-07-12T18:00:00.000Z";
+    const res = await postWebhook("pull_request", {
+      action: "closed",
+      installation: { id: INSTALLATION_ID },
+      repository: {
+        id: 999001,
+        full_name: REPO_FULL_NAME,
+        name: "gx",
+        owner: { login: "acme" },
+      },
+      pull_request: {
+        number: PR_NUMBER,
+        title: "Add webhook",
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER}`,
+        merged: true,
+        merged_at: mergedAt,
+        head: { ref: "feat/webhook", sha: "abc123" },
+        base: { ref: "main", sha: "def456" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const [row] = await db<{ merge_status: string; merged_at_ms: number | null }[]>`
+      SELECT merge_status, merged_at_ms FROM bookmarks WHERE id = ${bookmarkId}
+    `;
+    expect(row?.merge_status).toBe("merged");
+    expect(row?.merged_at_ms).toBe(Date.parse(mergedAt));
+  });
+
+  test("pull_request closed without merge sets bookmark merge_status to closed", async () => {
+    const db = getSql();
+    await db`
+      UPDATE bookmarks
+      SET merge_status = 'open', merged_at_ms = NULL
+      WHERE id = ${bookmarkId}
+    `;
+
+    const res = await postWebhook("pull_request", {
+      action: "closed",
+      installation: { id: INSTALLATION_ID },
+      repository: {
+        id: 999001,
+        full_name: REPO_FULL_NAME,
+        name: "gx",
+        owner: { login: "acme" },
+      },
+      pull_request: {
+        number: PR_NUMBER,
+        title: "Add webhook",
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${PR_NUMBER}`,
+        merged: false,
+        head: { ref: "feat/webhook", sha: "abc123" },
+        base: { ref: "main", sha: "def456" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const [row] = await db<{ merge_status: string; merged_at_ms: number | null }[]>`
+      SELECT merge_status, merged_at_ms FROM bookmarks WHERE id = ${bookmarkId}
+    `;
+    expect(row?.merge_status).toBe("closed");
+    expect(row?.merged_at_ms).toBeNull();
+  });
+
   test("push webhook enqueues incremental index without blocking", async () => {
     process.env.OPENAI_API_KEY = "test-openai-key";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf-key";
