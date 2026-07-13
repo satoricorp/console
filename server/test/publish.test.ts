@@ -74,6 +74,12 @@ describeDb("publish artifact upsert", () => {
           headers: { "Content-Type": "application/json" },
         });
       }
+      if (url.match(new RegExp(`/repos/.+/pulls/${prNumber}$`))) {
+        return new Response(
+          JSON.stringify({ number: prNumber, body: "" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       if (url.includes(`/issues/${prNumber}/comments`)) {
         return new Response(JSON.stringify({ id: 9101 }), {
           status: 201,
@@ -238,6 +244,12 @@ describeDb("publish artifact upsert", () => {
       if (url.includes("/pulls?") && url.includes("state=open")) {
         return new Response(
           JSON.stringify([{ number: prNumber, html_url: prUrl }]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.match(new RegExp(`/repos/.+/pulls/${prNumber}$`))) {
+        return new Response(
+          JSON.stringify({ number: prNumber, body: "Author wrote this first." }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }

@@ -80,6 +80,23 @@ describeDb("GitHub webhook", () => {
         });
       }
 
+      if (url.match(/\/repos\/[^/]+\/[^/]+\/pulls\/\d+$/)) {
+        if (init?.method === "PATCH") {
+          return new Response(JSON.stringify({ id: PR_NUMBER, number: PR_NUMBER }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            id: PR_NUMBER,
+            number: PR_NUMBER,
+            body: "Please review the webhook path.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       if (url.includes("/issues/") && url.includes("/comments")) {
         return new Response(
           JSON.stringify({ id: 9001, html_url: "https://github.com/acme/gx/pull/17#issuecomment-9001" }),
@@ -280,7 +297,7 @@ describeDb("GitHub webhook", () => {
     delete process.env.TURBOPUFFER_API_KEY;
   });
 
-  test("pull_request opened generates summary and posts comment", async () => {
+  test("pull_request opened generates summary and updates PR body", async () => {
     const res = await postWebhook("pull_request", {
       action: "opened",
       installation: { id: INSTALLATION_ID },
@@ -301,7 +318,35 @@ describeDb("GitHub webhook", () => {
 
     expect(res.status).toBe(200);
     expect(fetchCalls.some((c) => c.url.includes("/access_tokens"))).toBe(true);
-    expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(true);
+    expect(
+      fetchCalls.some(
+        (c) =>
+          c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) &&
+          (c.init?.method ?? "GET") === "GET",
+      ),
+    ).toBe(true);
+    expect(
+      fetchCalls.some(
+        (c) =>
+          c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) && c.init?.method === "PATCH",
+      ),
+    ).toBe(true);
+    expect(
+      fetchCalls.some(
+        (c) => c.url.includes("/issues/17/comments") && c.init?.method === "POST",
+      ),
+    ).toBe(false);
+
+    const patchCall = fetchCalls.find(
+      (c) =>
+        c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) && c.init?.method === "PATCH",
+    );
+    const patchBody = JSON.parse(String(patchCall?.init?.body ?? "{}")) as {
+      body?: string;
+    };
+    expect(patchBody.body).toContain("<!-- gx:pr-summary:v1 -->");
+    expect(patchBody.body).toContain("## Author Notes");
+    expect(patchBody.body).toContain("Please review the webhook path.");
 
     const db = getSql();
     const summaries = await db<{ content: string }[]>`
@@ -320,7 +365,7 @@ describeDb("GitHub webhook", () => {
       LIMIT 1
     `;
     expect(comments.length).toBe(1);
-    expect(Number(comments[0]?.github_comment_id)).toBe(9001);
+    expect(comments[0]?.github_comment_id).toBeNull();
   });
 
   test("pull_request opened with expired trial posts nothing and logs skip", async () => {
@@ -354,6 +399,12 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
     expect(fetchCalls.some((c) => c.url.includes("/issues/"))).toBe(false);
     expect(fetchCalls.some((c) => c.url.includes("/comments"))).toBe(false);
+    expect(
+      fetchCalls.some(
+        (c) =>
+          c.url.match(/\/repos\/.+\/pulls\/\d+$/) && c.init?.method === "PATCH",
+      ),
+    ).toBe(false);
 
     const skips = await db<
       { reason: string; source: string; pr_number: number | null }[]

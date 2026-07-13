@@ -7,9 +7,9 @@ import {
   type ContextSnippet,
 } from "../../context/broker";
 
-export const PR_SUMMARY_SYSTEM_PROMPT = `You write PR Summaries for GitHub pull request comments.
+export const PR_SUMMARY_SYSTEM_PROMPT = `You write PR Summaries for GitHub pull request descriptions.
 
-GX Cloud posts exactly one summary comment per PR. Match this rich format (same shape as the former CLI PR body summary):
+GX Cloud writes exactly one rich summary into the PR body. Match this format:
 
 > 👀 **Quick scan** — <one short triage reason>
 
