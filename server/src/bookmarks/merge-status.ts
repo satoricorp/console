@@ -30,9 +30,10 @@ export function parseGithubPrNumber(
 }
 
 /** Prefer stored PR number; fall back to parsing github_pr_url. */
-export function resolveGithubPrNumber(
-  bookmark: Pick<BookmarkMergeFields, "github_pr_number" | "github_pr_url">,
-): number | null {
+export function resolveGithubPrNumber(bookmark: {
+  github_pr_number: number | null;
+  github_pr_url?: string | null;
+}): number | null {
   if (bookmark.github_pr_number != null) {
     return Number(bookmark.github_pr_number);
   }
