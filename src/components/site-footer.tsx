@@ -39,7 +39,7 @@ export function SiteFooter() {
         <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
           <div className="flex w-fit max-w-xs flex-col items-start gap-4 text-left">
             <p className="max-w-[16rem] text-sm leading-6 text-zinc-600">
-              Version Control for Agents
+              Simplified Code Review
             </p>
             <GxLogo variant="footer" />
           </div>
@@ -97,25 +97,43 @@ export function SiteFooter() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <p className={sectionLabelClassName}>Company</p>
-              <ul className="space-y-2">
-                <li>
-                  <a
-                    href="https://satori.sh"
-                    target="_blank"
-                    rel="noreferrer"
-                    className={linkClassName}
-                  >
-                    Website
-                  </a>
-                </li>
-                <li>
-                  <a href={SUPPORT_EMAIL_URL} className={linkClassName}>
-                    Say hi, email us
-                  </a>
-                </li>
-              </ul>
+            <div className="space-y-8">
+              <div className="space-y-3">
+                <p className={sectionLabelClassName}>Company</p>
+                <ul className="space-y-2">
+                  <li>
+                    <a
+                      href="https://satori.sh"
+                      target="_blank"
+                      rel="noreferrer"
+                      className={linkClassName}
+                    >
+                      Website
+                    </a>
+                  </li>
+                  <li>
+                    <a href={SUPPORT_EMAIL_URL} className={linkClassName}>
+                      Say hi, email us
+                    </a>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <p className={sectionLabelClassName}>Legal</p>
+                <ul className="space-y-2">
+                  <li>
+                    <Link href="/terms" className={linkClassName}>
+                      Terms of Service
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/privacy" className={linkClassName}>
+                      Privacy Policy
+                    </Link>
+                  </li>
+                </ul>
+              </div>
             </div>
           </nav>
         </div>
