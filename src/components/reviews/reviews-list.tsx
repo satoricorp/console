@@ -167,9 +167,11 @@ async function setArchived(bookmarkId: string, archived: boolean) {
 export function ReviewsList({
   initialBookmarks,
   initialFilter = "open",
+  demoMode = false,
 }: {
   initialBookmarks: ReviewListItem[];
   initialFilter?: ReviewsListFilter;
+  demoMode?: boolean;
 }) {
   const [filter, setFilter] = useState<ReviewsListFilter>(initialFilter);
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
@@ -178,13 +180,10 @@ export function ReviewsList({
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (filter === initialFilter) {
-      setBookmarks(initialBookmarks);
-      return;
-    }
+    if (demoMode) return;
+    if (filter === initialFilter) return;
 
     let cancelled = false;
-    setListLoading(true);
     void fetchBookmarks(filter)
       .then((rows) => {
         if (!cancelled) setBookmarks(rows);
@@ -199,7 +198,7 @@ export function ReviewsList({
     return () => {
       cancelled = true;
     };
-  }, [filter, initialBookmarks, initialFilter]);
+  }, [demoMode, filter, initialBookmarks, initialFilter]);
 
   const { visible, noData } = useMemo(
     () => partitionReviewsList(bookmarks, { filter }),
@@ -209,6 +208,15 @@ export function ReviewsList({
 
   const filterLabel =
     FILTER_OPTIONS.find((option) => option.value === filter)?.label ?? "Open";
+
+  function changeFilter(value: ReviewsListFilter) {
+    setFilter(value);
+    if (value === initialFilter) {
+      setBookmarks(initialBookmarks);
+    } else {
+      setListLoading(true);
+    }
+  }
 
   async function toggleArchive(bookmark: ReviewListItem) {
     const nextArchived = bookmark.archived_at_ms == null;
@@ -239,37 +247,41 @@ export function ReviewsList({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              title={`Filter: ${filterLabel}`}
-              aria-label={`Filter reviews by status, currently ${filterLabel}`}
-              className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950 data-[state=open]:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 dark:data-[state=open]:text-zinc-50"
-            >
-              <Filter className="h-3.5 w-3.5" />
-              <span className="sr-only">{filterLabel}</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[8.5rem]">
-            <DropdownMenuRadioGroup
-              value={filter}
-              onValueChange={(value) => setFilter(value as ReviewsListFilter)}
-            >
-              {FILTER_OPTIONS.map((option) => (
-                <DropdownMenuRadioItem
-                  key={option.value}
-                  value={option.value}
-                  className="text-[12px]"
-                >
-                  {option.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {demoMode ? null : (
+        <div className="flex items-center justify-end gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                title={`Filter: ${filterLabel}`}
+                aria-label={`Filter reviews by status, currently ${filterLabel}`}
+                className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:text-zinc-950 data-[state=open]:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 dark:data-[state=open]:text-zinc-50"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                <span className="sr-only">{filterLabel}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[8.5rem]">
+              <DropdownMenuRadioGroup
+                value={filter}
+                onValueChange={(value) =>
+                  changeFilter(value as ReviewsListFilter)
+                }
+              >
+                {FILTER_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem
+                    key={option.value}
+                    value={option.value}
+                    className="text-[12px]"
+                  >
+                    {option.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       {listLoading ? (
         <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-zinc-500">
@@ -291,7 +303,7 @@ export function ReviewsList({
                 {group.bookmarks.map((bookmark) => (
                   <li key={bookmark.id} className="flex items-stretch gap-1">
                     <Link
-                      href={`/reviews/${bookmark.id}`}
+                      href={`/reviews/${bookmark.id}${demoMode ? "?demo=1" : ""}`}
                       onClick={() => setLoadingId(bookmark.id)}
                       className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
                     >
@@ -340,24 +352,26 @@ export function ReviewsList({
                         </span>
                       </span>
                     </Link>
-                    <button
-                      type="button"
-                      disabled={pendingId === bookmark.id}
-                      onClick={() => void toggleArchive(bookmark)}
-                      title={
-                        bookmark.archived_at_ms != null
-                          ? "Unarchive review"
-                          : "Archive review"
-                      }
-                      className="inline-flex shrink-0 cursor-pointer items-center self-center px-2 py-2 text-zinc-500 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-500 dark:hover:text-zinc-50"
-                    >
-                      <Archive className="h-3.5 w-3.5" />
-                      <span className="sr-only">
-                        {bookmark.archived_at_ms != null
-                          ? "Unarchive"
-                          : "Archive"}
-                      </span>
-                    </button>
+                    {demoMode ? null : (
+                      <button
+                        type="button"
+                        disabled={pendingId === bookmark.id}
+                        onClick={() => void toggleArchive(bookmark)}
+                        title={
+                          bookmark.archived_at_ms != null
+                            ? "Unarchive review"
+                            : "Archive review"
+                        }
+                        className="inline-flex shrink-0 cursor-pointer items-center self-center px-2 py-2 text-zinc-500 transition-colors hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-500 dark:hover:text-zinc-50"
+                      >
+                        <Archive className="h-3.5 w-3.5" />
+                        <span className="sr-only">
+                          {bookmark.archived_at_ms != null
+                            ? "Unarchive"
+                            : "Archive"}
+                        </span>
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

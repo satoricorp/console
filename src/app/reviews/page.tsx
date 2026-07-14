@@ -7,9 +7,33 @@ import {
 import { ReviewsEmptyState } from "@/components/reviews/reviews-empty-state";
 import { SignInLink } from "@/components/sign-in-link";
 import { fetchAuthQuery } from "@/lib/auth-server";
+import { DEMO_REVIEW_LIST } from "@/lib/demo-review";
 import { gxApiJson } from "@/lib/gx-api-server";
 
-export default async function ReviewsPage() {
+export default async function ReviewsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string | string[] }>;
+}) {
+  const demoMode = (await searchParams).demo === "1";
+  if (demoMode) {
+    return (
+      <AppPage>
+        <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
+          <div className="space-y-1">
+            <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+              Reviews
+            </h1>
+            <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+              Published changes, grouped by repository.
+            </p>
+          </div>
+          <ReviewsList initialBookmarks={DEMO_REVIEW_LIST} demoMode />
+        </div>
+      </AppPage>
+    );
+  }
+
   const viewer = await fetchAuthQuery(api.profile.getViewer, {});
 
   if (!viewer?.id) {

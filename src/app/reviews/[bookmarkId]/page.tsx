@@ -1,5 +1,6 @@
 import { api } from "../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
+import { getDemoReview } from "@/lib/demo-review";
 import { gxApiJson } from "@/lib/gx-api-server";
 import type { ReviewResponse } from "@/lib/reviews-client";
 import { ReviewView } from "./review-view";
@@ -7,10 +8,23 @@ import { SignInLink } from "@/components/sign-in-link";
 
 export default async function ReviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ bookmarkId: string }>;
+  searchParams: Promise<{ demo?: string | string[] }>;
 }) {
   const { bookmarkId } = await params;
+  const demoMode = (await searchParams).demo === "1";
+  if (demoMode) {
+    return (
+      <ReviewView
+        bookmarkId={bookmarkId}
+        initial={getDemoReview(bookmarkId)}
+        demoMode
+      />
+    );
+  }
+
   const viewer = await fetchAuthQuery(api.profile.getViewer, {});
 
   if (!viewer?.id) {

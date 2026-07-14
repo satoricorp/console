@@ -26,7 +26,13 @@ function riskDot(level: string | null): string {
   return "var(--gx-faint)";
 }
 
-export function ReviewSiteHeader({ review }: { review: ReviewResponse }) {
+export function ReviewSiteHeader({
+  review,
+  demoMode = false,
+}: {
+  review: ReviewResponse;
+  demoMode?: boolean;
+}) {
   const [org, repo] = review.bookmark.repoFullName.split("/");
   const id = review.bookmark.id;
   const shortId =
@@ -38,7 +44,7 @@ export function ReviewSiteHeader({ review }: { review: ReviewResponse }) {
         gx
       </Link>
       <div className="crumb">
-        <Link href="/reviews">Reviews</Link>
+        <Link href={demoMode ? "/reviews?demo=1" : "/reviews"}>Reviews</Link>
         <span className="sep">/</span>
         <span>{org}</span>
         <span className="sep">/</span>

@@ -21,15 +21,17 @@ import "@/components/reviews/reviews.css";
 export function ReviewView({
   bookmarkId,
   initial,
+  demoMode = false,
 }: {
   bookmarkId: string;
   initial: ReviewResponse | null;
+  demoMode?: boolean;
 }) {
   const [review, setReview] = useState<ReviewResponse | null>(initial);
   const [error, setError] = useState<string | null>(
     initial ? null : "Review not found",
   );
-  const [loading, setLoading] = useState(!initial);
+  const [loading, setLoading] = useState(!initial && !demoMode);
 
   const reload = useCallback(async () => {
     try {
@@ -44,19 +46,36 @@ export function ReviewView({
   }, [bookmarkId]);
 
   useEffect(() => {
-    if (!initial) void reload();
-  }, [initial, reload]);
+    if (initial || demoMode) return;
+    let cancelled = false;
+    void fetchReview(bookmarkId)
+      .then((next) => {
+        if (cancelled) return;
+        setReview(next);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load review");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmarkId, demoMode, initial]);
 
   const pending =
     review?.plan.status === "pending" || review?.plan.status === "missing";
 
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || demoMode) return;
     const id = window.setInterval(() => {
       void reload();
     }, 4000);
     return () => window.clearInterval(id);
-  }, [pending, reload]);
+  }, [demoMode, pending, reload]);
 
   if (loading && !review) {
     return (
@@ -75,7 +94,10 @@ export function ReviewView({
           <h1 style={{ fontSize: 19, fontWeight: 650 }}>Review not found</h1>
           <p style={{ color: "var(--gx-muted)", marginTop: 8 }}>{error}</p>
           <p style={{ marginTop: 16 }}>
-            <Link href="/reviews" style={{ color: "var(--gx-muted)" }}>
+            <Link
+              href={demoMode ? "/reviews?demo=1" : "/reviews"}
+              style={{ color: "var(--gx-muted)" }}
+            >
               ← Reviews
             </Link>
           </p>
@@ -91,7 +113,7 @@ export function ReviewView({
 
   return (
     <div className="gx-review">
-      <ReviewSiteHeader review={review} />
+      <ReviewSiteHeader review={review} demoMode={demoMode} />
       <main className="wrap">
         <ReviewHeader review={review} />
 
@@ -142,7 +164,9 @@ export function ReviewView({
           </>
         ) : null}
       </main>
-      <ApproveMergeBar review={review} onMerged={() => void reload()} />
+      {demoMode ? null : (
+        <ApproveMergeBar review={review} onMerged={() => void reload()} />
+      )}
     </div>
   );
 }
