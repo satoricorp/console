@@ -10,6 +10,7 @@ import {
 import { loadReviewPlanContext } from "./context";
 import type { ReviewPlan, UsageBreakdown } from "./types";
 import {
+  isCurrentReviewPlan,
   parseAndValidateReviewPlan,
   scoreReviewPlanCandidate,
 } from "./validate";
@@ -60,7 +61,11 @@ export async function generateReviewPlan(
         AND head_commit_id = ${input.headCommitId}
       LIMIT 1
     `;
-    if (existing?.status === "ready" && existing.plan) {
+    if (
+      existing?.status === "ready" &&
+      existing.plan &&
+      isCurrentReviewPlan(existing.plan)
+    ) {
       return {
         status: "skipped",
         planId: existing.id,

@@ -7,7 +7,9 @@ import {
 import { splitUnifiedDiff, sliceFilePatch, newLineRanges } from "../src/review-plan/patch";
 import { buildUsageBreakdown, parseUsageFromBody } from "../src/review-plan/usage";
 import {
+  isCurrentReviewPlan,
   parseAndValidateReviewPlan,
+  REVIEW_PLAN_HEURISTIC_VERSION,
   scoreReviewPlanCandidate,
 } from "../src/review-plan/validate";
 import { classifyFileForReview } from "../src/review-plan/priority";
@@ -221,6 +223,29 @@ ${additions}
     expect(sliced.split("\n").length).toBeLessThan(25);
   });
 
+  test("bounds broad and file-level anchors to one focused chunk", () => {
+    const additions = Array.from(
+      { length: 200 },
+      (_, index) => `+line-${index + 1}`,
+    ).join("\n");
+    const [file] = splitUnifiedDiff(`diff --git a/src/large.ts b/src/large.ts
+new file mode 100644
+--- /dev/null
++++ b/src/large.ts
+@@ -0,0 +1,200 @@
+${additions}
+`);
+
+    for (const sliced of [
+      sliceFilePatch(file!, 0, 200),
+      sliceFilePatch(file!),
+    ]) {
+      expect(sliced).toContain("+line-1");
+      expect(sliced).not.toContain("+line-40");
+      expect(sliced.split("\n").length).toBeLessThan(40);
+    }
+  });
+
   test("wraps GitHub PR file patches into parseable unified diffs", () => {
     const unified = githubFilesToUnifiedDiff([
       {
@@ -385,6 +410,41 @@ describe("parseAndValidateReviewPlan", () => {
     // line range outside hunk → downgraded to file
     expect(result.plan!.notableChanges[2]!.anchorConfidence).toBe("file");
     expect(result.plan!.safeToSkim.length).toBeGreaterThanOrEqual(0);
+  });
+
+  test("downgrades broad and zero-based anchors to file confidence", () => {
+    const ctx = stubCtx(["src/a.ts"]);
+    const result = parseAndValidateReviewPlan(
+      JSON.stringify({
+        narrative: { summary: "x", why: "y", attributionSources: [] },
+        notableChanges: [
+          {
+            rank: 1,
+            category: "architecture",
+            title: "Broad file",
+            whyItMatters: "Needs focus.",
+            anchor: { file: "src/a.ts", lineStart: 0, lineEnd: 400 },
+            anchorConfidence: "exact",
+          },
+        ],
+        safeToSkim: [],
+      }),
+      ctx,
+    );
+
+    expect(result.plan?.notableChanges[0]?.anchorConfidence).toBe("file");
+    expect(result.plan?.notableChanges[0]?.anchor.lineStart).toBeUndefined();
+    expect(result.plan?.notableChanges[0]?.anchor.lineEnd).toBeUndefined();
+    expect(result.plan?.heuristicVersion).toBe(
+      REVIEW_PLAN_HEURISTIC_VERSION,
+    );
+    expect(isCurrentReviewPlan(result.plan)).toBe(true);
+    expect(
+      isCurrentReviewPlan({
+        ...result.plan!,
+        heuristicVersion: undefined,
+      }),
+    ).toBe(false);
   });
 
   test("drops invalid anchors without forcing a critical change", () => {
