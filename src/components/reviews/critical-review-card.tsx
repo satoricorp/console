@@ -32,6 +32,22 @@ function countDiffStats(patch: string): { adds: number; dels: number } {
   return { adds, dels };
 }
 
+export function findNotablePatch(
+  patches: ReviewResponse["notablePatches"],
+  change: ReviewPlan["notableChanges"][number],
+) {
+  return (
+    patches.find((patch) => patch.rank === change.rank) ??
+    patches.find(
+      (patch) =>
+        patch.file === change.anchor.file &&
+        (!patch.revisionChangeId ||
+          !change.anchor.revisionChangeId ||
+          patch.revisionChangeId === change.anchor.revisionChangeId),
+    )
+  );
+}
+
 export function CriticalReviewSection({
   plan,
   review,
@@ -40,7 +56,6 @@ export function CriticalReviewSection({
   review: ReviewResponse;
 }) {
   const total = plan.notableChanges.length;
-  const patchByRank = new Map(review.notablePatches.map((patch) => [patch.rank, patch]));
   const headSha =
     review.bookmark.headCommitId || review.bookmark.remoteHeadSha || "HEAD";
   const repo = review.bookmark.repoFullName;
@@ -61,7 +76,7 @@ export function CriticalReviewSection({
           </p>
         ) : null}
         {plan.notableChanges.map((change) => {
-          const patch = patchByRank.get(change.rank);
+          const patch = findNotablePatch(review.notablePatches, change);
           const stats = patch ? countDiffStats(patch.patch) : { adds: 0, dels: 0 };
           const lineStart = change.anchor.lineStart;
           const lineEnd = change.anchor.lineEnd;

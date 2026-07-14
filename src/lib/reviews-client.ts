@@ -128,7 +128,7 @@ export type ReviewResponse = {
     baseBranchName: string | null;
   }>;
   notablePatches: Array<{
-    rank: number;
+    rank?: number;
     file: string;
     revisionChangeId?: string;
     patch: string;

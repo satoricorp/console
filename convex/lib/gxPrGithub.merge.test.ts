@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mergeBlockedReason, type GithubPullDetails } from "./gxPrGithub";
+import {
+  classifyPullStatus,
+  mergeBlockedReason,
+  type GithubPullDetails,
+} from "./gxPrGithub";
 
 function pull(
   overrides: Partial<GithubPullDetails> &
@@ -18,8 +22,23 @@ function pull(
 }
 
 describe("mergeBlockedReason", () => {
-  test("does not block while GitHub is still computing mergeable", () => {
-    expect(mergeBlockedReason(pull({ number: 12, mergeable: null }))).toBeNull();
+  test("surfaces GitHub DIRTY status as merge conflicts", () => {
+    expect(
+      classifyPullStatus(
+        pull({ number: 12, mergeable: false, mergeable_state: "unknown" }),
+        "DIRTY",
+      ),
+    ).toEqual({
+      health: "dirty",
+      label: "Dirty",
+      canReconcile: true,
+    });
+  });
+
+  test("blocks while GitHub is still computing mergeability", () => {
+    expect(
+      mergeBlockedReason(pull({ number: 12, mergeable: null })),
+    ).toMatch(/still checking/);
   });
 
   test("blocks when mergeable is false due to conflicts", () => {
