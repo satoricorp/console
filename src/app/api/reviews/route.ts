@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { gxApiRequest } from "@/lib/gx-api-server";
 
