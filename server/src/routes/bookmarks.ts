@@ -60,6 +60,7 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   const repoFullName = c.req.query("repo_full_name")?.trim();
   const includeArchived = c.req.query("include_archived") === "1";
   const archivedOnly = mergeStatus === "archived";
+  const githubPrOnly = c.req.query("github_pr_only") === "1";
 
   if (
     mergeStatus &&
@@ -118,6 +119,7 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
             : db``
       }
       ${repoFullName ? db`AND b.repo_full_name = ${repoFullName}` : db``}
+      ${githubPrOnly ? db`AND b.github_pr_number IS NOT NULL` : db``}
       ${
         archivedOnly || includeArchived
           ? db``

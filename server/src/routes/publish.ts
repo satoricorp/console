@@ -242,21 +242,23 @@ async function reconcilePublishBookmarkWithPullRequest(
 ): Promise<BookmarkRow> {
   let prNumber = input.githubPrNumber;
   let prUrl = input.githubPrUrl;
-
-  if (prNumber === null) {
-    const lookedUp = await lookupOpenPullRequestForBranch(
-      db,
-      input.bookmark.repo_full_name,
-      input.bookmark.branch_name,
-    );
-    if (!lookedUp) {
-      return input.bookmark;
-    }
+  const lookedUp = await lookupOpenPullRequestForBranch(
+    db,
+    input.bookmark.repo_full_name,
+    input.bookmark.branch_name,
+  );
+  if (lookedUp) {
     prNumber = lookedUp.number;
     prUrl = lookedUp.htmlUrl;
   }
 
-  if (input.bookmark.github_pr_number === prNumber) {
+  if (prNumber === null) {
+    return input.bookmark;
+  }
+  if (
+    input.bookmark.github_pr_number === prNumber &&
+    (!lookedUp || input.bookmark.merge_status === "open")
+  ) {
     return input.bookmark;
   }
 
@@ -293,6 +295,14 @@ async function reconcilePublishBookmarkWithPullRequest(
     UPDATE bookmarks
     SET github_pr_number = ${prNumber},
         github_pr_url = COALESCE(${prUrl}, bookmarks.github_pr_url),
+        merge_status = CASE
+          WHEN ${lookedUp !== null} THEN 'open'
+          ELSE bookmarks.merge_status
+        END,
+        merged_at_ms = CASE
+          WHEN ${lookedUp !== null} THEN NULL
+          ELSE bookmarks.merged_at_ms
+        END,
         updated_at_ms = ${Date.now()}
     WHERE id = ${input.bookmark.id}
     RETURNING *
@@ -701,15 +711,7 @@ async function upsertBookmark(
         head_commit_id = ${args.headCommitId},
         github_pr_url = COALESCE(${args.githubPrUrl}, bookmarks.github_pr_url),
         remote_head_sha = COALESCE(${args.remoteHeadSha}, bookmarks.remote_head_sha),
-        updated_at_ms = ${args.updatedAtMs},
-        merge_status = CASE
-          WHEN bookmarks.merge_status = 'closed' THEN 'open'
-          ELSE bookmarks.merge_status
-        END,
-        merged_at_ms = CASE
-          WHEN bookmarks.merge_status = 'closed' THEN NULL
-          ELSE bookmarks.merged_at_ms
-        END
+        updated_at_ms = ${args.updatedAtMs}
       WHERE user_id = ${args.userId}
         AND repo_full_name = ${args.repoFullName}
         AND github_pr_number = ${args.githubPrNumber}
@@ -764,15 +766,7 @@ async function upsertBookmark(
         github_pr_number = COALESCE(EXCLUDED.github_pr_number, bookmarks.github_pr_number),
         remote_head_sha = COALESCE(EXCLUDED.remote_head_sha, bookmarks.remote_head_sha),
         title = COALESCE(bookmarks.title, EXCLUDED.title),
-        updated_at_ms = EXCLUDED.updated_at_ms,
-        merge_status = CASE
-          WHEN bookmarks.merge_status = 'closed' THEN 'open'
-          ELSE bookmarks.merge_status
-        END,
-        merged_at_ms = CASE
-          WHEN bookmarks.merge_status = 'closed' THEN NULL
-          ELSE bookmarks.merged_at_ms
-        END
+        updated_at_ms = EXCLUDED.updated_at_ms
       RETURNING *
     `;
     if (!row) throw new Error("Failed to upsert bookmark");
@@ -817,15 +811,7 @@ async function upsertBookmark(
       github_pr_number = COALESCE(EXCLUDED.github_pr_number, bookmarks.github_pr_number),
       remote_head_sha = COALESCE(EXCLUDED.remote_head_sha, bookmarks.remote_head_sha),
       title = COALESCE(bookmarks.title, EXCLUDED.title),
-      updated_at_ms = EXCLUDED.updated_at_ms,
-      merge_status = CASE
-        WHEN bookmarks.merge_status = 'closed' THEN 'open'
-        ELSE bookmarks.merge_status
-      END,
-      merged_at_ms = CASE
-        WHEN bookmarks.merge_status = 'closed' THEN NULL
-        ELSE bookmarks.merged_at_ms
-      END
+      updated_at_ms = EXCLUDED.updated_at_ms
     RETURNING *
   `;
   if (!row) throw new Error("Failed to upsert bookmark");

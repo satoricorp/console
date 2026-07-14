@@ -6,7 +6,11 @@ export type AttributionSourceKind =
   | "pr-payload";
 
 export type NotableCategory =
+  | "behavior"
+  | "failure-path"
+  | "boundary"
   | "architecture"
+  // Legacy values retained for stored plans.
   | "pattern"
   | "blast-radius"
   | "other";
@@ -121,6 +125,7 @@ export type ReviewChangeSummary = {
 };
 
 export type NotablePatchSlice = {
+  rank: number;
   file: string;
   revisionChangeId?: string;
   patch: string;

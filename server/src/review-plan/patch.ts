@@ -182,7 +182,10 @@ export function sliceFilePatch(
   if (lineStart == null || lineEnd == null || file.hunks.length === 0) {
     return file.text;
   }
-  const target = { start: lineStart, end: lineEnd };
+  const target = {
+    start: lineStart,
+    end: Math.min(lineEnd, lineStart + 79),
+  };
   const matching = file.hunks.filter((h) =>
     rangesIntersect(
       { start: h.newStart, end: h.newStart + Math.max(h.newLines, 1) - 1 },
@@ -203,7 +206,69 @@ export function sliceFilePatch(
       line.startsWith("rename"),
   );
 
-  return [...headerLines, ...matching.flatMap((h) => h.lines)].join("\n");
+  return [
+    ...headerLines,
+    ...matching.flatMap((hunk) => sliceHunk(hunk, target, 5)),
+  ].join("\n");
+}
+
+function sliceHunk(
+  hunk: UnifiedHunk,
+  target: { start: number; end: number },
+  contextLines: number,
+): string[] {
+  const displayStart = Math.max(hunk.newStart, target.start - contextLines);
+  const hunkEnd = hunk.newStart + Math.max(hunk.newLines, 1) - 1;
+  const displayEnd = Math.min(hunkEnd, target.end + contextLines);
+  const body = hunk.lines.slice(1);
+  let oldLine = hunk.oldStart;
+  let newLine = hunk.newStart;
+  let first = -1;
+  let last = -1;
+  let sliceOldStart = oldLine;
+  let sliceNewStart = newLine;
+
+  for (let index = 0; index < body.length; index += 1) {
+    const line = body[index] ?? "";
+    const position = newLine;
+    const inRange = position >= displayStart && position <= displayEnd;
+    if (inRange && line !== "\\ No newline at end of file") {
+      if (first < 0) {
+        first = index;
+        sliceOldStart = oldLine;
+        sliceNewStart = newLine;
+      }
+      last = index;
+    }
+    if (line.startsWith("+")) {
+      newLine += 1;
+    } else if (line.startsWith("-")) {
+      oldLine += 1;
+    } else if (line.startsWith(" ")) {
+      oldLine += 1;
+      newLine += 1;
+    }
+  }
+
+  if (first < 0 || last < first) return hunk.lines;
+  if (
+    body[last + 1] === "\\ No newline at end of file" &&
+    last + 1 < body.length
+  ) {
+    last += 1;
+  }
+  const selected = body.slice(first, last + 1);
+  let oldCount = 0;
+  let newCount = 0;
+  for (const line of selected) {
+    if (line.startsWith(" ") || line.startsWith("-")) oldCount += 1;
+    if (line.startsWith(" ") || line.startsWith("+")) newCount += 1;
+  }
+  const suffix = hunk.header.match(/@@[^@]*@@(.*)$/)?.[1] ?? "";
+  return [
+    `@@ -${sliceOldStart},${oldCount} +${sliceNewStart},${newCount} @@${suffix}`,
+    ...selected,
+  ];
 }
 
 export function capFilePatches(

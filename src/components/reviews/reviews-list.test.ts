@@ -3,6 +3,7 @@ import {
   groupReviewsByRepo,
   isGxSupportedReview,
   isNoDataReview,
+  isOpenGithubReview,
   partitionReviewsList,
   type ReviewListItem,
 } from "./reviews-list";
@@ -53,11 +54,46 @@ describe("isGxSupportedReview / isNoDataReview", () => {
   });
 });
 
+describe("isOpenGithubReview", () => {
+  test("requires an open status and GitHub PR number", () => {
+    expect(isOpenGithubReview(item({ id: "open", github_pr_number: 12 }))).toBe(
+      true,
+    );
+    expect(
+      isOpenGithubReview(
+        item({ id: "closed", merge_status: "closed", github_pr_number: 12 }),
+      ),
+    ).toBe(false);
+    expect(isOpenGithubReview(item({ id: "gx-only" }))).toBe(false);
+  });
+});
+
 describe("partitionReviewsList", () => {
-  const open = item({ id: "open" });
-  const merged = item({ id: "merged", merge_status: "merged" });
+  const open = item({ id: "open", github_pr_number: 1 });
+  const merged = item({
+    id: "merged",
+    merge_status: "merged",
+    github_pr_number: 2,
+  });
+  const closed = item({
+    id: "closed",
+    merge_status: "closed",
+    github_pr_number: 3,
+  });
+  const archived = item({
+    id: "archived",
+    github_pr_number: 4,
+    archived_at_ms: 100,
+  });
+  const archivedMerged = item({
+    id: "archived-merged",
+    merge_status: "merged",
+    github_pr_number: 5,
+    archived_at_ms: 100,
+  });
   const noData = item({
     id: "no-data",
+    github_pr_number: 6,
     plan_status: "failed",
     plan_error: "no_surviving_changes",
     file_count: 0,
@@ -69,13 +105,21 @@ describe("partitionReviewsList", () => {
     file_count: 0,
   });
 
-  test("splits GX-supported rows from no-data rows", () => {
-    const result = partitionReviewsList([open, merged, noData, webhookOnly]);
-    expect(result.visible.map((b) => b.id)).toEqual(["open", "merged"]);
+  test("shows only open GitHub PRs by default", () => {
+    const result = partitionReviewsList(
+      [open, merged, closed, archived, archivedMerged, noData, webhookOnly],
+      { filter: "open" },
+    );
+    expect(result.visible.map((b) => b.id)).toEqual(["open"]);
     expect(result.noData.map((b) => b.id).sort()).toEqual([
       "no-data",
       "webhook-only",
     ]);
+  });
+
+  test("keeps status-filtered non-open rows", () => {
+    const result = partitionReviewsList([merged], { filter: "merged" });
+    expect(result.visible.map((bookmark) => bookmark.id)).toEqual(["merged"]);
   });
 });
 

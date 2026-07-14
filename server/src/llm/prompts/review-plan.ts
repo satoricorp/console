@@ -19,10 +19,10 @@ Return JSON only (no markdown fences) matching this schema:
     ],
     "selfReportQuote": string   // short quote of agent self-report / first prompt
   },
-  "notableChanges": [           // 3–7 ranked items humans must review
+  "notableChanges": [           // 0–5 ranked hunks humans must review
     {
       "rank": number,
-      "category": "architecture"|"pattern"|"blast-radius"|"other",
+      "category": "behavior"|"failure-path"|"boundary"|"architecture",
       "title": string,
       "whyItMatters": string,   // 2–3 sentences
       "anchor": {
@@ -40,7 +40,11 @@ Return JSON only (no markdown fences) matching this schema:
 }
 
 Rules:
-- Prefer architecture, pattern, and blast-radius categories for notable changes.
+- Select a hunk only when it can change runtime behavior, disrupt a happy path, introduce a bug, cross a trust/data boundary, or alter the architecture.
+- Prioritize control flow and state transitions; error/fallback/retry/async behavior; auth, persistence, and network boundaries; then public runtime contracts and architecture.
+- Type-only declarations, generated files, lockfiles, formatting, docs, snapshots, import-only edits, and supporting tests belong in safeToSkim unless they change runtime validation, serialization, compatibility, or a safety invariant.
+- Select 0–5 focused hunks. Do not manufacture a minimum count. Low-risk changes may have no notableChanges.
+- Keep exact anchors narrow and function-level. Do not select an entire file or broad hunk when a smaller range contains the risky logic.
 - Every changed file that is not notable must appear in safeToSkim with a one-line reason.
 - Anchors must reference changed files; line numbers must fall inside the provided hunk new-line ranges when possible (anchorConfidence="exact").
 - Summary must restate the original intent and quote the self-report / first user prompt when available.
@@ -105,6 +109,15 @@ export function buildReviewPlanUserPrompt(ctx: ReviewPlanContext): string {
     }
   }
 
+  if (ctx.filePriorities?.length) {
+    lines.push("", "## Deterministic file priorities");
+    for (const priority of ctx.filePriorities) {
+      lines.push(
+        `- ${priority.file}: ${priority.priority} — ${priority.reason} executableRatio=${priority.executableLineRatio.toFixed(2)}`,
+      );
+    }
+  }
+
   if (ctx.contextBuckets && ctx.contextManifest) {
     lines.push("", formatContextManifestLine(ctx.contextManifest));
     lines.push(...formatBucketPromptSections(ctx.contextBuckets));
@@ -119,7 +132,7 @@ export function buildReviewPlanUserPrompt(ctx: ReviewPlanContext): string {
 
   lines.push(
     "",
-    "Write the review plan JSON now. Choose 3–7 notable changes that truly need human review.",
+    "Write the review plan JSON now. Choose only focused hunks that truly need human review; zero is valid.",
   );
   return lines.join("\n");
 }

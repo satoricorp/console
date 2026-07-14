@@ -6,6 +6,9 @@ export type AttributionSourceKind =
   | "pr-payload";
 
 export type NotableCategory =
+  | "behavior"
+  | "failure-path"
+  | "boundary"
   | "architecture"
   | "pattern"
   | "blast-radius"
@@ -125,6 +128,7 @@ export type ReviewResponse = {
     baseBranchName: string | null;
   }>;
   notablePatches: Array<{
+    rank: number;
     file: string;
     revisionChangeId?: string;
     patch: string;

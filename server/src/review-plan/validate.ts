@@ -3,6 +3,7 @@ import {
   type ReviewPlanContext,
 } from "./context";
 import { newLineRanges, rangesIntersect } from "./patch";
+import { classifyFileForReview } from "./priority";
 import type {
   AnchorConfidence,
   AttributionSource,
@@ -13,6 +14,9 @@ import type {
 } from "./types";
 
 const CATEGORIES: NotableCategory[] = [
+  "behavior",
+  "failure-path",
+  "boundary",
   "architecture",
   "pattern",
   "blast-radius",
@@ -54,8 +58,20 @@ function clampText(value: string, max: number): string {
 
 function parseCategory(value: unknown): NotableCategory {
   const s = asString(value)?.toLowerCase();
-  if (s === "architecture" || s === "pattern" || s === "blast-radius" || s === "other") {
+  if (
+    s === "behavior" ||
+    s === "failure-path" ||
+    s === "boundary" ||
+    s === "architecture" ||
+    s === "pattern" ||
+    s === "blast-radius" ||
+    s === "other"
+  ) {
     return s;
+  }
+  if (s === "failure_path" || s === "failure") return "failure-path";
+  if (s === "security" || s === "data-security" || s === "contract") {
+    return "boundary";
   }
   if (s === "blast_radius" || s === "blastradius") return "blast-radius";
   return "other";
@@ -125,6 +141,12 @@ export function parseAndValidateReviewPlan(
 
   const changedFiles = new Set(ctx.allFiles);
   const patches = filePatchIndex(ctx);
+  const priorityByFile = new Map(
+    (ctx.filePriorities ??
+      ctx.allFiles.map((file) =>
+        classifyFileForReview(file, patches.get(file)),
+      )).map((priority) => [priority.file, priority] as const),
+  );
 
   const notableRaw = Array.isArray(root.notableChanges)
     ? root.notableChanges
@@ -147,6 +169,9 @@ export function parseAndValidateReviewPlan(
     if (!file) continue;
     totalAnchors += 1;
     if (!changedFiles.has(file) && !patches.has(file)) {
+      continue;
+    }
+    if (priorityByFile.get(file)?.priority === "skim") {
       continue;
     }
 
@@ -222,19 +247,11 @@ export function parseAndValidateReviewPlan(
     });
   }
 
-  // Rank + cap 3–7
+  // Rank + cap focused review targets.
   notableChanges.sort((a, b) => a.rank - b.rank);
-  const capped = notableChanges.slice(0, 7).map((c, i) => ({ ...c, rank: i + 1 }));
-
-  if (capped.length < 1) {
-    return {
-      ok: false,
-      plan: null,
-      anchorValidationRate: totalAnchors > 0 ? exactOrFile / totalAnchors : 0,
-      categoryCoverage: 0,
-      error: "no_surviving_changes",
-    };
-  }
+  const capped = notableChanges
+    .slice(0, 5)
+    .map((change, index) => ({ ...change, rank: index + 1 }));
 
   const safeRaw = Array.isArray(root.safeToSkim)
     ? root.safeToSkim
@@ -256,7 +273,12 @@ export function parseAndValidateReviewPlan(
   for (const file of ctx.allFiles) {
     if (notableFiles.has(file)) continue;
     if (safeToSkim.some((s) => s.file === file)) continue;
-    safeToSkim.push({ file, reason: "Supporting change; low review priority." });
+    safeToSkim.push({
+      file,
+      reason:
+        priorityByFile.get(file)?.reason ??
+        "Supporting change; low review priority.",
+    });
   }
 
   const attrRaw = Array.isArray(narrativeRaw.attributionSources)
@@ -292,9 +314,16 @@ export function parseAndValidateReviewPlan(
   }));
 
   const categoriesUsed = new Set(capped.map((c) => c.category));
+  const currentCategories = CATEGORIES.filter(
+    (category) =>
+      category === "behavior" ||
+      category === "failure-path" ||
+      category === "boundary" ||
+      category === "architecture",
+  );
   const categoryCoverage =
-    CATEGORIES.filter((c) => c !== "other").filter((c) => categoriesUsed.has(c))
-      .length / 3;
+    currentCategories.filter((category) => categoriesUsed.has(category)).length /
+    currentCategories.length;
 
   const summary = clampText(
     asString(narrativeRaw.summary) ?? ctx.intent.selfReport?.taskSummary ?? "Review these changes.",
@@ -347,10 +376,27 @@ export function scoreReviewPlanCandidate(result: ValidatePlanResult): number {
   if (!result.ok || !result.plan) return 0;
   let score = 40;
   score += result.anchorValidationRate * 35;
-  score += result.categoryCoverage * 15;
   const n = result.plan.notableChanges.length;
-  if (n >= 3 && n <= 7) score += 10;
-  else if (n >= 1) score += 4;
+  if (n === 0) {
+    score += 10;
+  } else {
+    const focused = result.plan.notableChanges.filter((change) => {
+      const start = change.anchor.lineStart;
+      const end = change.anchor.lineEnd;
+      return (
+        change.anchorConfidence === "exact" &&
+        start != null &&
+        end != null &&
+        end - start <= 80
+      );
+    }).length;
+    score += (focused / n) * 15;
+    score -= result.plan.notableChanges.filter((change) => {
+      const start = change.anchor.lineStart;
+      const end = change.anchor.lineEnd;
+      return start != null && end != null && end - start > 120;
+    }).length * 10;
+  }
   if (result.plan.narrative.summary.length > 40) score += 5;
   if (result.plan.narrative.why.length > 20) score += 5;
   return score;

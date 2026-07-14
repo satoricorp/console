@@ -69,15 +69,28 @@ export function isNoDataReview(bookmark: ReviewListItem) {
   );
 }
 
+export function isOpenGithubReview(bookmark: ReviewListItem) {
+  return (
+    bookmark.merge_status === "open" &&
+    bookmark.github_pr_number != null
+  );
+}
+
 /** Partition a status-filtered bookmark page into main list vs no-data. */
 export function partitionReviewsList(
   bookmarks: ReviewListItem[],
-  _opts?: { showArchived?: boolean; showMerged?: boolean },
+  opts?: { filter?: ReviewsListFilter },
 ) {
   const noDataItems: ReviewListItem[] = [];
   const main: ReviewListItem[] = [];
 
   for (const bookmark of bookmarks) {
+    if (
+      opts?.filter === "open" &&
+      (!isOpenGithubReview(bookmark) || bookmark.archived_at_ms != null)
+    ) {
+      continue;
+    }
     if (isNoDataReview(bookmark)) {
       noDataItems.push(bookmark);
       continue;
@@ -123,8 +136,9 @@ export function groupReviewsByRepo(
 }
 
 async function fetchBookmarks(filter: ReviewsListFilter): Promise<ReviewListItem[]> {
+  const githubPrOnly = filter === "open" ? "&github_pr_only=1" : "";
   const response = await fetch(
-    `/api/bookmarks?merge_status=${encodeURIComponent(filter)}`,
+    `/api/bookmarks?merge_status=${encodeURIComponent(filter)}${githubPrOnly}`,
     { credentials: "include", cache: "no-store" },
   );
   if (!response.ok) {
@@ -188,8 +202,8 @@ export function ReviewsList({
   }, [filter, initialBookmarks, initialFilter]);
 
   const { visible, noData } = useMemo(
-    () => partitionReviewsList(bookmarks),
-    [bookmarks],
+    () => partitionReviewsList(bookmarks, { filter }),
+    [bookmarks, filter],
   );
   const repoGroups = useMemo(() => groupReviewsByRepo(visible), [visible]);
 
@@ -279,7 +293,7 @@ export function ReviewsList({
                     <Link
                       href={`/reviews/${bookmark.id}`}
                       onClick={() => setLoadingId(bookmark.id)}
-                      className="flex min-w-0 flex-1 items-baseline justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-medium leading-5 text-zinc-950 dark:text-zinc-50">
@@ -301,12 +315,23 @@ export function ReviewsList({
                         </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-2 text-right text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-                        {loadingId === bookmark.id ? (
+                        <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                           <Loader2
-                            className="h-3.5 w-3.5 animate-spin"
-                            aria-label="Loading review"
+                            className={`h-3.5 w-3.5 ${
+                              loadingId === bookmark.id
+                                ? "animate-spin opacity-100"
+                                : "opacity-0"
+                            }`}
+                            aria-label={
+                              loadingId === bookmark.id
+                                ? "Loading review"
+                                : undefined
+                            }
+                            aria-hidden={
+                              loadingId === bookmark.id ? undefined : true
+                            }
                           />
-                        ) : null}
+                        </span>
                         <span>
                           {bookmark.merge_status}
                           <span className="block">

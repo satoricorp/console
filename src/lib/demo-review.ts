@@ -191,12 +191,14 @@ export const DEMO_REVIEW: ReviewResponse = (() => {
     changes: [],
     notablePatches: [
       {
+        rank: 1,
         file: "services/api/src/routes/auth.ts",
         patch: AUTH_PATCH,
         lineStart: 41,
         lineEnd: 58,
       },
       {
+        rank: 2,
         file: "apps/desktop/src/renderer/main.jsx",
         patch: MAIN_PATCH,
         lineStart: 112,

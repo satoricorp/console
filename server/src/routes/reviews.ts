@@ -274,6 +274,7 @@ async function buildReviewResponse(
       const fp = patches.get(change.anchor.file);
       if (!fp) continue;
       notablePatches.push({
+        rank: change.rank,
         file: change.anchor.file,
         revisionChangeId: change.anchor.revisionChangeId,
         patch: sliceFilePatch(fp, change.anchor.lineStart, change.anchor.lineEnd),

@@ -112,6 +112,17 @@ describe("bookmarksMissingFromOpenSet", () => {
     );
     expect(stale.map((b) => b.id)).toEqual(["url-only"]);
   });
+
+  test("marks every linked bookmark stale when GitHub has no open PRs", () => {
+    const stale = bookmarksMissingFromOpenSet(
+      [
+        { id: "one", github_pr_number: 10 },
+        { id: "two", github_pr_number: 11 },
+      ],
+      new Set(),
+    );
+    expect(stale.map((bookmark) => bookmark.id)).toEqual(["one", "two"]);
+  });
 });
 
 describe("mapPool", () => {

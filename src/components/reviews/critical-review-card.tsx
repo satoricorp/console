@@ -3,6 +3,9 @@ import { PatchDiff } from "@pierre/diffs/react";
 import type { ReviewPlan, ReviewResponse } from "@/lib/reviews-client";
 
 const CAT_CLASS: Record<string, string> = {
+  behavior: "blast",
+  "failure-path": "blast",
+  boundary: "arch",
   architecture: "arch",
   pattern: "parad",
   "blast-radius": "blast",
@@ -10,6 +13,9 @@ const CAT_CLASS: Record<string, string> = {
 };
 
 const CAT_LABEL: Record<string, string> = {
+  behavior: "behavior",
+  "failure-path": "failure path",
+  boundary: "boundary",
   architecture: "architecture",
   pattern: "pattern",
   "blast-radius": "blast radius",
@@ -34,7 +40,7 @@ export function CriticalReviewSection({
   review: ReviewResponse;
 }) {
   const total = plan.notableChanges.length;
-  const patchByFile = new Map(review.notablePatches.map((p) => [p.file, p]));
+  const patchByRank = new Map(review.notablePatches.map((patch) => [patch.rank, patch]));
   const headSha =
     review.bookmark.headCommitId || review.bookmark.remoteHeadSha || "HEAD";
   const repo = review.bookmark.repoFullName;
@@ -49,8 +55,13 @@ export function CriticalReviewSection({
       </div>
 
       <div className="cards">
+        {total === 0 ? (
+          <p className="text-[13px] text-zinc-500">
+            No critical runtime hunks identified.
+          </p>
+        ) : null}
         {plan.notableChanges.map((change) => {
-          const patch = patchByFile.get(change.anchor.file);
+          const patch = patchByRank.get(change.rank);
           const stats = patch ? countDiffStats(patch.patch) : { adds: 0, dels: 0 };
           const lineStart = change.anchor.lineStart;
           const lineEnd = change.anchor.lineEnd;

@@ -37,7 +37,7 @@ export default async function ReviewsPage() {
   try {
     bookmarks = await gxApiJson<ReviewListItem[]>(
       viewer.id,
-      "/bookmarks?merge_status=open",
+      "/bookmarks?merge_status=open&github_pr_only=1",
     );
     if (bookmarks.length > 0) {
       isEmpty = false;

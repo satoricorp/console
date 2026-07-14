@@ -14,6 +14,10 @@ import {
   splitUnifiedDiff,
   type FilePatch,
 } from "./patch";
+import {
+  classifyFileForReview,
+  type FileReviewPriority,
+} from "./priority";
 import type { UsageBreakdown } from "./types";
 import { buildUsageBreakdown } from "./usage";
 
@@ -73,6 +77,7 @@ export type ReviewPlanContext = {
   revisions: ReviewRevisionContext[];
   allFiles: string[];
   cappedPatches: FilePatch[];
+  filePriorities?: FileReviewPriority[];
   intent: {
     selfReport: SelfReport | null;
     firstUserMessages: string[];
@@ -414,6 +419,17 @@ export async function loadReviewPlanContext(
 
   const allFiles = [...new Set(revisions.flatMap((r) => r.files))];
   const cappedPatches = capFilePatches(revisions.flatMap((r) => r.filePatches));
+  const patchByFile = new Map(
+    revisions.flatMap((revision) =>
+      revision.filePatches.map((patch) => [patch.file, patch] as const),
+    ),
+  );
+  const changedSymbols = revisions.flatMap(
+    (revision) => revision.changedSymbols ?? [],
+  );
+  const filePriorities = allFiles.map((file) =>
+    classifyFileForReview(file, patchByFile.get(file), changedSymbols),
+  );
 
   const sessions = Array.isArray(event.sessions) ? event.sessions : [];
   const usage = buildUsageBreakdown({
@@ -479,6 +495,7 @@ export async function loadReviewPlanContext(
     revisions,
     allFiles,
     cappedPatches,
+    filePriorities,
     intent: {
       selfReport,
       firstUserMessages: firstUserMessages(sessions as unknown[]),

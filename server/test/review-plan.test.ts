@@ -6,7 +6,11 @@ import {
 } from "../src/pricing/model-pricing";
 import { splitUnifiedDiff, sliceFilePatch, newLineRanges } from "../src/review-plan/patch";
 import { buildUsageBreakdown, parseUsageFromBody } from "../src/review-plan/usage";
-import { parseAndValidateReviewPlan } from "../src/review-plan/validate";
+import {
+  parseAndValidateReviewPlan,
+  scoreReviewPlanCandidate,
+} from "../src/review-plan/validate";
+import { classifyFileForReview } from "../src/review-plan/priority";
 import type { ReviewPlanContext } from "../src/review-plan/context";
 import { createMockProvider } from "../src/llm/provider";
 import { REVIEW_PLAN_SYSTEM_PROMPT } from "../src/llm/prompts/review-plan";
@@ -194,8 +198,27 @@ diff --git a/src/b.ts b/src/b.ts
   test("slices hunks by new-line range", () => {
     const files = splitUnifiedDiff(sample);
     const sliced = sliceFilePatch(files[1]!, 10, 12);
-    expect(sliced).toContain("@@ -10,2 +10,3 @@");
+    expect(sliced).toContain("@@ -10,1 +10,2 @@");
     expect(sliced).toContain("+added");
+  });
+
+  test("bounds a large hunk to the exact anchor and nearby context", () => {
+    const additions = Array.from(
+      { length: 200 },
+      (_, index) => `+line-${index + 1}`,
+    ).join("\n");
+    const [file] = splitUnifiedDiff(`diff --git a/src/large.ts b/src/large.ts
+new file mode 100644
+--- /dev/null
++++ b/src/large.ts
+@@ -0,0 +1,200 @@
+${additions}
+`);
+    const sliced = sliceFilePatch(file!, 100, 102);
+    expect(sliced).toContain("+line-100");
+    expect(sliced).toContain("+line-102");
+    expect(sliced).not.toContain("+line-1\n");
+    expect(sliced.split("\n").length).toBeLessThan(25);
   });
 
   test("wraps GitHub PR file patches into parseable unified diffs", () => {
@@ -364,7 +387,7 @@ describe("parseAndValidateReviewPlan", () => {
     expect(result.plan!.safeToSkim.length).toBeGreaterThanOrEqual(0);
   });
 
-  test("fails when no surviving changes", () => {
+  test("drops invalid anchors without forcing a critical change", () => {
     const ctx = stubCtx(["src/a.ts"]);
     const raw = JSON.stringify({
       narrative: { summary: "x", why: "y", attributionSources: [] },
@@ -380,7 +403,49 @@ describe("parseAndValidateReviewPlan", () => {
       safeToSkim: [],
     });
     const result = parseAndValidateReviewPlan(raw, ctx);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(result.plan?.notableChanges).toEqual([]);
+  });
+
+  test("accepts a low-risk plan with no critical hunks", () => {
+    const ctx = stubCtx(["src/_generated/api.ts"]);
+    const result = parseAndValidateReviewPlan(
+      JSON.stringify({
+        narrative: {
+          summary: "Refresh generated API types.",
+          why: "The generated output follows its source.",
+          attributionSources: [],
+        },
+        notableChanges: [
+          {
+            rank: 1,
+            category: "behavior",
+            title: "Generated API",
+            whyItMatters: "Generated output changed.",
+            anchor: { file: "src/_generated/api.ts", lineStart: 1, lineEnd: 2 },
+          },
+        ],
+        safeToSkim: [],
+      }),
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.plan?.notableChanges).toEqual([]);
+    expect(result.plan?.safeToSkim[0]?.reason).toContain("Generated");
+  });
+
+  test("scores focused anchors above broad anchors", () => {
+    const ctx = stubCtx(["src/a.ts"]);
+    const focused = parseAndValidateReviewPlan(
+      validPlanRaw([{ source: "pr-payload", pct: 100 }]),
+      ctx,
+    );
+    const broad = structuredClone(focused);
+    broad.plan!.notableChanges[0]!.anchor.lineStart = 1;
+    broad.plan!.notableChanges[0]!.anchor.lineEnd = 200;
+    expect(scoreReviewPlanCandidate(focused)).toBeGreaterThan(
+      scoreReviewPlanCandidate(broad),
+    );
   });
 
   test("zeros attribution for buckets with provided=0", () => {
@@ -514,6 +579,14 @@ describe("mock review-plan provider", () => {
     const completion = await provider.complete(REVIEW_PLAN_SYSTEM_PROMPT, user);
     const parsed = JSON.parse(completion.text);
     expect(parsed.schemaVersion).toBe(1);
-    expect(parsed.notableChanges.length).toBeGreaterThanOrEqual(3);
+    expect(parsed.notableChanges).toHaveLength(2);
+  });
+});
+
+describe("classifyFileForReview", () => {
+  test("deprioritizes generated paths", () => {
+    expect(
+      classifyFileForReview("convex/_generated/api.ts").priority,
+    ).toBe("skim");
   });
 });

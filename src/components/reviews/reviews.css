@@ -3,6 +3,8 @@
   color: var(--gx-fg);
   font-size: 15px;
   line-height: 1.55;
+  min-width: 0;
+  overflow-x: clip;
   padding-bottom: 96px;
 }
 .gx-review a { color: inherit; }
@@ -43,7 +45,7 @@
   .crumb strong { color: var(--gx-fg); font-weight: 500; }
 
   /* ── layout: single column (wide desktop for diffs) ─ */
-  .wrap { max-width: min(1400px, calc(100vw - 48px)); margin: 0 auto; padding: 28px 20px 40px; }
+  .wrap { box-sizing: border-box; width: 100%; max-width: min(1400px, calc(100vw - 48px)); min-width: 0; margin: 0 auto; padding: 28px 20px 40px; }
 
   /* ── review header ────────────────────────────────── */
   .review-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 30px; }
@@ -146,7 +148,8 @@
   @media (max-width: 620px) { .card-why, .card-anchor { padding-left: 16px; } .attr-chip { margin-left: 0; } }
 
   /* ── diff ─────────────────────────────────────────── */
-  .diff { border-top: 1px solid var(--gx-line); background: var(--gx-panel); overflow-x: auto; }
+  .diff { max-width: 100%; min-width: 0; border-top: 1px solid var(--gx-line); background: var(--gx-panel); overflow-x: auto; }
+  .diff diffs-container { display: block; max-width: 100%; min-width: 0; }
   .diff table { border-collapse: collapse; width: 100%; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 12px; line-height: 1.6; }
   .diff td { padding: 0 14px 0 0; white-space: pre; }
   .diff .ln {
@@ -228,7 +231,7 @@
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
   .approve-inner {
-    max-width: min(1400px, calc(100vw - 48px)); margin: 0 auto; padding: 12px 20px;
+    box-sizing: border-box; width: 100%; max-width: min(1400px, calc(100vw - 48px)); margin: 0 auto; padding: 12px 20px;
     display: flex; align-items: center; gap: 16px;
   }
   .approve-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }

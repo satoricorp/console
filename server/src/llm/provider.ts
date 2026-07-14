@@ -62,17 +62,16 @@ export function createMockProvider(contextHint?: string): LLMProvider {
           (m[1] ?? "").split(",").map((f) => f.trim()).filter(Boolean),
         );
         const changed = [...new Set([...files, ...fileList])].filter(Boolean);
-        const primary = changed[0] ?? "src/main.ts";
-        const secondary = changed[1] ?? primary;
         const selfReport =
           user.match(/Self-report:\s*(.+)/)?.[1]?.trim() ||
           contextHint?.slice(0, 120) ||
           "Implement the requested changes";
-        const notableFiles = changed.slice(0, Math.min(5, Math.max(3, changed.length || 3)));
-        while (notableFiles.length < 3) {
-          notableFiles.push(primary);
-        }
-        const categories = ["architecture", "pattern", "blast-radius"] as const;
+        const notableFiles = changed.slice(0, 3);
+        const categories = [
+          "behavior",
+          "failure-path",
+          "boundary",
+        ] as const;
         const plan = {
           schemaVersion: 1,
           narrative: {
