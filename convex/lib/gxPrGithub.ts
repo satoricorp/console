@@ -183,8 +183,9 @@ export function mergeBlockedReason(pull: GithubPullDetails): string | null {
     }
     return `PR #${pull.number} is not mergeable (${pull.mergeable_state ?? "unknown state"}).`;
   }
-  // mergeable == null means GitHub is still computing. Callers should
-  // waitForMergeability first, then let the merge API report if needed.
+  if (pull.mergeable == null) {
+    return `GitHub is still checking whether PR #${pull.number} can merge. Try again shortly.`;
+  }
   return null;
 }
 

@@ -14,12 +14,14 @@ import {
   getPullRequest,
   createDraftPullRequest,
   getPullStatusForPush,
+  mergeBlockedReason,
   mergePullRequestOnGithub,
   submitApprovingReview,
   type PullStatusResponse,
   type PullStatusSnapshot,
   reconcilePullRequest,
   resolvePullForPush,
+  waitForMergeability,
 } from "./lib/gxPrGithub";
 import { githubAdapter } from "./lib/codeStorageAdapter";
 import { headCommitIdFromPayload, mergeTargetFromPayload } from "./lib/gxPrPayload";
@@ -362,6 +364,17 @@ const branchPublishStatusValidator = v.object({
     v.literal("failure"),
     v.literal("none"),
   ),
+  pullHealth: v.union(
+    v.literal("clean"),
+    v.literal("dirty"),
+    v.literal("behind"),
+    v.literal("blocked"),
+    v.literal("draft"),
+    v.literal("merged"),
+    v.literal("unknown"),
+    v.literal("no_pr"),
+  ),
+  pullLabel: v.string(),
   integratedOnBase: v.boolean(),
   message: v.union(v.null(), v.string()),
   canLand: v.boolean(),
@@ -494,6 +507,16 @@ export const approveAndMergePullRequest = action({
       );
     }
 
+    const preflight = await waitForMergeability(
+      accessToken,
+      target.repoFullName,
+      pull.number,
+    );
+    const blockedReason = mergeBlockedReason(preflight);
+    if (blockedReason) {
+      throw new Error(blockedReason);
+    }
+
     const review = await submitApprovingReview(
       accessToken,
       target.repoFullName,
@@ -551,7 +574,7 @@ export const getPublishStatus = action({
   handler: async (ctx, { publishContext, includeCiChecks }) => {
     const { accessToken, target, localHeadSha } =
       await loadAuthorizedPublishContext(ctx, publishContext);
-    return githubAdapter.fetchStatus(
+    const branchStatus = await githubAdapter.fetchStatus(
       {
         accessToken,
         repoFullName: target.repoFullName,
@@ -561,6 +584,24 @@ export const getPublishStatus = action({
       },
       { includeCiChecks: includeCiChecks ?? false },
     );
+    const resolution = await resolvePullForPush(
+      accessToken,
+      target.repoFullName,
+      undefined,
+      target.headBranch,
+      target.baseBranch,
+    );
+    const pullStatus = await getPullStatusForPush(accessToken, resolution);
+
+    return {
+      ...branchStatus,
+      checkStatus:
+        includeCiChecks && pullStatus.status
+          ? pullStatus.status.checkStatus
+          : branchStatus.checkStatus,
+      pullHealth: pullStatus.status?.health ?? "no_pr",
+      pullLabel: pullStatus.status?.label ?? "No GitHub PR",
+    };
   },
 });
 

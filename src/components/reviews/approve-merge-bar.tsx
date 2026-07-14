@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction } from "convex/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { userFacingActionError } from "@/lib/convex-action-error";
 import {
@@ -24,19 +24,21 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
   const [ci, setCi] = useState<{
     checkStatus: string;
     message: string | null;
+    pullHealth: string;
+    pullLabel: string;
   } | null>(null);
-
-  useEffect(() => {
-    setMergeStatus(review.bookmark.mergeStatus);
-  }, [review.bookmark.mergeStatus]);
 
   const prNumber =
     review.publishContext.pullRequestNumber ?? review.bookmark.githubPrNumber;
   const prUrl =
     review.publishContext.pullRequestUrl ?? review.bookmark.githubPrUrl;
-  const merged = mergeStatus === "merged";
-  const closed = mergeStatus === "closed";
-  const canMerge = Boolean(prNumber) && !merged && !closed;
+  const merged =
+    mergeStatus === "merged" || review.bookmark.mergeStatus === "merged";
+  const closed =
+    mergeStatus === "closed" || review.bookmark.mergeStatus === "closed";
+  const mergeBlocked =
+    ci?.pullHealth === "dirty" || ci?.pullHealth === "blocked";
+  const canMerge = Boolean(prNumber) && !merged && !closed && !mergeBlocked;
 
   async function refreshCi() {
     try {
@@ -50,10 +52,20 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
         },
         includeCiChecks: true,
       });
-      setCi({ checkStatus: status.checkStatus, message: status.message });
+      setCi({
+        checkStatus: status.checkStatus,
+        message: status.message,
+        pullHealth: status.pullHealth,
+        pullLabel: status.pullLabel,
+      });
       return status;
     } catch {
-      setCi({ checkStatus: "none", message: null });
+      setCi({
+        checkStatus: "none",
+        message: null,
+        pullHealth: "unknown",
+        pullLabel: "Unknown",
+      });
       return null;
     }
   }
@@ -62,8 +74,18 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
     if (ci) return ci;
     const status = await refreshCi();
     return status
-      ? { checkStatus: status.checkStatus, message: status.message }
-      : { checkStatus: "none", message: null };
+      ? {
+          checkStatus: status.checkStatus,
+          message: status.message,
+          pullHealth: status.pullHealth,
+          pullLabel: status.pullLabel,
+        }
+      : {
+          checkStatus: "none",
+          message: null,
+          pullHealth: "unknown",
+          pullLabel: "Unknown",
+        };
   }
 
   async function handleApprove() {
@@ -77,6 +99,16 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
       }
 
       const status = await ensureCi();
+      if (status.pullHealth === "dirty") {
+        setError(
+          `PR #${prNumber} has merge conflicts with ${review.publishContext.baseBranch}. Resolve them before merging.`,
+        );
+        return;
+      }
+      if (status.pullHealth === "blocked") {
+        setError(`PR #${prNumber} is blocked and cannot be merged.`);
+        return;
+      }
       if (status.checkStatus === "failure") {
         setError("CI checks are failing. Fix checks before merging.");
         return;
@@ -160,13 +192,17 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
 
   const ciPassing = ci?.checkStatus === "success";
   const ciLabel =
-    ci?.checkStatus === "success"
-      ? "CI passing"
-      : ci?.checkStatus === "failure"
-        ? "CI failing"
-        : ci?.checkStatus === "pending"
-          ? "CI running"
-          : "CI status unknown";
+    ci?.pullHealth === "dirty"
+      ? "Merge conflicts"
+      : ci?.pullHealth === "blocked"
+        ? "Merge blocked"
+        : ci?.checkStatus === "success"
+          ? "CI passing"
+          : ci?.checkStatus === "failure"
+            ? "CI failing"
+            : ci?.checkStatus === "pending"
+              ? "CI running"
+              : "CI status unknown";
 
   return (
     <div className="approve-bar">
@@ -186,20 +222,27 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
                 background: "transparent",
                 border: 0,
                 padding: 0,
-                color: ciPassing
-                  ? "var(--gx-ok)"
-                  : ci?.checkStatus === "failure"
-                    ? "var(--gx-risk)"
-                    : "var(--gx-muted)",
+                color: mergeBlocked
+                  ? "var(--gx-risk)"
+                  : ciPassing
+                    ? "var(--gx-ok)"
+                    : ci?.checkStatus === "failure"
+                      ? "var(--gx-risk)"
+                      : "var(--gx-muted)",
               }}
               onClick={() => void refreshCi()}
               onFocus={() => void ensureCi()}
+              onMouseEnter={() => void ensureCi()}
             >
               <span className="tick">
                 {ciPassing ? "✓" : ci?.checkStatus === "failure" ? "✗" : "·"}
               </span>
               {ciLabel}
-              {ci?.message ? (
+              {ci?.pullHealth === "dirty" ? (
+                <span className="ci-detail num">
+                  Resolve against {review.publishContext.baseBranch}
+                </span>
+              ) : ci?.message ? (
                 <span className="ci-detail num">{ci.message}</span>
               ) : null}
             </button>
@@ -239,6 +282,7 @@ export function ApproveMergeBar({ review, onMerged }: Props) {
               disabled={busy}
               onClick={() => void handleApprove()}
               onFocus={() => void ensureCi()}
+              onMouseEnter={() => void ensureCi()}
             >
               {busy ? "Working…" : "Approve & merge"}
             </button>
