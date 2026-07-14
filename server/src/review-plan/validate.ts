@@ -2,7 +2,11 @@ import {
   filePatchIndex,
   type ReviewPlanContext,
 } from "./context";
-import { newLineRanges, rangesIntersect } from "./patch";
+import {
+  MAX_NOTABLE_NEW_LINES,
+  newLineRanges,
+  rangesIntersect,
+} from "./patch";
 import { classifyFileForReview } from "./priority";
 import type {
   AnchorConfidence,
@@ -30,6 +34,14 @@ const ATTRIBUTION_SOURCES: AttributionSource["source"][] = [
   "docs",
   "pr-payload",
 ];
+
+export const REVIEW_PLAN_HEURISTIC_VERSION = 2;
+
+export function isCurrentReviewPlan(
+  plan: ReviewPlan | null | undefined,
+): boolean {
+  return plan?.heuristicVersion === REVIEW_PLAN_HEURISTIC_VERSION;
+}
 
 const BROKER_BUCKETS = [
   "agent-sessions",
@@ -187,6 +199,16 @@ export function parseAndValidateReviewPlan(
         : typeof anchorRaw.line_end === "number"
           ? anchorRaw.line_end
           : undefined;
+    const hasNarrowRange =
+      Number.isInteger(lineStart) &&
+      Number.isInteger(lineEnd) &&
+      lineStart! >= 1 &&
+      lineEnd! >= lineStart! &&
+      lineEnd! - lineStart! + 1 <= MAX_NOTABLE_NEW_LINES;
+    if (!hasNarrowRange) {
+      lineStart = undefined;
+      lineEnd = undefined;
+    }
 
     let confidence: AnchorConfidence = "unverified";
     const declared = asString(row.anchorConfidence) ?? asString(row.anchor_confidence);
@@ -345,6 +367,7 @@ export function parseAndValidateReviewPlan(
 
   const plan: ReviewPlan = {
     schemaVersion: 1,
+    heuristicVersion: REVIEW_PLAN_HEURISTIC_VERSION,
     narrative: {
       summary,
       summaryTeaser,

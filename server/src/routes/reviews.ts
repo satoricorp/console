@@ -20,6 +20,7 @@ import type {
   ReviewResponse,
   UsageBreakdown,
 } from "../review-plan/types";
+import { isCurrentReviewPlan } from "../review-plan/validate";
 
 export const reviewsRoutes = new Hono<AppEnv>();
 
@@ -85,9 +86,15 @@ reviewsRoutes.get("/v1/reviews/:bookmarkId", async (c) => {
   const headCommitId = bookmark.head_commit_id ?? "";
   const response = await buildReviewResponse(db, bookmark, headCommitId);
 
-  // Auto-enqueue when plan missing but artifact exists
+  const planNeedsRefresh =
+    response.plan.status === "ready" &&
+    !isCurrentReviewPlan(response.plan.plan);
+
+  // Auto-enqueue when the plan is missing, failed, or uses stale heuristics.
   if (
-    (response.plan.status === "missing" || response.plan.status === "failed") &&
+    (response.plan.status === "missing" ||
+      response.plan.status === "failed" ||
+      planNeedsRefresh) &&
     bookmark.latest_event_id &&
     headCommitId
   ) {
@@ -97,7 +104,7 @@ reviewsRoutes.get("/v1/reviews/:bookmarkId", async (c) => {
       headCommitId,
       eventId: bookmark.latest_event_id,
     });
-    if (response.plan.status === "missing") {
+    if (response.plan.status === "missing" || planNeedsRefresh) {
       response.plan.status = "pending";
     }
   }

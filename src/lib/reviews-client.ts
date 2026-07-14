@@ -18,6 +18,7 @@ export type AnchorConfidence = "exact" | "file" | "unverified";
 
 export type ReviewPlan = {
   schemaVersion: 1;
+  heuristicVersion?: number;
   narrative: {
     summary: string;
     summaryTeaser: string;

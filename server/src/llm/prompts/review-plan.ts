@@ -44,7 +44,7 @@ Rules:
 - Prioritize control flow and state transitions; error/fallback/retry/async behavior; auth, persistence, and network boundaries; then public runtime contracts and architecture.
 - Type-only declarations, generated files, lockfiles, formatting, docs, snapshots, import-only edits, and supporting tests belong in safeToSkim unless they change runtime validation, serialization, compatibility, or a safety invariant.
 - Select 0–5 focused hunks. Do not manufacture a minimum count. Low-risk changes may have no notableChanges.
-- Keep exact anchors narrow and function-level. Do not select an entire file or broad hunk when a smaller range contains the risky logic.
+- Keep exact anchors to at most 24 new-file lines around one risky behavior. Never use line 0, an entire file, or a broad hunk.
 - Every changed file that is not notable must appear in safeToSkim with a one-line reason.
 - Anchors must reference changed files; line numbers must fall inside the provided hunk new-line ranges when possible (anchorConfidence="exact").
 - Summary must restate the original intent and quote the self-report / first user prompt when available.

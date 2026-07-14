@@ -17,6 +17,10 @@ export type FilePatch = {
   text: string;
 };
 
+export const MAX_NOTABLE_NEW_LINES = 24;
+const MAX_NOTABLE_BODY_LINES = 30;
+const NOTABLE_CONTEXT_LINES = 3;
+
 const SKIP_PATH_RE =
   /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|go\.sum|.*\.min\.(js|css)|.*\.map)$/i;
 
@@ -179,20 +183,39 @@ export function sliceFilePatch(
   lineStart?: number,
   lineEnd?: number,
 ): string {
-  if (lineStart == null || lineEnd == null || file.hunks.length === 0) {
+  if (file.hunks.length === 0) {
     return file.text;
   }
+  const fallbackHunk =
+    file.hunks.find((hunk) => hunk.newLines > 0) ?? file.hunks[0]!;
+  const hasUsableRange =
+    Number.isInteger(lineStart) &&
+    Number.isInteger(lineEnd) &&
+    lineStart! >= 1 &&
+    lineEnd! >= lineStart!;
+  const start = hasUsableRange ? lineStart! : Math.max(1, fallbackHunk.newStart);
   const target = {
-    start: lineStart,
-    end: Math.min(lineEnd, lineStart + 79),
+    start,
+    end: hasUsableRange
+      ? Math.min(lineEnd!, start + MAX_NOTABLE_NEW_LINES - 1)
+      : start + MAX_NOTABLE_NEW_LINES - 1,
   };
-  const matching = file.hunks.filter((h) =>
+  const matching = file.hunks.find((hunk) =>
     rangesIntersect(
-      { start: h.newStart, end: h.newStart + Math.max(h.newLines, 1) - 1 },
+      {
+        start: hunk.newStart,
+        end: hunk.newStart + Math.max(hunk.newLines, 1) - 1,
+      },
       target,
     ),
   );
-  if (matching.length === 0) return file.text;
+  const selectedHunk = matching ?? fallbackHunk;
+  const selectedTarget = matching
+    ? target
+    : {
+        start: Math.max(1, fallbackHunk.newStart),
+        end: Math.max(1, fallbackHunk.newStart) + MAX_NOTABLE_NEW_LINES - 1,
+      };
 
   const headerLines = file.text.split("\n").filter(
     (line) =>
@@ -208,7 +231,7 @@ export function sliceFilePatch(
 
   return [
     ...headerLines,
-    ...matching.flatMap((hunk) => sliceHunk(hunk, target, 5)),
+    ...sliceHunk(selectedHunk, selectedTarget, NOTABLE_CONTEXT_LINES),
   ].join("\n");
 }
 
@@ -257,7 +280,7 @@ function sliceHunk(
   ) {
     last += 1;
   }
-  const selected = body.slice(first, last + 1);
+  const selected = body.slice(first, last + 1).slice(0, MAX_NOTABLE_BODY_LINES);
   let oldCount = 0;
   let newCount = 0;
   for (const line of selected) {

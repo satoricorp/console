@@ -54,6 +54,7 @@ export type ReviewPlanRevision = {
 
 export type ReviewPlan = {
   schemaVersion: 1;
+  heuristicVersion?: number;
   narrative: {
     summary: string;
     /** One-sentence teaser shown when Summary accordion is collapsed */
