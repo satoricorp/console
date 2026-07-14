@@ -62,7 +62,7 @@ export function HeroSection() {
             <div className="w-full max-w-2xl">
               <GxWordmark size="hero" className="mb-1 block sm:mb-1.5" />
               <h1 className="text-pretty text-3xl font-medium leading-[1.12] tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-5xl">
-                Version control for agents
+                Simplified Code Review
               </h1>
               <p className="mt-4 text-pretty text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
                 Join data from your coding sessions with your code to improve
