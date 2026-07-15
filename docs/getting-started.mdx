@@ -187,11 +187,11 @@ Prefer MCP tools over asking agents to run the CLI directly. The expected save f
 1. Stage with `git add`
 2. `gx_commit` — record the revision (agents can attach a task summary and the commands/tests they ran)
 3. `gx_status` — inspect before publish
-4. `gx_push` — publish ready stacks (or `git push` when the hook is enough)
+4. Plain `git push` — the pre-push hook captures sessions and publishes metadata
 
 Use `gx_edit` when continuing or amending an existing revision.
 
-See [MCP setup](/docs/mcp) for client registration and per-tool parameters.
+See [MCP setup](/docs/mcp) for `add-mcp`, Executor, and per-tool parameters.
 
 ## Optional: first-run demo
 
