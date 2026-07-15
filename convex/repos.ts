@@ -3,6 +3,7 @@ import {
   internalMutation,
   internalQuery,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import type { Doc } from "./_generated/dataModel";
@@ -34,12 +35,30 @@ export const getOnboardingStatus = query({
 
     const hasConnectedRepos = connected.length > 0;
 
+    // Returning users may still have CLI/publish history even if a prior
+    // read-time access check incorrectly cleared connectedRepos.
+    const hasCliSession = Boolean(
+      await ctx.db
+        .query("gxCliSessions")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .first(),
+    );
+    const hasPublished = Boolean(
+      await ctx.db
+        .query("gxPrPushes")
+        .withIndex("by_userId", (q) => q.eq("userId", user._id))
+        .first(),
+    );
+
     return {
       hasConnectedRepos,
       connectedCount: connected.length,
-      // Existing users who already connected repos count as completed.
+      // Existing users who already connected repos (or used GX) count as done.
       onboardingCompleted:
-        Boolean(appState?.onboardingCompletedAt) || hasConnectedRepos,
+        Boolean(appState?.onboardingCompletedAt) ||
+        hasConnectedRepos ||
+        hasCliSession ||
+        hasPublished,
     };
   },
 });
@@ -100,6 +119,7 @@ export const insertConnectedRepo = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { accessVerifiedAt });
+      await markOnboardingCompleted(ctx, userId, accessVerifiedAt);
       return { inserted: false, id: existing._id };
     }
 
@@ -115,9 +135,37 @@ export const insertConnectedRepo = internalMutation({
       accessVerifiedAt,
     });
 
+    await markOnboardingCompleted(ctx, userId, accessVerifiedAt);
     return { inserted: true, id };
   },
 });
+
+async function markOnboardingCompleted(
+  ctx: MutationCtx,
+  userId: string,
+  now: number,
+) {
+  const existing = await ctx.db
+    .query("userAppStates")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+
+  if (existing) {
+    if (existing.onboardingCompletedAt != null) return;
+    await ctx.db.patch(existing._id, {
+      onboardingCompletedAt: now,
+      updatedAt: now,
+    });
+    return;
+  }
+
+  await ctx.db.insert("userAppStates", {
+    userId,
+    createdAt: now,
+    updatedAt: now,
+    onboardingCompletedAt: now,
+  });
+}
 
 export const revokeRepoAccess = internalMutation({
   args: {

@@ -65,11 +65,10 @@ export const sendMessage = action({
       args.repoFullName,
     );
 
+    // Do not revoke connectedRepos on read-time checks.
+    // Transient 403/rate-limit responses would otherwise empty grants and
+    // bounce returning users back through onboarding.
     if (!verification.ok) {
-      await ctx.runMutation(internal.repos.revokeRepoAccess, {
-        userId: user._id,
-        fullName: args.repoFullName,
-      });
       throw new Error(verification.message);
     }
 

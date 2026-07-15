@@ -19,7 +19,19 @@ describe("GX reviews demo data", () => {
       const review = getDemoReview(item.id);
       expect(review?.bookmark.id).toBe(item.id);
       expect(review?.plan.status).toBe("ready");
-      expect(review?.plan.plan?.notableChanges.length).toBeGreaterThan(0);
+      const changes = review?.plan.plan?.notableChanges ?? [];
+      expect(changes.length).toBeGreaterThanOrEqual(2);
+      expect(changes.length).toBeLessThanOrEqual(3);
+      expect(review?.notablePatches).toHaveLength(changes.length);
+      expect(new Set(changes.map((change) => change.anchor.file)).size).toBe(
+        changes.length,
+      );
+      expect(
+        new Set((review?.notablePatches ?? []).map((patch) => patch.patch)).size,
+      ).toBe(changes.length);
+      for (const patch of review?.notablePatches ?? []) {
+        expect(patch.patch.split("\n").length).toBeGreaterThanOrEqual(12);
+      }
     }
   });
 });

@@ -60,11 +60,13 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   const skipOnboardingRedirect = bypassesOnboarding(pathname);
   const onFunnelPath = isFunnelPath(pathname);
   const onboardingCompleted = Boolean(onboardingStatus?.onboardingCompleted);
-  const needsRepoConnect =
+  // Hard gate is completion, not "currently has connectedRepos".
+  // Read-time GitHub checks used to delete grants and bounce completed users.
+  const needsOnboarding =
     Boolean(session?.user) &&
     onboardingStatus !== undefined &&
     onboardingStatus !== null &&
-    !onboardingStatus.hasConnectedRepos;
+    !onboardingCompleted;
   const shouldLeaveCompletedFunnel =
     onboardingCompleted && onFunnelPath && !forceOnboarding;
   const shouldStartForcedOnboarding =
@@ -95,20 +97,21 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     }
 
     if (
-      !onboardingStatus.hasConnectedRepos &&
+      !onboardingCompleted &&
       !isOnboardingRoute &&
       !skipOnboardingRedirect
     ) {
       router.replace(
         forceOnboarding
-          ? withOnboardingParam(ONBOARDING_PATH, true)
-          : ONBOARDING_PATH,
+          ? withOnboardingParam(ONBOARDING_START_PATH, true)
+          : ONBOARDING_START_PATH,
       );
       return;
     }
   }, [
     authReady,
     onboardingStatus,
+    onboardingCompleted,
     isOnboardingRoute,
     skipOnboardingRedirect,
     shouldLeaveCompletedFunnel,
@@ -144,7 +147,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     return <OnboardingGateFallback />;
   }
 
-  if (needsRepoConnect && !isOnboardingRoute && !skipOnboardingRedirect) {
+  if (needsOnboarding && !isOnboardingRoute && !skipOnboardingRedirect) {
     return <OnboardingGateFallback />;
   }
 

@@ -1,5 +1,9 @@
 import type { ReviewListItem } from "@/components/reviews/reviews-list";
-import type { ReviewPlan, ReviewResponse } from "@/lib/reviews-client";
+import type {
+  NotableCategory,
+  ReviewPlan,
+  ReviewResponse,
+} from "@/lib/reviews-client";
 
 const DEMO_PLAN: ReviewPlan = {
   schemaVersion: 1,
@@ -397,6 +401,634 @@ const DEMO_REVIEW_SPECS: DemoReviewSpec[] = [
   },
 ];
 
+type DemoDiffSpec = {
+  category: NotableCategory;
+  title?: string;
+  why?: string;
+  file?: string;
+  lineStart: number;
+  before: string[];
+  after: string[];
+};
+
+const DEMO_DIFFS: Record<string, DemoDiffSpec[]> = {
+  "demo-auth-sessions": [
+    {
+      category: "architecture",
+      lineStart: 38,
+      before: [
+        "  await sessions.insert({ userId, token: nextToken });",
+        "  await sessions.delete(currentSessionId);",
+        "  return nextToken;",
+      ],
+      after: [
+        "  return await db.transaction(async (tx) => {",
+        "    const current = await tx.sessions.lock(currentSessionId);",
+        '    if (!current || current.revokedAt) throw new Error("Session revoked");',
+        "    const nextToken = await mintSessionToken();",
+        "    await tx.sessions.insert({ userId, tokenHash: hash(nextToken) });",
+        "    await tx.sessions.patch(currentSessionId, { revokedAt: Date.now() });",
+        "    return nextToken;",
+        "  });",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Device revocation invalidates every derived session",
+      why: "Deleting only the selected browser session would leave refresh-token descendants active. The new family lookup makes revocation complete.",
+      file: "server/auth/revoke-device.ts",
+      lineStart: 51,
+      before: [
+        "  const session = await sessions.get(sessionId);",
+        "  if (session) await sessions.delete(session.id);",
+        "  return { revoked: Boolean(session) };",
+      ],
+      after: [
+        "  const session = await sessions.get(sessionId);",
+        '  if (!session || session.userId !== actor.id) throw new Error("Not found");',
+        "  const family = await sessions.byDevice(session.userId, session.deviceId);",
+        "  await Promise.all(",
+        "    family.map((item) =>",
+        "      sessions.patch(item.id, { revokedAt: now, revokedBy: actor.id }),",
+        "    ),",
+        "  );",
+        "  return { revoked: family.length };",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Concurrent refresh attempts now fail closed",
+      why: "A replayed refresh token must not mint a second valid session. This test locks in the single-winner behavior under contention.",
+      file: "server/auth/rotate-session.test.ts",
+      lineStart: 87,
+      before: [
+        "  const token = await rotateSession(fixture.sessionId);",
+        "  expect(token).toBeTruthy();",
+      ],
+      after: [
+        "  const attempts = await Promise.allSettled([",
+        "    rotateSession(fixture.sessionId),",
+        "    rotateSession(fixture.sessionId),",
+        "  ]);",
+        '  expect(attempts.filter((result) => result.status === "fulfilled")).toHaveLength(1);',
+        '  expect(attempts.filter((result) => result.status === "rejected")).toHaveLength(1);',
+        "  expect(await activeSessions(fixture.userId)).toHaveLength(1);",
+      ],
+    },
+  ],
+  "demo-billing-usage": [
+    {
+      category: "architecture",
+      lineStart: 72,
+      before: [
+        "  const events = await ctx.db.query(\"usageEvents\").collect();",
+        "  return sumUsage(events.filter((event) => event.workspaceId === workspaceId));",
+      ],
+      after: [
+        "  const existing = await getAggregate(ctx, workspaceId, day);",
+        "  if (existing?.lastEventId === event.id) return existing;",
+        "  const next = addUsage(existing, event);",
+        "  await ctx.db.patch(existing?._id ?? next._id, {",
+        "    inputTokens: next.inputTokens,",
+        "    outputTokens: next.outputTokens,",
+        "    costMicros: next.costMicros,",
+        "    lastEventId: event.id,",
+        "  });",
+        "  return next;",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Idempotency keys prevent duplicate invoice usage",
+      why: "Provider retries are normal. Enforcing the event key at ingestion keeps one retry from charging a workspace twice.",
+      file: "convex/usageEvents.ts",
+      lineStart: 29,
+      before: [
+        "  return await ctx.db.insert(\"usageEvents\", args.event);",
+      ],
+      after: [
+        "  const prior = await ctx.db",
+        "    .query(\"usageEvents\")",
+        "    .withIndex(\"by_provider_event\", (q) =>",
+        "      q.eq(\"provider\", args.event.provider).eq(\"eventId\", args.event.eventId),",
+        "    )",
+        "    .unique();",
+        "  if (prior) return prior._id;",
+        "  return await ctx.db.insert(\"usageEvents\", args.event);",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Unknown model prices are excluded, not guessed",
+      why: "Guessing a price would silently corrupt customer totals. Unknown SKUs are now surfaced for reconciliation.",
+      file: "src/lib/billing/calculate-cost.ts",
+      lineStart: 44,
+      before: [
+        "  const rate = MODEL_RATES[usage.model] ?? DEFAULT_RATE;",
+        "  return usage.tokens * rate;",
+      ],
+      after: [
+        "  const rate = MODEL_RATES[usage.model];",
+        "  if (!rate) {",
+        "    return { costMicros: null, unpricedModel: usage.model };",
+        "  }",
+        "  return {",
+        "    costMicros: Math.round(usage.tokens * rate.microsPerToken),",
+        "    unpricedModel: null,",
+        "  };",
+      ],
+    },
+  ],
+  "demo-invite-flow": [
+    {
+      category: "failure-path",
+      lineStart: 31,
+      before: [
+        "  const invite = await getInvite(token);",
+        "  await acceptInvite(invite.id, viewer.id);",
+        "  redirect(`/organizations/${invite.organizationId}`);",
+      ],
+      after: [
+        "  const invite = await getInvite(token);",
+        "  if (!invite || invite.expiresAt <= Date.now()) {",
+        "    return <ExpiredInvite inviter={invite?.inviterName ?? null} />;",
+        "  }",
+        "  if (invite.acceptedAt) {",
+        "    redirect(`/organizations/${invite.organizationId}`);",
+        "  }",
+        "  await acceptInvite(invite.id, viewer.id);",
+        "  redirect(`/organizations/${invite.organizationId}`);",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Invite acceptance verifies the authenticated email",
+      why: "A forwarded token should not grant membership to a different account. The mutation now enforces the invite recipient.",
+      file: "convex/invitations.ts",
+      lineStart: 94,
+      before: [
+        "  await ctx.db.insert(\"organizationMembers\", {",
+        "    organizationId: invite.organizationId,",
+        "    userId: user._id,",
+        "  });",
+      ],
+      after: [
+        '  if (normalizeEmail(user.email) !== normalizeEmail(invite.email)) {',
+        '    throw new Error("This invitation belongs to another account");',
+        "  }",
+        "  await ctx.db.insert(\"organizationMembers\", {",
+        "    organizationId: invite.organizationId,",
+        "    userId: user._id,",
+        "    role: invite.role,",
+        "    invitedBy: invite.inviterId,",
+        "  });",
+        "  await ctx.db.patch(invite._id, { acceptedAt: Date.now() });",
+      ],
+    },
+  ],
+  "demo-review-cache": [
+    {
+      category: "architecture",
+      lineStart: 18,
+      before: [
+        "  return createHash(\"sha256\").update(headSha).digest(\"hex\");",
+      ],
+      after: [
+        "  const canonical = changes",
+        "    .filter((change) => change.survives)",
+        "    .sort((a, b) => a.path.localeCompare(b.path))",
+        "    .map((change) => `${change.path}\\0${normalizePatch(change.patch)}`)",
+        "    .join(\"\\0\\0\");",
+        "  return createHash(\"sha256\")",
+        "    .update(REVIEW_PLAN_SCHEMA_VERSION)",
+        "    .update(canonical)",
+        "    .digest(\"hex\");",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Cache entries are scoped to repository and base branch",
+      why: "Identical patches can mean different things in different repositories. Scope is part of the lookup key to prevent cross-project plan reuse.",
+      file: "server/src/review-plan/cache.ts",
+      lineStart: 63,
+      before: [
+        "  return await cache.get(diffHash);",
+      ],
+      after: [
+        "  return await cache.get({",
+        "    organizationId: request.organizationId,",
+        "    repoFullName: request.repoFullName,",
+        "    baseBranch: request.baseBranch,",
+        "    schemaVersion: REVIEW_PLAN_SCHEMA_VERSION,",
+        "    diffHash,",
+        "  });",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Corrupt cached plans are discarded before serving",
+      why: "A stale or malformed cache value should trigger regeneration, never reach the reviewer as trusted output.",
+      file: "server/src/review-plan/load-plan.ts",
+      lineStart: 102,
+      before: [
+        "  if (cached) return cached.plan;",
+      ],
+      after: [
+        "  if (cached) {",
+        "    const parsed = validateReviewPlan(cached.plan);",
+        "    if (parsed.ok) return parsed.value;",
+        "    logger.warn({ cacheKey, issues: parsed.issues }, \"discarding invalid plan\");",
+        "    await cache.delete(cacheKey);",
+        "  }",
+        "  return await generateReviewPlan(request);",
+      ],
+    },
+  ],
+  "demo-stack-publish": [
+    {
+      category: "architecture",
+      lineStart: 44,
+      before: [
+        "for revision in revisions {",
+        "    publish(revision).await?;",
+        "}",
+      ],
+      after: [
+        "let graph = RevisionGraph::from_revisions(revisions)?;",
+        "let ordered = graph.topological_order().map_err(|cycle| {",
+        "    PublishError::DependencyCycle { revisions: cycle.members }",
+        "})?;",
+        "for revision in ordered {",
+        "    ensure_remote_parent_exists(&revision).await?;",
+        "    publish_revision(&revision).await?;",
+        "    checkpoint.record_published(revision.id).await?;",
+        "}",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Interrupted stack publishes resume from checkpoints",
+      why: "A network failure halfway through a stack must not duplicate already-published revisions or lose dependency ordering.",
+      file: "crates/gx/src/publish/checkpoint.rs",
+      lineStart: 27,
+      before: [
+        "pub fn pending(&self, revisions: Vec<Revision>) -> Vec<Revision> {",
+        "    revisions",
+        "}",
+      ],
+      after: [
+        "pub fn pending(&self, revisions: Vec<Revision>) -> Result<Vec<Revision>> {",
+        "    revisions",
+        "        .into_iter()",
+        "        .filter(|revision| !self.published.contains(&revision.id))",
+        "        .map(|revision| {",
+        "            self.verify_parent_checkpoint(&revision)?;",
+        "            Ok(revision)",
+        "        })",
+        "        .collect()",
+        "}",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Remote heads are verified before child revisions move",
+      why: "Publishing a child onto a changed parent would rewrite the intended stack. The remote SHA check stops that race.",
+      file: "crates/gx/src/publish/remote.rs",
+      lineStart: 116,
+      before: [
+        "let remote = fetch_remote_head(&revision.parent).await?;",
+        "push_revision(revision).await?;",
+      ],
+      after: [
+        "let remote = fetch_remote_head(&revision.parent).await?;",
+        "if remote.sha != revision.expected_parent_sha {",
+        "    return Err(PublishError::ParentMoved {",
+        "        revision: revision.id.clone(),",
+        "        expected: revision.expected_parent_sha.clone(),",
+        "        actual: remote.sha,",
+        "    });",
+        "}",
+        "push_revision(revision).await?;",
+      ],
+    },
+  ],
+  "demo-review-comments": [
+    {
+      category: "pattern",
+      lineStart: 58,
+      before: [
+        "  return candidates[0] ?? null;",
+      ],
+      after: [
+        "  const exact = candidates.filter((candidate) =>",
+        "    candidate.contextHash === anchor.contextHash &&",
+        "    candidate.symbol === anchor.symbol",
+        "  );",
+        "  if (exact.length === 1) return exact[0];",
+        "  if (exact.length > 1) return { status: \"ambiguous\", candidates: exact };",
+        "  const fuzzy = rankByContext(candidates, anchor);",
+        "  if (!fuzzy[0] || fuzzy[0].score < MIN_ANCHOR_SCORE) return null;",
+        "  return { status: \"fuzzy\", candidate: fuzzy[0] };",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Resolved comments never silently reopen",
+      why: "Anchor movement should preserve discussion state. The migration now separates location updates from reviewer resolution.",
+      file: "server/src/comments/carry-forward.ts",
+      lineStart: 73,
+      before: [
+        "  await comments.patch(comment.id, {",
+        "    anchor: remappedAnchor,",
+        "    resolvedAt: null,",
+        "  });",
+      ],
+      after: [
+        "  await comments.patch(comment.id, {",
+        "    anchor: remappedAnchor,",
+        "    previousAnchor: comment.anchor,",
+        "    remappedAt: now,",
+        "    remapConfidence: result.status,",
+        "  });",
+        "  if (result.status === \"ambiguous\") {",
+        "    await notifications.enqueueAnchorReview(comment.id);",
+        "  }",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Ambiguous anchors are surfaced instead of guessed",
+      why: "Attaching feedback to the wrong code is worse than leaving it unplaced. The API returns candidates for reviewer confirmation.",
+      file: "server/src/routes/comments.ts",
+      lineStart: 121,
+      before: [
+        "  return c.json({ comment: await remapComment(comment, revision) });",
+      ],
+      after: [
+        "  const result = await remapComment(comment, revision);",
+        "  if (result.status === \"ambiguous\") {",
+        "    return c.json({",
+        "      comment,",
+        "      anchorStatus: \"needs-review\",",
+        "      candidates: result.candidates.map(toPublicAnchor),",
+        "    });",
+        "  }",
+        "  return c.json({ comment: result.comment, anchorStatus: result.status });",
+      ],
+    },
+  ],
+  "demo-cli-output": [
+    {
+      category: "pattern",
+      lineStart: 34,
+      before: [
+        "println!(\"publishing {:?}\", event);",
+      ],
+      after: [
+        "match output_mode {",
+        "    OutputMode::Json => json_writer.write_event(&event)?,",
+        "    OutputMode::Tty => progress.render(&event)?,",
+        "    OutputMode::Plain => plain_writer.write_event(&event)?,",
+        "}",
+        "if event.is_terminal() {",
+        "    writer.flush()?;",
+        "}",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Machine output remains a stable versioned contract",
+      why: "CI scripts parse this stream. Versioning the envelope allows interactive output to change without breaking automation.",
+      file: "crates/gx/src/output/json.rs",
+      lineStart: 19,
+      before: [
+        "serde_json::to_writer(writer, event)?;",
+      ],
+      after: [
+        "let envelope = OutputEnvelope {",
+        "    schema_version: 1,",
+        "    event_type: event.kind(),",
+        "    timestamp: clock.now(),",
+        "    payload: event,",
+        "};",
+        "serde_json::to_writer(&mut writer, &envelope)?;",
+        "writer.write_all(b\"\\n\")?;",
+      ],
+    },
+  ],
+  "demo-desktop-updater": [
+    {
+      category: "boundary",
+      lineStart: 81,
+      before: [
+        "  const archive = await download(update.url);",
+        "  await installArchive(archive);",
+      ],
+      after: [
+        "  const archive = await download(update.url, { maxBytes: MAX_UPDATE_BYTES });",
+        "  const digest = await sha256(archive);",
+        "  if (digest !== update.sha256) throw new UpdateError(\"checksum_mismatch\");",
+        "  const key = trustedKeys.get(update.signingKeyId);",
+        "  if (!key) throw new UpdateError(\"unknown_signing_key\");",
+        "  const verified = await verifyEd25519(key, archive, update.signature);",
+        "  if (!verified) throw new UpdateError(\"invalid_signature\");",
+        "  await installArchive(archive);",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Failed verification quarantines the downloaded artifact",
+      why: "Keeping an untrusted archive in the normal update cache risks a later retry installing it without revalidation.",
+      file: "apps/desktop/src/main/update-cache.ts",
+      lineStart: 49,
+      before: [
+        "  await fs.rename(downloadPath, cachePath);",
+        "  return cachePath;",
+      ],
+      after: [
+        "  try {",
+        "    await verifier.assertTrusted(downloadPath, manifest);",
+        "    await fs.rename(downloadPath, cachePath);",
+        "    return cachePath;",
+        "  } catch (error) {",
+        "    const quarantine = path.join(quarantineDir, manifest.version);",
+        "    await fs.rename(downloadPath, quarantine);",
+        "    await audit.record(\"update_quarantined\", { version: manifest.version });",
+        "    throw error;",
+        "  }",
+      ],
+    },
+    {
+      category: "architecture",
+      title: "Signing-key rotation requires an overlap window",
+      why: "Replacing the only trusted key would strand clients that have not yet received the new keyset. Rotation now requires two valid generations.",
+      file: "apps/desktop/src/main/trusted-keys.ts",
+      lineStart: 22,
+      before: [
+        "export const TRUSTED_KEY = process.env.UPDATE_PUBLIC_KEY!;",
+      ],
+      after: [
+        "export const TRUSTED_KEYS = new Map([",
+        "  [\"2026-01\", EMBEDDED_KEYS.primary],",
+        "  [\"2025-09\", EMBEDDED_KEYS.previous],",
+        "]);",
+        "export function assertRotationWindow(manifest: UpdateManifest) {",
+        "  if (!TRUSTED_KEYS.has(manifest.signingKeyId)) {",
+        "    throw new UpdateError(\"update signed by an untrusted key generation\");",
+        "  }",
+        "}",
+      ],
+    },
+  ],
+  "demo-command-palette": [
+    {
+      category: "architecture",
+      lineStart: 40,
+      before: [
+        "  commands.push({ id, label, run });",
+      ],
+      after: [
+        "  registry.register({",
+        "    id,",
+        "    label,",
+        "    shortcut,",
+        "    isAvailable: (context) =>",
+        "      permissions.allows(context.viewer, requiredPermission) &&",
+        "      featureFlags.enabled(context.workspace, feature),",
+        "    execute: async (context) => {",
+        "      await audit.record(\"command_executed\", { id, actor: context.viewer.id });",
+        "      return await run(context);",
+        "    },",
+        "  });",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Keyboard shortcuts cannot bypass command availability",
+      why: "The shortcut handler previously called actions directly. It now resolves through the same permission-aware registry as the visible palette.",
+      file: "apps/desktop/src/renderer/commands/shortcuts.ts",
+      lineStart: 61,
+      before: [
+        "  const command = shortcuts.get(event.key);",
+        "  if (command) await command.run();",
+      ],
+      after: [
+        "  const commandId = shortcuts.get(normalizeShortcut(event));",
+        "  if (!commandId) return;",
+        "  const command = registry.resolve(commandId, currentContext());",
+        "  if (!command?.available) {",
+        "    announce(command?.unavailableReason ?? \"Command unavailable\");",
+        "    return;",
+        "  }",
+        "  event.preventDefault();",
+        "  await command.execute();",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Async command failures stay inside the palette boundary",
+      why: "An unhandled command rejection could tear down the renderer. Failures now preserve context and offer a retry.",
+      file: "apps/desktop/src/renderer/commands/execute.ts",
+      lineStart: 28,
+      before: [
+        "  await command.execute(context);",
+        "  closePalette();",
+      ],
+      after: [
+        "  setCommandState(command.id, { status: \"running\" });",
+        "  try {",
+        "    await command.execute(context);",
+        "    closePalette();",
+        "  } catch (error) {",
+        "    logger.error(\"command failed\", { commandId: command.id, error });",
+        "    setCommandState(command.id, {",
+        "      status: \"failed\",",
+        "      message: userFacingCommandError(error),",
+        "    });",
+        "  }",
+      ],
+    },
+  ],
+  "demo-offline-drafts": [
+    {
+      category: "architecture",
+      lineStart: 93,
+      before: [
+        "  await api.saveDraft(localDraft);",
+        "  await localStore.delete(localDraft.id);",
+      ],
+      after: [
+        "  const remote = await api.getDraft(localDraft.reviewId);",
+        "  const decision = reconcileDrafts(localDraft, remote);",
+        "  if (decision.kind === \"conflict\") {",
+        "    await localStore.markConflict(localDraft.id, decision.remoteRevision);",
+        "    return { status: \"needs-user-merge\", conflict: decision };",
+        "  }",
+        "  const saved = await api.saveDraft({",
+        "    ...decision.draft,",
+        "    expectedRevision: remote?.revision ?? 0,",
+        "  });",
+        "  await localStore.deleteThrough(localDraft.id, saved.revision);",
+      ],
+    },
+    {
+      category: "failure-path",
+      title: "Draft uploads use optimistic concurrency",
+      why: "Without a revision precondition, a reconnecting client could overwrite feedback saved from another device.",
+      file: "server/src/routes/review-drafts.ts",
+      lineStart: 67,
+      before: [
+        "  await drafts.save(reviewId, body.content);",
+        "  return c.json({ ok: true });",
+      ],
+      after: [
+        "  const current = await drafts.get(reviewId, viewer.id);",
+        "  if ((current?.revision ?? 0) !== body.expectedRevision) {",
+        "    return c.json({",
+        "      error: \"draft_conflict\",",
+        "      currentRevision: current?.revision ?? 0,",
+        "    }, 409);",
+        "  }",
+        "  const saved = await drafts.save(reviewId, viewer.id, body.content);",
+        "  return c.json({ revision: saved.revision });",
+      ],
+    },
+    {
+      category: "boundary",
+      title: "Local draft encryption is scoped to the signed-in account",
+      why: "Shared machines must not expose one reviewer’s offline notes to the next account that signs in.",
+      file: "apps/desktop/src/main/draft-vault.ts",
+      lineStart: 35,
+      before: [
+        "  return await keychain.get(\"draft-key\");",
+      ],
+      after: [
+        "  const accountKey = `draft-key:${viewer.id}`;",
+        "  let key = await keychain.get(accountKey);",
+        "  if (!key) {",
+        "    key = randomBytes(32).toString(\"base64url\");",
+        "    await keychain.set(accountKey, key);",
+        "  }",
+        "  return deriveKey(key, viewer.sessionBinding);",
+      ],
+    },
+  ],
+};
+
+function makeDemoPatch(
+  file: string,
+  lineStart: number,
+  before: string[],
+  after: string[],
+): string {
+  return `--- a/${file}
++++ b/${file}
+@@ -${lineStart},${before.length} +${lineStart},${after.length} @@
+${before.map((line) => `-${line}`).join("\n")}
+${after.map((line) => `+${line}`).join("\n")}
+`;
+}
+
 const DEMO_NOW = Date.UTC(2026, 6, 14, 15, 0, 0);
 
 function buildDemoReview(spec: DemoReviewSpec, index: number): ReviewResponse {
@@ -404,6 +1036,7 @@ function buildDemoReview(spec: DemoReviewSpec, index: number): ReviewResponse {
   const sha = `${(index + 1).toString(16).repeat(40)}`.slice(0, 40);
   const safeFile = spec.file.replace(/\.[^.]+$/, ".test$&");
   const baseNotable = DEMO_PLAN.notableChanges[0]!;
+  const diffs = DEMO_DIFFS[spec.id]!;
 
   return {
     ...DEMO_REVIEW,
@@ -439,19 +1072,26 @@ function buildDemoReview(spec: DemoReviewSpec, index: number): ReviewResponse {
           whyTeaser: spec.why,
           selfReportQuote: `Implement ${spec.title.toLowerCase()} and keep the change focused on the existing product flow.`,
         },
-        notableChanges: [
-          {
+        notableChanges: diffs.map((diff, diffIndex) => {
+          const file = diff.file ?? spec.file;
+          return {
             ...baseNotable,
-            title: spec.notableTitle,
-            whyItMatters: spec.notableWhy,
-            anchor: { file: spec.file, lineStart: 24, lineEnd: 61 },
+            rank: diffIndex + 1,
+            category: diff.category,
+            title: diff.title ?? spec.notableTitle,
+            whyItMatters: diff.why ?? spec.notableWhy,
+            anchor: {
+              file,
+              lineStart: diff.lineStart,
+              lineEnd: diff.lineStart + diff.after.length - 1,
+            },
             attribution: {
               authorship: "agent",
               tool: index % 2 === 0 ? "cursor" : "claude code",
               model: index % 2 === 0 ? "gpt-5.5" : "claude-sonnet-4-6",
             },
-          },
-        ],
+          };
+        }),
         safeToSkim: [
           { file: safeFile, reason: "Focused coverage for the behavior above" },
           { file: "bun.lock", reason: "Generated lockfile update" },
@@ -475,24 +1115,16 @@ function buildDemoReview(spec: DemoReviewSpec, index: number): ReviewResponse {
         costUsd: Number((0.72 + index * 0.31).toFixed(2)),
       },
     },
-    notablePatches: [
-      {
-        rank: 1,
-        file: spec.file,
-        lineStart: 24,
-        lineEnd: 61,
-        patch: `--- a/${spec.file}
-+++ b/${spec.file}
-@@ -24,3 +24,7 @@
--  return legacyBehavior(input);
-+  const result = await applyReviewedChange(input);
-+  if (!result.ok) {
-+    throw new Error(result.message);
-+  }
-+  return result.value;
-`,
-      },
-    ],
+    notablePatches: diffs.map((diff, diffIndex) => {
+      const file = diff.file ?? spec.file;
+      return {
+        rank: diffIndex + 1,
+        file,
+        lineStart: diff.lineStart,
+        lineEnd: diff.lineStart + diff.after.length - 1,
+        patch: makeDemoPatch(file, diff.lineStart, diff.before, diff.after),
+      };
+    }),
     activity: [
       {
         kind: "push",
