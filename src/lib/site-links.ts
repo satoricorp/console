@@ -36,7 +36,7 @@ export function githubSignInUrl(callbackURL = POST_SIGN_IN_URL) {
 
 export const DOCS_URL = "/docs";
 
-export const HOW_IT_WORKS_DOCS_URL = `${DOCS_URL}/how-it-works`;
+export const HOW_IT_WORKS_DOCS_URL = "https://gx.run/docs/how-it-works";
 
 export type NavLink = {
   label: string;
