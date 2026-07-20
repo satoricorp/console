@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
-import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
+import {
+  BASE_TRIAL_DAYS,
+  MS_PER_DAY,
+  TrialEntitlementUnavailableError,
+} from "../src/metering/quota";
 import { generateSummary } from "../src/summary/generate";
 import { authHeaders, installTestAuth } from "./auth";
 
@@ -118,6 +122,46 @@ describeDb("PR Summary metering", () => {
         provider: createMockProvider("blocked"),
       }),
     ).rejects.toThrow("free trial has ended");
+  });
+
+  test("reports entitlement authentication failure instead of expired trial", async () => {
+    const db = getSql();
+    const bookmarkId = await seedBookmark(
+      db,
+      expiredOrgId,
+      "entitlement-auth",
+      Date.now() + 50,
+    );
+    const originalFetch = globalThis.fetch;
+    const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
+    const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
+    process.env.CONVEX_SITE_URL = "https://convex.test";
+    process.env.GX_CLOUD_API_KEY = "wrong-key";
+    globalThis.fetch = (async () =>
+      new Response("Unauthorized", { status: 401 })) as unknown as typeof fetch;
+
+    try {
+      await expect(
+        generateSummary(db, {
+          orgId: expiredOrgId,
+          userId: "convex-user-entitlement-auth",
+          bookmarkId,
+          provider: createMockProvider("must not run"),
+        }),
+      ).rejects.toBeInstanceOf(TrialEntitlementUnavailableError);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalConvexSiteUrl === undefined) {
+        delete process.env.CONVEX_SITE_URL;
+      } else {
+        process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
+      }
+      if (originalCloudApiKey === undefined) {
+        delete process.env.GX_CLOUD_API_KEY;
+      } else {
+        process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
+      }
+    }
   });
 
   test("POST /v1/summaries/generate returns 402 after trial ends", async () => {

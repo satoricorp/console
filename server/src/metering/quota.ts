@@ -30,6 +30,13 @@ export class QuotaExceededError extends Error {
   }
 }
 
+export class TrialEntitlementUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TrialEntitlementUnavailableError";
+  }
+}
+
 /** Free trial length when Convex entitlement is unavailable. */
 export const BASE_TRIAL_DAYS = 7;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -74,12 +81,18 @@ async function fetchTrialEntitlement(
       },
       body: JSON.stringify({ user_id: userId }),
     });
-  } catch {
-    return null;
+  } catch (error) {
+    throw new TrialEntitlementUnavailableError(
+      `Convex trial entitlement request failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 
   if (!response.ok) {
-    return null;
+    throw new TrialEntitlementUnavailableError(
+      `Convex trial entitlement returned ${response.status}`,
+    );
   }
 
   return (await response.json()) as TrialEntitlement;
@@ -148,24 +161,24 @@ export async function checkPrSummaryQuota(
 
   if (looksLikeConvexUserId(userId)) {
     const entitlement = await fetchTrialEntitlement(userId);
-    if (entitlement) {
-      if (entitlement.allowed) {
+    if (entitlement && entitlement.reason !== "unknown_user") {
+      if (!entitlement.allowed) {
         return {
-          allowed: true,
+          allowed: false,
           used: 0,
           limit: 0,
           upgradeUrl,
           trialEndsAt: entitlement.trialEndsAt,
-          reason: entitlement.reason ?? "trial",
+          reason: "trial_expired",
         };
       }
       return {
-        allowed: false,
+        allowed: true,
         used: 0,
         limit: 0,
         upgradeUrl,
         trialEndsAt: entitlement.trialEndsAt,
-        reason: "trial_expired",
+        reason: entitlement.reason ?? "trial",
       };
     }
   }

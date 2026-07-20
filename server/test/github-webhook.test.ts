@@ -40,11 +40,34 @@ describeDb("GitHub webhook", () => {
   let bookmarkId: string;
   let eventId: string;
   const originalFetch = globalThis.fetch;
+  const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
+  const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+  let trialEntitlement: {
+    status: number;
+    body: {
+      allowed: boolean;
+      reason: string;
+      trialDaysTotal: number | null;
+      trialEndsAt: number | null;
+      startedAt: number | null;
+    };
+  } = {
+    status: 200,
+    body: {
+      allowed: true,
+      reason: "subscribed",
+      trialDaysTotal: null,
+      trialEndsAt: null,
+      startedAt: null,
+    },
+  };
 
   beforeAll(async () => {
     process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
     delete process.env.OPENAI_API_KEY;
+    process.env.CONVEX_SITE_URL = "https://convex.test";
+    process.env.GX_CLOUD_API_KEY = "test-cloud-api-key";
 
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     process.env.GITHUB_APP_ID = "12345";
@@ -56,6 +79,13 @@ describeDb("GitHub webhook", () => {
     globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       fetchCalls.push({ url, init });
+
+      if (url === "https://convex.test/cx/trial/entitlement") {
+        return new Response(JSON.stringify(trialEntitlement.body), {
+          status: trialEntitlement.status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
 
       if (url.includes("/embeddings")) {
         return new Response(
@@ -217,10 +247,30 @@ describeDb("GitHub webhook", () => {
 
   afterEach(() => {
     fetchCalls.length = 0;
+    trialEntitlement = {
+      status: 200,
+      body: {
+        allowed: true,
+        reason: "subscribed",
+        trialDaysTotal: null,
+        trialEndsAt: null,
+        startedAt: null,
+      },
+    };
   });
 
   afterAll(async () => {
     globalThis.fetch = originalFetch;
+    if (originalConvexSiteUrl === undefined) {
+      delete process.env.CONVEX_SITE_URL;
+    } else {
+      process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
+    }
+    if (originalCloudApiKey === undefined) {
+      delete process.env.GX_CLOUD_API_KEY;
+    } else {
+      process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
+    }
     await closeDatabase();
   });
 
@@ -317,6 +367,13 @@ describeDb("GitHub webhook", () => {
     });
 
     expect(res.status).toBe(200);
+    const entitlementCall = fetchCalls.find(
+      (c) => c.url === "https://convex.test/cx/trial/entitlement",
+    );
+    expect(entitlementCall).toBeDefined();
+    expect(JSON.parse(String(entitlementCall?.init?.body))).toEqual({
+      user_id: "webhook-test-user",
+    });
     expect(fetchCalls.some((c) => c.url.includes("/access_tokens"))).toBe(true);
     expect(
       fetchCalls.some(
@@ -374,15 +431,78 @@ describeDb("GitHub webhook", () => {
     expect(comments[0]?.github_comment_id).toBeNull();
   });
 
+  test("pull_request without a GX event waits without evaluating quota", async () => {
+    const db = getSql();
+    const prNumber = PR_NUMBER + 1000;
+    const branchName = `feat/missing-event-${prNumber}`;
+    const expired = Date.now() - (BASE_TRIAL_DAYS + 1) * MS_PER_DAY;
+    await db`
+      UPDATE orgs SET created_at_ms = ${expired}, plan = 'free' WHERE id = ${orgId}
+    `;
+    await db`
+      DELETE FROM github_post_skips
+      WHERE org_id = ${orgId} AND pr_number = ${prNumber}
+    `;
+    fetchCalls.length = 0;
+
+    const res = await postWebhook("pull_request", {
+      action: "opened",
+      installation: { id: INSTALLATION_ID },
+      repository: {
+        id: 999001,
+        full_name: REPO_FULL_NAME,
+        name: "gx",
+        owner: { login: "acme" },
+      },
+      pull_request: {
+        number: prNumber,
+        title: "Wait for GX publish",
+        html_url: `https://github.com/${REPO_FULL_NAME}/pull/${prNumber}`,
+        head: { ref: branchName, sha: "missing-event-head" },
+        base: { ref: "main", sha: "def456" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(
+      fetchCalls.some(
+        (c) => c.url === "https://convex.test/cx/trial/entitlement",
+      ),
+    ).toBe(false);
+    expect(
+      fetchCalls.some((c) => c.init?.method === "PATCH"),
+    ).toBe(false);
+    const skips = await db<{ reason: string }[]>`
+      SELECT reason FROM github_post_skips
+      WHERE org_id = ${orgId} AND pr_number = ${prNumber}
+    `;
+    expect(skips).toHaveLength(0);
+
+    await db`
+      UPDATE orgs SET created_at_ms = ${Date.now()}, plan = 'free' WHERE id = ${orgId}
+    `;
+  });
+
   test("pull_request opened with expired trial posts nothing and logs skip", async () => {
     const db = getSql();
     const expired = Date.now() - (BASE_TRIAL_DAYS + 1) * MS_PER_DAY;
     await db`
       UPDATE orgs SET created_at_ms = ${expired}, plan = 'free' WHERE id = ${orgId}
     `;
+    await db`DELETE FROM review_usage WHERE org_id = ${orgId}`;
     await db`DELETE FROM github_post_skips WHERE org_id = ${orgId}`;
     await db`DELETE FROM summaries WHERE org_id = ${orgId}`;
     fetchCalls.length = 0;
+    trialEntitlement = {
+      status: 200,
+      body: {
+        allowed: false,
+        reason: "trial",
+        trialDaysTotal: BASE_TRIAL_DAYS,
+        trialEndsAt: expired + BASE_TRIAL_DAYS * MS_PER_DAY,
+        startedAt: expired,
+      },
+    };
 
     const res = await postWebhook("pull_request", {
       action: "opened",

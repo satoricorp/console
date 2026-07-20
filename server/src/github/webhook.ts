@@ -3,8 +3,7 @@ import type postgres from "postgres";
 import { getSql } from "../db";
 import { containsGxMention, handleGxMention } from "../gx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
-import { recordGithubPostSkip } from "../metering/github-post-skips";
-import { checkPrSummaryQuota } from "../metering/quota";
+import { QuotaExceededError } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
@@ -277,40 +276,6 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     headSha: pr.head?.sha ?? null,
   });
 
-  const quota = await checkPrSummaryQuota(db, orgId, bookmark.id);
-  if (!quota.allowed) {
-    const reason = quota.reason ?? "trial_expired";
-    console.info("PR Summary skipped: not posting to GitHub", {
-      orgId,
-      bookmarkId: bookmark.id,
-      reason,
-      source: "github_webhook",
-    });
-    capture(
-      Events.SummaryQuotaBlocked,
-      {
-        bookmark_id: bookmark.id,
-        pr_number: pr.number,
-        repo: repo.full_name,
-        used: quota.used,
-        limit: quota.limit,
-        reason,
-        source: "github_webhook",
-      },
-      orgId,
-    );
-    await recordGithubPostSkip(db, {
-      orgId,
-      bookmarkId: bookmark.id,
-      eventId: bookmark.latest_event_id ?? null,
-      reason,
-      source: "github_webhook",
-      prNumber: pr.number,
-      repoFullName: repo.full_name,
-    });
-    return;
-  }
-
   const resolved = await adoptLatestEventFromBranchSibling(db, {
     orgId,
     bookmarkId: bookmark.id,
@@ -326,13 +291,36 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
     return;
   }
 
-  const result = await generateSummary(db, {
+  const publisherUserId = await resolveEventPublisherUserId(
+    db,
     orgId,
-    userId: "github-webhook",
-    bookmarkId: resolved.id,
-    provider: createLLMProvider(),
-    githubPrUrl: pr.html_url ?? null,
-  });
+    resolved.latest_event_id,
+  );
+
+  let result;
+  try {
+    result = await generateSummary(db, {
+      orgId,
+      userId: publisherUserId,
+      bookmarkId: resolved.id,
+      provider: createLLMProvider(),
+      quotaSkipSource: "github_webhook",
+      quotaSkipPrNumber: pr.number,
+      quotaSkipRepoFullName: repo.full_name,
+      githubPrUrl: pr.html_url ?? null,
+    });
+  } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      console.info("PR Summary skipped: not posting to GitHub", {
+        orgId,
+        bookmarkId: resolved.id,
+        reason: "trial_expired",
+        source: "github_webhook",
+      });
+      return;
+    }
+    throw error;
+  }
 
   let bodyUpdated = false;
   let postedOk = false;
@@ -390,6 +378,39 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       ${now}
     )
   `;
+}
+
+async function resolveEventPublisherUserId(
+  db: postgres.Sql,
+  orgId: string,
+  eventId: string,
+): Promise<string> {
+  const [event] = await db<
+    { user_id: string | null; github_user_id: number | null }[]
+  >`
+    SELECT user_id, github_user_id
+    FROM pr_events
+    WHERE id = ${eventId}::uuid
+      AND org_id = ${orgId}::uuid
+    LIMIT 1
+  `;
+  const userId = event?.user_id?.trim();
+  if (userId && userId !== "github-webhook" && !userId.startsWith("github:")) {
+    return userId;
+  }
+  if (typeof event?.github_user_id === "number") {
+    const [member] = await db<{ convex_user_id: string | null }[]>`
+      SELECT convex_user_id
+      FROM org_members
+      WHERE org_id = ${orgId}::uuid
+        AND github_user_id = ${event.github_user_id}
+      LIMIT 1
+    `;
+    if (member?.convex_user_id?.trim()) {
+      return member.convex_user_id.trim();
+    }
+  }
+  return userId || "github-webhook";
 }
 
 /** Sync bookmark merge_status when a PR is closed on GitHub (merge or close). */
