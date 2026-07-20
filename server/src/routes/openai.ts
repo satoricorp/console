@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import { getSql } from "../db";
-import { checkCloudAIQuota } from "../metering/quota";
+import {
+  checkCloudAIQuota,
+  TrialEntitlementUnavailableError,
+} from "../metering/quota";
 import type { AppEnv } from "../middleware/auth";
 import { requireAuth } from "../middleware/auth";
 import { logTiming, timingNow } from "../timing";
@@ -14,7 +17,21 @@ openAIRoutes.use("*", requireAuth);
 // tokens on the shared key.
 openAIRoutes.use("*", async (c, next) => {
   const auth = c.get("auth");
-  const quota = await checkCloudAIQuota(getSql(), auth.orgId, auth.userId);
+  let quota;
+  try {
+    quota = await checkCloudAIQuota(getSql(), auth.orgId, auth.userId);
+  } catch (error) {
+    if (error instanceof TrialEntitlementUnavailableError) {
+      return c.json(
+        {
+          error: "entitlement_unavailable",
+          message: "GX entitlement service is unavailable. Please retry.",
+        },
+        503,
+      );
+    }
+    throw error;
+  }
   if (!quota.allowed) {
     return c.json(
       {

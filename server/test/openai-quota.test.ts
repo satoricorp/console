@@ -99,4 +99,33 @@ describeDb("OpenAI proxy quota gate", () => {
     });
     expect(response.status).not.toBe(402);
   });
+
+  test("entitlement service authentication failure returns 503", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
+    process.env.CONVEX_SITE_URL = "https://convex.test";
+    globalThis.fetch = (async () =>
+      new Response("Unauthorized", { status: 401 })) as unknown as typeof fetch;
+
+    try {
+      const response = await app.request("/gx/openai/chat-completions", {
+        method: "POST",
+        headers: {
+          ...authHeaders("convex-user-openai-auth", expiredOrgId),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(chatPayload),
+      });
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toBe("entitlement_unavailable");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalConvexSiteUrl === undefined) {
+        delete process.env.CONVEX_SITE_URL;
+      } else {
+        process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
+      }
+    }
+  });
 });
