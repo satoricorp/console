@@ -113,6 +113,8 @@ export type GenerateSummaryInput = {
   skipQuotaCheck?: boolean;
   /** Where to attribute a quota skip row when posting is blocked. */
   quotaSkipSource?: GithubPostSkipSource;
+  quotaSkipPrNumber?: number | null;
+  quotaSkipRepoFullName?: string | null;
   /** Prefer this PR URL when bookmark row is missing github_pr_url. */
   githubPrUrl?: string | null;
 };
@@ -419,6 +421,8 @@ export async function generateSummary(
           limit: quota.limit,
           reason,
           source: input.quotaSkipSource ?? "summary_api",
+          pr_number: input.quotaSkipPrNumber ?? null,
+          repo: input.quotaSkipRepoFullName ?? null,
         },
         input.orgId,
       );
@@ -428,6 +432,8 @@ export async function generateSummary(
         eventId: target.eventId,
         reason,
         source: input.quotaSkipSource ?? "summary_api",
+        prNumber: input.quotaSkipPrNumber,
+        repoFullName: input.quotaSkipRepoFullName,
       });
       throw new QuotaExceededError(quota);
     }
