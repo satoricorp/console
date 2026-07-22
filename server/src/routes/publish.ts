@@ -12,6 +12,7 @@ import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
 import { QuotaExceededError } from "../metering/quota";
 import { enrichSummaryLinks } from "../summary/enrich-links";
+import { enrichSeverityDots } from "../summary/severity";
 import {
   generateSummary,
   loadExtractContext,
@@ -568,16 +569,20 @@ async function enrichExistingSummary(
       bookmarkId: input.bookmarkId,
     });
     const ctx = await loadExtractContext(db, input.orgId, target);
-    return enrichSummaryLinks(
-      input.content,
-      summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+    return enrichSeverityDots(
+      enrichSummaryLinks(
+        input.content,
+        summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+      ),
     );
   } catch {
-    return enrichSummaryLinks(input.content, {
-      prUrl: input.githubPrUrl,
-      headSha: null,
-      hunks: [],
-    });
+    return enrichSeverityDots(
+      enrichSummaryLinks(input.content, {
+        prUrl: input.githubPrUrl,
+        headSha: null,
+        hunks: [],
+      }),
+    );
   }
 }
 

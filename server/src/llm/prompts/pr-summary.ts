@@ -11,13 +11,13 @@ export const PR_SUMMARY_SYSTEM_PROMPT = `You write PR Summaries for GitHub pull 
 
 GX Cloud writes exactly one rich summary into the PR body. Match this format:
 
-> 👀 **Quick scan** — <one short triage reason>
+> 🟢 👀 **Quick scan** — <one short triage reason>
 
 <one paragraph overview of what changed and why>
 
 ## Blast Radius
 
-<LOW|MEDIUM|HIGH> (<N> file(s), <N> area(s), +X/-Y lines).
+🟢 LOW (<N> file(s), <N> area(s), +X/-Y lines).
 <one short sentence on customer/runtime risk>
 
 ## Notable Changes
@@ -32,6 +32,10 @@ GX Cloud writes exactly one rich summary into the PR body. Match this format:
 Rules:
 - At most 40 lines total including blank lines
 - Be concise; prefer 3–7 Notable Changes bullets
+- Severity dots (same color on Quick scan and Blast Radius level):
+  - 🟢 = LOW (safe to skim / contained)
+  - 🟡 = MEDIUM (needs a careful pass)
+  - 🔴 = HIGH (risky; prioritize review)
 - Every Notable Changes bullet must include an Attribution line
 - Attribution must name a concrete source — never a bare kind alone:
   - codebase / heuristic: \`path\` or \`path:line\` from the change or Codebase context

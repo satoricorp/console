@@ -19,6 +19,7 @@ import {
   enrichSummaryLinks,
   type SummaryLinkContext,
 } from "./enrich-links";
+import { enrichSeverityDots } from "./severity";
 import { assertValidSummary, validateSummary } from "./validate";
 
 export type HunkLinkRow = {
@@ -457,9 +458,11 @@ export async function generateSummary(
     assertValidSummary(completion.text);
   }
   const lineCount = validation.ok ? validation.lineCount : 0;
-  const content = enrichSummaryLinks(
-    completion.text,
-    summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+  const content = enrichSeverityDots(
+    enrichSummaryLinks(
+      completion.text,
+      summaryLinkContextFromExtract(ctx, input.githubPrUrl),
+    ),
   );
 
   const postedAt = Date.now();

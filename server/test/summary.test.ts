@@ -8,13 +8,13 @@ import { authHeaders, installTestAuth } from "./auth";
 
 describe("validateSummary", () => {
   const validSummary = [
-    "> 👀 **Quick scan** — standard change; skim the notable changes.",
+    "> 🟢 👀 **Quick scan** — standard change; skim the notable changes.",
     "",
     "Add capture upload path for WP-1b.",
     "",
     "## Blast Radius",
     "",
-    "LOW (2 file(s), 1 area(s), +10/-1 lines).",
+    "🟢 LOW (2 file(s), 1 area(s), +10/-1 lines).",
     "CLI upload only; no production runtime path is changed.",
     "",
     "## Notable Changes",

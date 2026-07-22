@@ -117,13 +117,13 @@ export function createMockProvider(contextHint?: string): LLMProvider {
       const fileMatch = user.match(/Hunk links[\s\S]*?- ([^\s:]+):/i);
       const primaryFile = fileMatch?.[1] ?? "server/src/summary/generate.ts";
       const text = [
-        "> 👀 **Quick scan** — standard change; skim the notable changes.",
+        "> 🟢 👀 **Quick scan** — standard change; skim the notable changes.",
         "",
         intent,
         "",
         "## Blast Radius",
         "",
-        "LOW (1 file(s), 1 area(s), +10/-1 lines).",
+        "🟢 LOW (1 file(s), 1 area(s), +10/-1 lines).",
         "Contained to review/summary paths; no production runtime path is changed.",
         "",
         "## Notable Changes",

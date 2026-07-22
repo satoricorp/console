@@ -61,11 +61,11 @@ describe("github link helpers", () => {
 
 describe("enrichSummaryLinks", () => {
   const sample = [
-    "> 👀 **Quick scan** — wires PR body updates",
+    "> 🟢 👀 **Quick scan** — wires PR body updates",
     "",
     "## Blast Radius",
     "",
-    "LOW (1 file, 1 area, +10/-2 lines).",
+    "🟢 LOW (1 file, 1 area, +10/-2 lines).",
     "",
     "## Notable Changes",
     "",
