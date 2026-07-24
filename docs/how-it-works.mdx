@@ -16,22 +16,21 @@ Agent-written code breaks two of Git's assumptions:
 
 ## What GX captures
 
-GX records work at three levels:
+GX records work at two levels:
 
 - **Sessions** — transcripts from coding agents (for example, Claude Code transcripts via `Stop`/`SessionEnd` hooks that `gx init` installs). Sessions are retained locally for 30 days and published alongside the code they produced.
-- **Revisions** — each `gx commit` records the staged changes as one reviewable unit, down to individual [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (a few changed lines, not whole files). GX links each revision to the session that produced it — automatically when it can match one, or explicitly when an agent declares it.
-- **Agent self-reports** — through the [MCP tools](/docs/mcp), an agent can attach a task summary and the commands and tests it ran directly to the revision it is committing.
+- **Revisions** — each plain `git commit` records the staged changes as one reviewable unit via the GX hooks, down to individual [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (a few changed lines, not whole files). GX links each revision to the session that produced it automatically, by matching the changed hunks against captured session activity — you never attach anything by hand.
 
 Because changes are stored as described hunks with linked sessions, GX can point reviewers at the parts that matter and let them skim the mechanical rest — instead of forcing a line-by-line read of everything.
 
 ## Stacks and revisions
 
-You are likely used to the Git mental model of branches and commits. These work great until you need to edit a commit, rebase, or reorder work — then the tooling gets sharp.
+You already know the Git mental model of branches and commits. GX keeps exactly that model and records review context around it — no new objects to learn.
 
-- A **revision** is analogous to a commit, but it can be edited and updated after it is recorded. Revisions are JJ-backed, so amending one never requires an interactive rebase.
-- A **stack** is analogous to a branch, but with metadata: an ordered line of revisions, their base, publish state, and remote sync status. Status output also calls a stack a **feature**.
+- A **revision** is a Git commit plus the review context GX records around it: the session that produced it, a generated summary, and its place in the stack.
+- A **stack** is a Git branch plus metadata: an ordered line of revisions, their base, publish state, and remote sync status. GX also calls a stack a **feature**.
 
-Here is a stack as `gx status` shows it — two revisions built on `main`, not yet published:
+Here is a stack — two revisions built on `main`, not yet published:
 
 ```text
 › ● retry-backoff  s1 · feature/retry-backoff · main · draft · ↑2
@@ -43,36 +42,25 @@ Each revision is separately reviewable, and the order tells the story of the wor
 
 ## Everything still exports to Git
 
-GX maintains revisions and stacks locally. When you push — via `git push` with the GX pre-push hook, or `gx push` — GX publishes:
+GX maintains revisions and stacks locally. When you `git push`, the GX pre-push hook publishes:
 
 - normal Git **branches and commits**, so your Git log and GitHub stay standard;
 - the linked **sessions and metadata** to GX Cloud as a review bundle.
 
 Nothing about your repository becomes GX-specific. If you stopped using GX tomorrow, your branches and commits remain ordinary Git.
 
-## Replace your git workflow
+## Your Git workflow, unchanged
 
-Instead of manually creating a branch and commit:
-
-```bash
-git checkout -b feature/my-change
-git add .
-git commit -m "update stuff"
-git push
-```
-
-Start with:
+You might expect a set of `gx` verbs to learn. There are none for everyday work — after `gx init`, keep using the Git you already know:
 
 ```bash
-git add <files>
-gx commit -m "describe this revision"   # add -b feature/my-change for a new branch
-gx status                               # alias: gxs
-git push                                # or gx push
+git switch -c feature/my-change        # a normal branch, when you want one
+git add <files>                        # choose the scope of the change
+git commit -m "describe this change"   # a hook records it as a GX revision
+git push                               # the pre-push hook captures sessions + publishes
 ```
 
-`gx commit` records staged work as a GX revision. `gx status` shows local stacks and remote state. `git push` (with the GX pre-push hook) or `gx push` publishes code plus session data and metadata to GitHub and GX Cloud.
-
-For a large messy working copy, agents can still run `gx generate` to bulk-organize changes into smaller revisions, then inspect with `gx status` and push when ready.
+Plain `git commit` records the staged work as a GX revision. Use `git status` to inspect local state and `gx review` (alias `gxr`) to review the current change. Plain `git push` publishes the code plus linked session data and metadata to GitHub and GX Cloud through the pre-push hook.
 
 ## Where the context goes
 
@@ -82,4 +70,4 @@ The published review bundle powers the review surfaces:
 - [`@gx` chat](/docs/github) answers questions inside the pull request, citing the sessions and diffs it used.
 - [`gx review`](/docs/cli) runs a local review using the same captured context before you ever open a PR.
 
-The recommended way to use GX with agents is through the [MCP server](/docs/mcp). That lets your coding tool record and publish work without touching the terminal.
+The recommended way to give agents review context is through the [MCP server](/docs/mcp): it exposes the `gx_review` tool so your coding tool can review its own work in the loop, without dropping to the terminal.

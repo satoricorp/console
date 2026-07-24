@@ -13,7 +13,7 @@ export GX_API_URL="https://api.gx.run"
 | --- | --- |
 | `GET /health` | API and database reachability |
 | `GET /v1/auth/me` | inspect the authenticated caller |
-| `POST /v1/publish` | publish a GX review bundle (what `gx push` sends) |
+| `POST /v1/publish` | publish a GX review bundle (what the pre-push hook sends) |
 | `GET /bookmarks` | list bookmark metadata for sync and review |
 | `GET /v1/review/context` | review context for a repo/ref range |
 | `GET /v1/reviews/:bookmarkId` (+ `/plan`, `/decision`) | Console review experience |
@@ -101,7 +101,7 @@ Response fields include `org_id`, `user_id`, `token_label`, and optional GitHub/
 
 ## POST /v1/publish
 
-Publish a GX review bundle. This is what `gx push` (and the publish path used after Git push with the GX hook) sends after it has produced Git branches, commits, sessions, and review metadata.
+Publish a GX review bundle. This is what the GX pre-push hook sends on `git push`, after Git has produced branches and commits and GX has captured sessions and review metadata.
 
 ```bash
 curl "$GX_API_URL/v1/publish" \
