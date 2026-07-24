@@ -5,57 +5,44 @@ description: GX is the quality layer for agent-written code — capture coding s
 
 GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
 
-The open-source `gx` CLI captures coding sessions, records staged changes as reviewable revisions inside stacks, and publishes those stacks as normal Git branches and commits. The paid GitHub features add [PR Summaries and `@gx` chat](/docs/github) inside GitHub pull requests.
+The open-source `gx` CLI installs Git hooks that capture coding sessions and link them to your commits as reviewable revisions, and adds AI review with `gx review`. You keep using plain Git — `git add`, `git commit`, `git push` — and GX does its work automatically on the way through. The paid GitHub features add [PR Summaries and `@gx` chat](/docs/github) inside GitHub pull requests.
 
 ## Start here
 
 - [Get started](/docs/getting-started): install GX, sign in, and publish your first revision.
 - [How it works](/docs/how-it-works): why GX stores more context than Git, and what stacks and revisions are.
 - [CLI](/docs/cli): every command with flags, examples, and exit codes.
-- [MCP setup](/docs/mcp): let coding agents commit, inspect, review, and push through MCP tools.
+- [MCP setup](/docs/mcp): give coding agents review context through the `gx_review` MCP tool.
 - [Pull Requests](/docs/github): PR Summaries, `@gx` chat, and paid GitHub review features.
 - [Troubleshooting](/docs/troubleshooting): common errors and how to fix them.
 
 ## Core workflow
 
-GX keeps the Git staging mental model: `git add` chooses the scope, and `gx commit` replaces `git commit`.
+You keep working in plain Git. Once `gx init` installs the hooks, your normal `git` commands do the GX work automatically — there is no GX-specific save verb to learn.
 
 ```bash
-git add <files>                        # choose the scope of the revision
-gx commit -m "describe this revision"  # record it as a GX revision
-gx status                              # inspect stacks before publishing (alias: gxs)
-git push                               # the GX pre-push hook publishes sessions + metadata
+git add <files>                        # choose the scope of the change
+git commit -m "describe this change"   # a hook records it as a GX revision
+git push                               # the pre-push hook captures sessions + publishes review context
 ```
 
-A first commit looks like this:
+A commit looks like any other:
 
 ```text
 $ git add src/retry.js
-$ gx commit -m "add retry helper with attempt limit"
-
-Revision recorded
-Message       add retry helper with attempt limit
-Revision      qltmnmynnyzk
-Commit        b694d3be
-Stack         main
-Provenance    absent
+$ git commit -m "add retry helper with attempt limit"
+[main b694d3be] add retry helper with attempt limit
+ 1 file changed, 12 insertions(+)
 ```
 
-Every `gx commit` produces a normal Git commit (`b694d3be` above) plus a GX **revision** (`qltmnmynnyzk`) that stays editable and carries review context: which captured session produced it, what the agent reported doing, and where it sits in its stack. `Provenance` shows whether a captured coding session was linked to the revision — `absent` here because no agent session was running.
+Behind that ordinary commit, GX's `prepare-commit-msg` and `post-commit` hooks record a GX **revision** (`qltmnmynnyzk`) — an editable review unit that carries review context: which captured session produced it, and where it sits among your branches. When you `git push`, the pre-push hook links each captured session to the hunks it changed and publishes the review bundle.
 
-The CLI installer also adds two shortcuts:
-
-```bash
-gxs   # gx status
-gxr   # gx review
-```
-
-For a large messy working copy, the advanced bulk organizer can split the work into smaller revisions automatically:
+GX adds three commands on top of Git — and nothing that duplicates Git itself:
 
 ```bash
-gx generate   # hidden from gx --help; see CLI → Bulk organize
-gx status
-gx push
+gx init      # set up hooks and identity in a repo (run once)
+gx review    # AI review of your current change, with codebase + session context (alias: gxr)
+gx doctor    # check capture, hooks, and workflow state
 ```
 
 ## Product model
@@ -63,11 +50,11 @@ gx push
 GX uses a few terms consistently:
 
 - **Session**: captured coding context from an agent, editor, or shell.
-- **Revision**: one reviewable logical change, including the code diff and the context that explains how it was produced.
-- **Stack** (also called a **feature** in status output): an ordered line of revisions that should be reviewed together.
+- **Revision**: one reviewable logical change — a Git commit plus the context that explains how it was produced.
+- **Stack**: an ordered line of revisions that should be reviewed together, exported as a single Git branch.
 - **Review bundle**: the published payload that joins code changes, sessions, metadata, and review evidence.
 
-GX still outputs normal Git branches, commits, and pull requests. The GX terms describe the product model before it is exported to Git.
+These are just names for what your ordinary Git commits and branches already are, plus the review context GX records around them. You never leave Git to get them.
 
 A Git commit is a durable snapshot plus a short message. That is still useful, but it is often too thin for AI-generated work: the commit does not know which agent session produced it, which prompt or shell commands mattered, whether the change was split out of a larger messy workspace, or how it relates to nearby generated work.
 

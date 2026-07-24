@@ -6,9 +6,9 @@
 
 ```bash
 git add <files>
-gx commit -m "describe this revision"
-gx status   # gxs
-git push    # or gx push
+git commit -m "describe this change"   # a GX hook records the revision
+git status
+git push                               # the pre-push hook captures sessions + publishes
 ```
 
 ## Docs
@@ -16,8 +16,8 @@ git push    # or gx push
 - [Overview](/docs): Product model — sessions, revisions, stacks, review bundles
 - [Get started](/docs/getting-started): Install, auth, gx init, first revision, build a stack
 - [How it works](/docs/how-it-works): What GX captures, stacks vs commits, Git export
-- [CLI](/docs/cli): Every command with flags, examples, and exit codes
-- [MCP Setup](/docs/mcp): add-mcp connect, Executor integration, gx_commit / gx_status, agent save workflow
+- [CLI](/docs/cli): gx init, gx review, gx doctor, and setup commands — with flags and examples
+- [MCP Setup](/docs/mcp): add-mcp connect, Executor integration, the gx_review tool, plain-git save workflow
 - [GitHub PRs](/docs/github): PR Summaries and @gx chat (paid / trial)
 - [Troubleshooting](/docs/troubleshooting): Common errors, environment variables, uninstall
 - [API](/docs/reference/api): GX Cloud HTTP APIs
