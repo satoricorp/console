@@ -418,17 +418,21 @@ gx review                                 # alias: gxr
 gx review "check auth rollback risks"
 ```
 
-Reviews local changes using codebase context, captured sessions, review resources, and optional prompt guidance. Findings are printed as markdown and recorded to review history so future reviews can retrieve previous decisions.
+Reviews your changes using codebase context, captured sessions, review resources, and optional prompt guidance. Findings are printed as markdown and recorded to review history so future reviews can retrieve previous decisions.
 
 AI reviewers are optional and resolve credentials in this order: your own key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, or `gx set key`), then GX Cloud when you are signed in (on your plan or free trial), then deterministic checks only — the review always completes, with a warning naming what was unavailable.
 
 | Flag | Meaning |
 | --- | --- |
 | `[prompt]` | optional positional prompt to steer the review |
+| `--base <ref>` | review the commit range `<ref>...HEAD` instead of the working tree |
 | `--scope <scope>` | focused review scope: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
 | `--focus <path>` | limit review to files under this path prefix |
 | `--deep` | full-spectrum review with more local and indexed context |
 | `--verbose` | include repo facts, docs, and changed files in the output |
+| `--json` | print the report as JSON instead of markdown |
+| `--fail-on <level>` | exit non-zero when findings at or above this level survive |
+| `--no-publish` | skip posting the PR review comment and recording review history |
 
 Examples:
 
@@ -437,6 +441,32 @@ gx review --scope security                  # security-focused pass over the cur
 gx review --focus src/auth --deep           # deep review of just the auth directory
 gx review "did we break the retry contract?"
 ```
+
+### What gets reviewed
+
+`gx review` picks the change set in this order:
+
+1. `--base <ref>`, when you pass it — the range `<ref>...HEAD`.
+2. Your working-tree changes, when there are any. This is the usual case while you work.
+3. Otherwise the commits on your branch, `<merge-base>...HEAD` against the base branch it detects (`main`, `master`, `origin/main`, `origin/master`), falling back to the last commit.
+
+So a clean checkout with everything committed still gets reviewed. If there is genuinely nothing to review, `gx review` says so and names the refs it tried — it never reports a clean review of code it did not read.
+
+### As a CI gate
+
+```bash
+gx review --base origin/main --fail-on strong --no-publish --json
+```
+
+`--fail-on` takes `none` (the default), `any`, `speculative`, `worth-exploring`, `strong`, or `blocking`. Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | no findings at or above the level |
+| `3` | findings at or above the level survived |
+| `4` | nothing was reviewed — a gate should not pass without inspecting code |
+
+Pair it with `--no-publish` so a CI run does not post PR comments, and `--json` to parse findings yourself.
 
 ## gx auth
 
