@@ -86,6 +86,8 @@ Line by line:
 
 For scripts and agent sandboxes, `gx init -y` accepts all defaults and suppresses interactive prompts.
 
+To skip the per-repository step entirely, `gx init --global` installs the hooks once for every repository on the machine — useful when you don't want to remember `gx init` in a new clone. See [CLI → Machine-wide hooks](/docs/cli#machine-wide-hooks).
+
 ## Optional: bring your own model key
 
 You do not need a model API key to use GX. The core workflow is fully deterministic, and once you sign in, AI features like `gx review` run through GX Cloud on your plan or free trial.

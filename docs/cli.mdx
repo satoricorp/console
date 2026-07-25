@@ -58,6 +58,7 @@ Run it once per repository.
 | `--name <name>` | user name to store in GX config (defaults to Git identity) |
 | `--email <email>` | user email to store in GX config |
 | `-y`, `--yes` | accept defaults and suppress prompts — use in scripts and agent sandboxes |
+| `--global` | install the hooks machine-wide instead of for one repository (see below) |
 
 ```text
 $ gx init
@@ -71,6 +72,38 @@ AGENTS.md      ok: added GX workflow instructions
 
 Next           git add <files> && git commit -m "..."
 ```
+
+### Machine-wide hooks
+
+`gx init --global` installs the hooks once for every repository, so you still get
+capture and PR summaries in a repo where you forgot to run `gx init`:
+
+```bash
+gx init --global
+```
+
+It writes the hooks to `~/.gx/hooks` and points Git at them with
+`git config --global core.hooksPath`. Because a global hooks path makes Git ignore
+each repository's own `.git/hooks`, GX's scripts **chain**: they do GX's work and
+then run the repository's own hook of the same name, passing along its arguments,
+input, and exit code — so husky, lefthook, and hand-written hooks keep working.
+
+If a global hooks path is already set to something that is not GX's, `gx init --global`
+stops and tells you rather than overwriting it.
+
+Exclude a single repository, from inside it:
+
+```bash
+git config gx.enabled false
+```
+
+Undo the machine-wide install:
+
+```bash
+git config --global --unset core.hooksPath
+```
+
+`gx doctor` reports whether the machine-wide hooks are installed and healthy.
 
 ## gx review
 
