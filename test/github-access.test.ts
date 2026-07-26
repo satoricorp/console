@@ -125,7 +125,7 @@ describe("getGithubAccessToken", () => {
       Response.json({
         error: "bad_refresh_token",
         error_description: "The refresh token passed is incorrect or expired.",
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
 
     await expect(getGithubAccessToken(ctx as never, "user_123")).rejects.toThrow(
       "GitHub session expired. Sign out and sign in again to grant repository access.",
