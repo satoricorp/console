@@ -146,6 +146,8 @@ gx review "did we break the retry contract?"
 
 So a clean checkout with everything committed still gets reviewed. If there is genuinely nothing to review, `gx review` says so and names the refs it tried — it never reports a clean review of code it did not read.
 
+`gx review` is read-only: it does not require `gx init`, and it never installs hooks or writes GX state into the repository it reviews. You can point it at any checkout, including one you do not own.
+
 ### As a CI gate
 
 ```bash
