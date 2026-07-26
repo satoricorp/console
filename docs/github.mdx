@@ -44,6 +44,14 @@ GX posts summaries from these paths:
 
 The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** write the PR description by itself.
 
+### When no session was captured
+
+A summary is worth more than the diff because a captured coding session explains it. When no session context reached the summary, GX says so in the PR body rather than letting a diff-only summary pass for a context-rich one:
+
+> *No captured coding session was linked to this branch, so this summary is based on the diff alone. That usually means the branch was pushed without GX's pre-push hook installed, so nothing was captured.*
+
+Install the hooks with `gx init` in the repo (or `gx init --global` once per machine) and push again — the pre-push hook captures the session on the way out. When context is present the note is absent, and the footer reports what informed the summary.
+
 ### Trial and paid access
 
 Orgs on the free plan get PR Summaries during a free trial window (default 7 days from org creation, or the entitlement returned by GX Cloud). After the trial ends, summaries require a paid plan. When quota blocks a summary, GX can post an upgrade comment on the PR instead.
