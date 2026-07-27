@@ -3,9 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 const originalFetch = globalThis.fetch;
 

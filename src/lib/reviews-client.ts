@@ -184,25 +184,3 @@ export async function regenerateReviewPlan(
     throw new Error(body?.error ?? `Failed to regenerate plan (${response.status})`);
   }
 }
-
-export async function recordReviewDecision(
-  bookmarkId: string,
-  body: {
-    action: "approve";
-    merged: boolean;
-    mergeSha?: string;
-    prNumber?: number;
-    reason?: string;
-  },
-): Promise<void> {
-  const response = await fetch(`/api/reviews/${bookmarkId}/decision`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const err = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(err?.error ?? `Failed to record decision (${response.status})`);
-  }
-}

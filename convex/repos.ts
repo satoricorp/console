@@ -43,12 +43,6 @@ export const getOnboardingStatus = query({
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .first(),
     );
-    const hasPublished = Boolean(
-      await ctx.db
-        .query("gxPrPushes")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .first(),
-    );
 
     return {
       hasConnectedRepos,
@@ -57,8 +51,7 @@ export const getOnboardingStatus = query({
       onboardingCompleted:
         Boolean(appState?.onboardingCompletedAt) ||
         hasConnectedRepos ||
-        hasCliSession ||
-        hasPublished,
+        hasCliSession,
     };
   },
 });

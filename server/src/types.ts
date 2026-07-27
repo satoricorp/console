@@ -40,6 +40,9 @@ export type PushBundle = {
     head_commit_id: string;
     github_pull_request_url?: string;
   };
+  // Schema v2: flat list of published revisions (commit + GX trailer ID).
+  revisions?: PublishRevision[];
+  // Schema v1 (legacy): single current change …
   change?: {
     id?: number;
     jj_change_id?: string;
@@ -48,6 +51,7 @@ export type PushBundle = {
     files?: string[];
     review_context?: ReviewContextPayload;
   };
+  // … plus the stack it sat on. jj_change_id carried the GX trailer revision ID.
   stack?: Array<{
     change?: {
       id?: number;
@@ -64,6 +68,18 @@ export type PushBundle = {
   }>;
   sessions?: unknown[];
   metadata?: Record<string, string>;
+};
+
+export type PublishRevision = {
+  revision_id?: string;
+  commit_id?: string;
+  description?: string;
+  files?: string[];
+  branch_name?: string;
+  base_branch_name?: string;
+  patch?: string;
+  github_pull_request_url?: string;
+  review_context?: Record<string, unknown>;
 };
 
 export type ReviewContextPayload = {

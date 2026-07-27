@@ -6,24 +6,24 @@ description: Diagnose and fix common GX problems — and know exactly what each 
 Start with the built-in doctor:
 
 ```bash
-gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
+gx doctor          # diagnose capture, hooks, and the publish queue
 gx doctor --fix    # apply safe repairs automatically
 ```
 
-If something still misbehaves, `gx report` uploads recent GX logs to support and prints a report ID you can share.
+If something still misbehaves, `gx doctor --report` uploads the diagnosis and recent GX logs to support and prints a report ID you can share.
 
 ## Common errors
 
-### `no staged changes; run git add first`
+### Nothing staged to commit
 
-`gx commit` records **staged** changes only, and exits with code `2` when the index is empty.
+A GX revision follows your staged index, so stage the changes you want in it before committing:
 
 ```bash
 git add <files>     # or git add -p to select hunks
-gx commit -m "describe this revision"
+git commit -m "describe this change"
 ```
 
-Agents checking exit codes: `0` success, `1` general error, `2` nothing staged.
+With an empty index there is nothing for the commit hook to record — stage your changes first.
 
 ### `Run gx init first.`
 
@@ -34,24 +34,14 @@ gx init        # interactive
 gx init -y     # accept defaults, for scripts and agent sandboxes
 ```
 
-### `gx commit -a is not supported`
-
-Deliberate. GX wants the revision scope to be explicit, so `-a`, `--amend`, and `-F` are rejected with the replacement in the message:
-
-- instead of `-a`: stage with `git add` first
-- instead of `--amend`: `gx edit <rev>` reopens a recorded revision
-- instead of `-F file`: pass the message with `-m`
-
 ### Push reports remote divergence
 
-The remote moved since your last sync — a branch was merged, closed, or force-pushed. Reflect remote state locally, then retry:
+The remote moved since you last fetched — a branch was merged, closed, or force-pushed. Bring your local branch up to date, then push again:
 
 ```bash
-gx sync
-gx push
+git pull --rebase
+git push
 ```
-
-`gx sync` also prunes stacks whose PRs were merged or closed, so status stops showing stale work.
 
 ### `Could not upload GX review context ... GX Cloud is not configured`
 
@@ -62,7 +52,7 @@ curl -fsSL https://download.gx.run/install.sh | sh
 gx auth status || gx auth login
 ```
 
-Local remote metadata is still recorded, so nothing is lost. Queued uploads are drained on the next successful `gx sync` or `gx push`.
+Local remote metadata is still recorded, so nothing is lost. Queued uploads are drained on the next `git push`.
 
 ### `gx-mcp not found; install GX CLI package first`
 
@@ -78,7 +68,7 @@ Then re-run `gx init`, or register manually per [MCP setup](/docs/mcp).
 
 Check, in order:
 
-1. The branch was pushed **through GX** — `gx push`, or `git push` with the GX pre-push hook installed. A PR created only in the GitHub UI has no capture metadata.
+1. The branch was pushed with `git push` while the GX pre-push hook is installed. A PR created only in the GitHub UI has no capture metadata.
 2. The GX GitHub App is installed on the repository, with the webhook pointed at `https://api.gx.run/github/webhook`.
 3. Your org's trial window or paid plan is active — when quota blocks a summary, GX posts an upgrade comment instead. See [Pull Requests](/docs/github).
 
@@ -89,10 +79,7 @@ Check, in order:
 ```bash
 gx doctor          # shows capture and hook state
 gx doctor --fix
-gx capture sync    # advanced: force a capture sync
 ```
-
-Captured sessions are retained locally for 30 days.
 
 ## Environment
 
@@ -106,7 +93,7 @@ Captured sessions are retained locally for 30 days.
 ## Uninstall
 
 ```bash
-rm -f ~/.local/bin/gx ~/.local/bin/gxr ~/.local/bin/gxs ~/.local/bin/gx-mcp
+rm -f ~/.local/bin/gx ~/.local/bin/gxr ~/.local/bin/gx-mcp
 ```
 
 This removes the installed binaries only. Local GX data remains in `~/.gx`; delete that directory too if you want a clean slate. Your Git repositories are untouched — everything GX published is ordinary Git.
@@ -114,7 +101,7 @@ This removes the installed binaries only. Local GX data remains in `~/.gx`; dele
 ## Send logs to support
 
 ```bash
-gx report
+gx doctor --report
 ```
 
-Uploads recent GX logs (requires `gx auth login`) and prints a report ID and URL to share with the team.
+Runs the diagnosis and uploads it with recent GX logs (requires `gx auth login`), then prints a report ID and URL to share with the team.

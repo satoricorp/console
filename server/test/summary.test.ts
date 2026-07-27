@@ -5,6 +5,13 @@ import { createMockProvider } from "../src/llm/provider";
 import { generateSummary } from "../src/summary/generate";
 import { validateSummary, REQUIRED_SECTIONS } from "../src/summary/validate";
 import { authHeaders, installTestAuth } from "./auth";
+import { describeDb } from "./db-gate";
+
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const summaryUserId = `summary-test-user-${crypto.randomUUID()}`;
 
 describe("validateSummary", () => {
   const validSummary = [
@@ -107,9 +114,6 @@ function normalizeHeading(line: string): string {
     .toLowerCase();
 }
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
-
 describeDb("generateSummary integration", () => {
   let orgId: string;
   let bookmarkId: string;
@@ -143,7 +147,7 @@ describeDb("generateSummary integration", () => {
           intentCandidates: ["Wire PR Summary generator"],
         })}::jsonb,
         ${orgId},
-        'summary-test-user',
+        ${summaryUserId},
         '/Users/joe/git/gx'
       )
       RETURNING id
@@ -154,7 +158,7 @@ describeDb("generateSummary integration", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        'summary-test-user',
+        ${summaryUserId},
         'acme/gx',
         'feat/summary',
         ${now},
@@ -254,7 +258,7 @@ describeDb("generateSummary integration", () => {
     const res = await app.request("http://localhost/v1/summaries/generate", {
       method: "POST",
       headers: {
-        ...authHeaders("summary-test-user", orgId),
+        ...authHeaders(summaryUserId, orgId),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ bookmarkId }),
@@ -277,7 +281,7 @@ describeDb("generateSummary integration", () => {
     const res = await app.request("http://localhost/v1/summaries/generate", {
       method: "POST",
       headers: {
-        ...authHeaders("summary-test-user", orgId),
+        ...authHeaders(summaryUserId, orgId),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ bookmarkId: "00000000-0000-0000-0000-000000000099" }),

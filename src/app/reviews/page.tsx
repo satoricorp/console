@@ -61,14 +61,14 @@ export default async function ReviewsPage({
   try {
     bookmarks = await gxApiJson<ReviewListItem[]>(
       viewer.id,
-      "/bookmarks?merge_status=open&github_pr_only=1",
+      "/v1/reviews?merge_status=open&github_pr_only=1",
     );
     if (bookmarks.length > 0) {
       isEmpty = false;
     } else {
       const any = await gxApiJson<ReviewListItem[]>(
         viewer.id,
-        "/bookmarks?include_archived=1",
+        "/v1/reviews?include_archived=1",
       );
       isEmpty = any.length === 0;
     }

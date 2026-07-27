@@ -28,15 +28,30 @@ Forward-only Postgres migrations for the consolidated GX server. The original AP
 22. `server/migrations/022_review_plans.sql`
 23. `server/migrations/023_github_post_skips.sql`
 
-### One-liner (local Postgres via Docker)
+### Applying the chain
 
-```bash
-docker run --rm -d --name gx-pg-test -e POSTGRES_PASSWORD=gx -p 5433:5432 postgres:16
-export DATABASE_URL="postgres://postgres:gx@localhost:5433/postgres"
+Use `cd server && bun run test:db`. It recreates a scratch database and applies
+every migration through the server's own `runMigrations()` — the same code path
+`bun run migrate` uses in production — then runs the suite against it. Prefer
+that over hand-rolled `psql` loops, which skip `schema_migrations` bookkeeping
+and drift out of date.
 
-for f in server/migrations/0*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/test/migrations/ledger_joins_test.sql
-```
+## No unique index on (org_id, repo_full_name, github_pr_number)
+
+`server/test/publish.test.ts` used to `CREATE UNIQUE INDEX` on that triple in
+its `beforeAll`. No migration creates it, so every test ran against a schema
+production does not have — and the state the index forbids is the state
+production is actually in (duplicate `(org, repo, PR)` bookmark rows exist in
+the dev database today). That made the publish upsert's multi-row `UPDATE`
+unreachable under test.
+
+The index has been removed from the test rather than promoted to a migration:
+adding it would abort the migration chain on any database holding duplicates,
+and de-duplicating them is a data decision, not a schema one. The invariant is
+maintained in application code instead — see the webhook-takeover path in
+`src/routes/publish.ts` that clears a conflicting row's PR number. If that
+proves insufficient, the fix is a repair migration that de-duplicates first,
+then adds the constraint; do not re-add the index to a test.
 
 ### Verify script
 

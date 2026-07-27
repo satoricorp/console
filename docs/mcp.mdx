@@ -14,7 +14,7 @@ gx auth login
 
 That places `gx` and `gx-mcp` in `~/.local/bin`.
 
-If a repo is not initialized, MCP runs `gx init` non-interactively before repository tools continue — using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`.
+If a repo is not initialized, MCP runs `gx init` non-interactively before `gx_review` runs — using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`.
 
 ## Connect in one command
 
@@ -55,8 +55,9 @@ Paste this into Claude, Cursor, or any MCP-capable agent:
 ```text
 Help me set up the GX MCP server in this agent.
 
-GX is version control for coding agents. The CLI installs a local stdio MCP
-binary at ~/.local/bin/gx-mcp.
+GX is the quality layer for agent-written code. You keep using plain Git; GX's
+hooks record and publish automatically. The CLI installs a local stdio MCP
+binary at ~/.local/bin/gx-mcp that exposes one tool, gx_review.
 
 1. If gx isn't installed:
    curl -fsSL https://download.gx.run/install.sh | sh
@@ -64,8 +65,10 @@ binary at ~/.local/bin/gx-mcp.
 2. Register the MCP globally with add-mcp:
    npx add-mcp "$HOME/.local/bin/gx-mcp" --name gx --env "GX_BINARY=$HOME/.local/bin/gx" -g -y
 3. Tell me if I need to restart or open a new chat, then wait.
-4. Once tools are available, run gx_status and walk me through the save flow:
-   git add → gx_commit → gx_status → git push.
+4. Once tools are available, confirm gx_review shows up, then walk me through
+   the save flow — plain Git: git add → git commit → git push. GX's hooks
+   record the revision and publish the review bundle; gx_review is there when
+   I want AI review.
 
 Docs: https://gx.run/docs/mcp
 ```
@@ -85,7 +88,7 @@ GX is a **local stdio** server, so add it from Executor running on the same mach
    - **Command:** `$HOME/.local/bin/gx-mcp` (expand to an absolute path if the UI requires it)
    - **Name / namespace:** `gx`
 5. Optional: add env var `GX_BINARY` = `$HOME/.local/bin/gx`. If omitted, `gx-mcp` looks for `~/.local/bin/gx`, then `gx` on `PATH`.
-6. Save, then confirm tools appear (search for `gx_status` / `gx_commit`).
+6. Save, then confirm the tool appears (search for `gx_review`).
 
 Agents that already talk to Executor pick up GX from the shared catalog — no per-client `gx-mcp` registration needed.
 
@@ -192,52 +195,11 @@ Example Cursor / Claude `mcp.json` entry:
 
 | Tool | CLI command | Purpose |
 | --- | --- | --- |
-| `gx_commit` | `gx commit -m "..."` | Record staged Git changes as a GX revision (**default save**) |
-| `gx_status` | `gx status --json` | Inspect unstaged work, features, revisions, and remote state |
-| `gx_edit` | `gx edit <rev>` | Re-enter an existing revision to keep working on it |
-| `gx_review` | `gx review [prompt]` | Review using local and cloud context |
+| `gx_review` | `gx review [prompt]` | AI review using local and cloud context |
 
-Publish is not an MCP tool: use plain `git push` (the GX pre-push hook captures the session and publishes), then open the PR with `gh pr create`.
+`gx_review` is the only MCP tool. Saving and publishing are plain Git, not MCP calls: `git add` + `git commit` record the revision through GX's hooks, and `git push` captures the session and publishes the review bundle through the pre-push hook. Open the PR with `gh pr create`.
 
-All tools accept an optional `cwd` (repository working directory; defaults to the MCP server process cwd). `gx_review` allows up to 5 minutes.
-
-### gx_commit
-
-The default save verb. Stage files with `git add` first.
-
-| Parameter | Type | Meaning |
-| --- | --- | --- |
-| `message` | string (required) | commit message for the staged revision |
-| `branch` | string | create this branch at `HEAD` and record onto it; default: current branch |
-| `task_summary` | string | agent-declared summary of the work being committed |
-| `commands_run` | string[] | shell commands the agent ran while doing this work |
-| `tests_run` | string[] | test commands the agent ran |
-| `session_id` | string | captured GX session id to attach as provenance |
-
-Provenance fields are why to prefer `gx_commit` over shelling out: they attach *what the agent did* to the revision, and reviewers see it next to the diff.
-
-```json
-{
-  "message": "retry: honor attempt limit",
-  "task_summary": "Add retry/backoff utilities requested in TICKET-482",
-  "commands_run": ["bun test retry.test.js"],
-  "tests_run": ["bun test"]
-}
-```
-
-### gx_status
-
-Read-only. Returns the `gx status --json` stack summary: unstaged files, features, revisions, publish counts, and remote sync state. Optional `show_all` includes all changed files in git working tree sections.
-
-### gx_edit
-
-Re-enter an existing revision so follow-up work lands on that change. Required when amending — `gx commit --amend` is unsupported.
-
-| Parameter | Type | Meaning |
-| --- | --- | --- |
-| `revision` | string (required) | change id, commit id, or short id from `gx_status` |
-
-After editing, return to the base branch before starting unrelated `gx_commit` work.
+`gx_review` accepts an optional `cwd` (repository working directory; defaults to the MCP server process cwd) and may run up to 5 minutes.
 
 ### gx_review
 
@@ -251,33 +213,24 @@ After editing, return to the base branch before starting unrelated `gx_commit` w
 
 ## Agent workflow
 
-When a user says "save work", "save using gx", or "save with gx", run:
+When a user says "save work", "save using gx", or "save with gx", use plain Git — GX's hooks do the GX work automatically:
 
 1. Stage with `git add` (one logical change per revision)
-2. `gx_commit` with a message and, when available, `task_summary` / `commands_run` / `tests_run`
-3. `gx_status` — inspect before publish
-4. Plain `git push` for ready stacks (unless they ask to keep work local)
-5. Open the PR with `gh pr create` — do not seed a `## Summary`; GX Cloud appends it
+2. `git commit -m "..."` — a hook records it as a GX revision
+3. `git push` for ready stacks (unless they ask to keep work local) — the pre-push hook captures the session and publishes the review bundle
+4. Open the PR with `gh pr create` — do not seed a `## Summary`; GX Cloud appends it
 
-Use `gx_edit` when continuing or amending an existing revision.
+Run `gx_review` (or the `gx review` CLI) whenever you want AI review of the current change, typically before pushing.
 
-A typical save sequence, as tool calls:
+A typical save sequence:
 
-```jsonc
-// 1. after: git add src/backoff.js
-{ "tool": "gx_commit", "arguments": {
-  "message": "add exponential backoff helper",
-  "branch": "feature/retry-backoff",
-  "task_summary": "Backoff helper for the retry work in TICKET-482",
-  "tests_run": ["bun test"]
-} }
-
-// 2. verify the stack looks right
-{ "tool": "gx_status", "arguments": {} }
-
-// 3. publish with the shell (not an MCP tool)
-// git push
+```bash
+git add src/backoff.js
+git commit -m "add exponential backoff helper"
+git push
 ```
+
+Provenance is inferred automatically: the pre-push hook matches captured sessions to the hunks they changed, so there is nothing for the agent to attach by hand.
 
 GX PR summaries are posted for PRs whose branch was pushed through GX with `git push` while the pre-push hook is installed. A PR opened before that push will not get a summary until the branch is pushed through GX.
 
@@ -286,17 +239,14 @@ GX PR summaries are posted for PRs whose branch was pushed through GX with `git 
 `gx init` offers to append these instructions to your repo's `AGENTS.md`. If you skipped that step, add them manually:
 
 ```markdown
-Version control: use GX, not `git commit`.
+Version control: plain Git. Once `gx init` installs the hooks, GX records and
+publishes automatically — there is no GX save verb.
 
 Default flow:
 - Run `git add` to stage the files for this revision.
-- Run `gx commit` (or MCP `gx_commit`) to record staged work as a GX revision.
-- Run `gx status` to inspect staged files, local features/revisions, and remote state.
-- Run plain `git push` to ship. The GX pre-push hook publishes code changes, sessions, and GX metadata to GX Cloud automatically — do not run `gx push` or `gx capture push` yourself.
+- Run `git commit -m "..."` to save. A GX hook records the commit as a reviewable revision.
+- Run plain `git push` to publish. The GX pre-push hook captures the session and publishes code changes, sessions, and GX metadata to GX Cloud automatically — do not run `gx push` or `gx capture push` yourself; they bypass the hook.
 - Open PRs with `gh pr create` (or the GitHub UI). Do not seed a `## Summary` in the PR body — leave human notes only; GX Cloud appends the rich summary below once the PR exists.
 
-Use GX MCP first: `gx_status`, then `gx_commit`; push with plain `git push`. Use `gx_edit` only to re-enter an existing revision.
-
-Use hidden utility commands such as `gx base` or `gx edit` only for explicit
-surgery or user-directed repair.
+For AI review, run the `gx_review` MCP tool (or the `gx review` CLI) on the current change.
 ```
