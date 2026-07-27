@@ -105,6 +105,17 @@ jobs:
       - name: Check server
         working-directory: server
         env:
+          # Tests must never reach a live model. bedrockConfigured() is true
+          # whenever any AWS_* credential var is set, so with the deploy
+          # credentials in scope the @gx handler made a real Bedrock call and
+          # blew the 5s test timeout. Blanked here only; later steps still
+          # deploy with the configured credentials.
+          AWS_ACCESS_KEY_ID: ""
+          AWS_SECRET_ACCESS_KEY: ""
+          AWS_SESSION_TOKEN: ""
+          AWS_REGION: ""
+          AWS_DEFAULT_REGION: ""
+          AWS_PROFILE: ""
           # An empty CI database means `bun test` also replays migrations
           # 001..028 end to end, which nothing else does. test/db-gate.ts turns
           # a missing DATABASE_URL into a hard failure here rather than a skip.
