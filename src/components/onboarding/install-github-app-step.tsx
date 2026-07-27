@@ -9,7 +9,7 @@ import { api } from "../../../convex/_generated/api";
 import { GitHubIcon } from "@/components/github-icon";
 import { withOnboardingParam } from "@/lib/site-links";
 
-const FALLBACK_INSTALL_URL = "https://github.com/apps/gx-faster-code-review";
+const FALLBACK_INSTALL_URL = "https://github.com/apps/satoricorp-gx";
 
 export function InstallGithubAppStep() {
   const searchParams = useSearchParams();

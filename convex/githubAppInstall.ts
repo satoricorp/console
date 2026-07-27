@@ -16,7 +16,7 @@ type GithubInstallationsResponse = {
   installations?: GithubInstallation[];
 };
 
-const DEFAULT_INSTALL_URL = "https://github.com/apps/gx-faster-code-review";
+const DEFAULT_INSTALL_URL = "https://github.com/apps/satoricorp-gx";
 
 function githubAppInstallUrl() {
   return process.env.GITHUB_APP_INSTALL_URL?.trim() || DEFAULT_INSTALL_URL;
