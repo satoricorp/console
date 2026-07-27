@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -33,7 +33,6 @@ describeDb("publish artifact upsert", () => {
     } else {
       process.env.GITHUB_APP_PRIVATE_KEY = originalGithubAppPrivateKey;
     }
-    await closeDatabase();
   });
 
   afterEach(() => {

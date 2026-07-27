@@ -84,7 +84,6 @@ describe("gx mention helpers", () => {
 describeDb("handleGxMention integration", () => {
   afterAll(async () => {
     const { closeDatabase } = await import("../src/db");
-    await closeDatabase();
   });
 
   test("retires matching rules on veto pattern", async () => {

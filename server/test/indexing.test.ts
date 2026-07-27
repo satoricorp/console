@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { getSql, runMigrations, closeDatabase } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 
 // Unique per process run. bookmarks carries a UNIQUE index on
 // (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
@@ -68,7 +68,6 @@ describeDb("indexing turbopuffer", () => {
     delete process.env.TURBOPUFFER_API_KEY;
     resetIndexingFetch();
     globalThis.fetch = originalFetch;
-    await closeDatabase();
   });
 
   test("returns disabled when API keys missing", async () => {

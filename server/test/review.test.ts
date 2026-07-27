@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -84,7 +84,6 @@ describeDb("review context API", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("GET /v1/review/context returns rules, collisions, and hunk links", async () => {

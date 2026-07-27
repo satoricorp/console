@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -137,7 +137,6 @@ describeDb("GET /bookmarks merge_status reconcile", () => {
 
   afterAll(async () => {
     globalThis.fetch = originalFetch;
-    await closeDatabase();
   });
 
   test("repo open-PR list updates only stale bookmarks", async () => {

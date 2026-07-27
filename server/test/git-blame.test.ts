@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { loadGitBlameContext, parsePatchHunks } from "../src/github/git-blame";
 import { buildGxChatUserPrompt } from "../src/llm/prompts/gx-chat";
 import type { ExtractContext } from "../src/summary/generate";
@@ -473,7 +473,6 @@ describeDb("loadGitBlameContext", () => {
     } else {
       process.env.GITHUB_APP_PRIVATE_KEY = originalPrivateKey;
     }
-    await closeDatabase();
   });
 
   test("caches GitHub blame and joins previous GX provenance", async () => {
