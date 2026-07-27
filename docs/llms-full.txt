@@ -767,7 +767,7 @@ The CLI records sessions and revisions and publishes them for free. GitHub PR Su
 ## Prerequisites
 
 1. Sign in with `gx auth login` (or sign in on the console).
-2. Install the GX GitHub App on your personal account or organization so GX can post comments and read PR context. From the console, use **Install on GitHub** after the download step (`/install-github`), or open [github.com/apps/gx-faster-code-review](https://github.com/apps/gx-faster-code-review) directly.
+2. Install the GX GitHub App on your personal account or organization so GX can post comments and read PR context. From the console, use **Install on GitHub** after the download step (`/install-github`), or open [github.com/apps/satoricorp-gx](https://github.com/apps/satoricorp-gx) directly.
 3. Point the GitHub App webhook at the GX Cloud API:
 
 ```text
@@ -862,7 +862,7 @@ When available, GX can also use captured coding-session context, indexed codebas
 
 ## GitHub App
 
-Install from the console (**Install on GitHub**) or at [github.com/apps/gx-faster-code-review](https://github.com/apps/gx-faster-code-review). To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still record and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
+Install from the console (**Install on GitHub**) or at [github.com/apps/satoricorp-gx](https://github.com/apps/satoricorp-gx). To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still record and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
 
 # Troubleshooting
 
