@@ -13,8 +13,8 @@ export GX_API_URL="https://api.gx.run"
 | --- | --- |
 | `GET /health` | API and database reachability |
 | `GET /v1/auth/me` | inspect the authenticated caller |
-| `POST /v1/publish` | publish a GX review bundle (what `gx push` sends) |
-| `GET /bookmarks` | list bookmark metadata for sync and review |
+| `POST /v1/publish` | publish a GX review bundle (what the pre-push hook sends) |
+| `GET /v1/reviews` | list reviews for review surfaces (was `GET /bookmarks`) |
 | `GET /v1/review/context` | review context for a repo/ref range |
 | `GET /v1/reviews/:bookmarkId` (+ `/plan`, `/decision`) | Console review experience |
 | `POST /v1/summaries/generate` | generate and store a PR Summary |
@@ -101,7 +101,7 @@ Response fields include `org_id`, `user_id`, `token_label`, and optional GitHub/
 
 ## POST /v1/publish
 
-Publish a GX review bundle. This is what `gx push` (and the publish path used after Git push with the GX hook) sends after it has produced Git branches, commits, sessions, and review metadata.
+Publish a GX review bundle. This is what the GX pre-push hook sends on `git push`, after Git has produced branches and commits and GX has captured sessions and review metadata.
 
 ```bash
 curl "$GX_API_URL/v1/publish" \
@@ -109,11 +109,12 @@ curl "$GX_API_URL/v1/publish" \
   -H "Content-Type: application/json" \
   -d '{
     "event": "gx.pr",
+    "schema_version": 2,
     "created_at": 1760000000000,
     "gx_version": "0.0.0",
     "repo": {
       "root_path": "/repo",
-      "backend": "jj",
+      "backend": "git",
       "remote_url": "https://github.com/org/repo.git"
     },
     "push": {
@@ -121,34 +122,42 @@ curl "$GX_API_URL/v1/publish" \
       "head_commit_id": "abc123",
       "github_pull_request_url": "https://github.com/org/repo/pull/123"
     },
-    "stack": [],
+    "revisions": [],
     "sessions": []
   }'
 ```
+
+`revisions` carries one entry per commit being published — `revision_id` (the ID from the commit's `GX:` trailer), `commit_id`, `description`, `files`, `branch_name`, `base_branch_name`, and `patch`. `sessions` carries the captured agent sessions with their model, token, and timing metadata. Bundles with `schema_version: 1` (the older `stack`/`change` shape) remain accepted.
 
 The server stores the publish event, upserts a bookmark, indexes artifacts when configured, and returns review/bookmark metadata. When a PR number is present and the GitHub App is installed, publish may also post a missing PR Summary.
 
 Without `event: "gx.pr"`, the same route accepts a lighter **registration-only** payload (`repo_full_name`, `branch_name`, `head_commit_id`, …) to upsert bookmark metadata.
 
-## GET /bookmarks
+## GET /v1/reviews
 
-List bookmark metadata for sync and review surfaces, newest first.
+List reviews for review surfaces, newest first. One review is one branch's published work — the PR it becomes, the latest publish event, and its plan status.
 
 Query parameters: `merge_status` (`open`, `merged`, or `closed`; any other value is a `400`) and `repo_full_name`. Both optional.
 
 ```bash
-curl "$GX_API_URL/bookmarks?merge_status=open" \
+curl "$GX_API_URL/v1/reviews?merge_status=open" \
   -H "Authorization: Bearer $GITHUB_TOKEN"
 ```
 
 Filter to one repository:
 
 ```bash
-curl "$GX_API_URL/bookmarks?repo_full_name=org/repo&merge_status=open" \
+curl "$GX_API_URL/v1/reviews?repo_full_name=org/repo&merge_status=open" \
   -H "Authorization: Bearer $GITHUB_TOKEN"
 ```
 
-Response: an array of bookmarks.
+<Note>
+  `GET /bookmarks` is the former name of this endpoint and still works — it forwards to
+  `/v1/reviews` and returns exactly the same response, with a `Deprecation` header. Move
+  to `/v1/reviews`; the old path will be removed in a future release.
+</Note>
+
+Response: an array of reviews.
 
 ```json
 [

@@ -13,6 +13,7 @@ import {
   prepareIndexChunks,
 } from "../src/routes/index-chunks";
 import { authHeaders, installTestAuth } from "./auth";
+import { describeDb } from "./db-gate";
 
 describe("prepareIndexChunks", () => {
   test("accepts allowlisted kinds and strips client org_id", () => {
@@ -75,9 +76,6 @@ describe("prepareIndexChunks", () => {
     expect(result.ok).toBe(true);
   });
 });
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
 
 describeDb("POST /v1/index/chunks", () => {
   const originalFetch = globalThis.fetch;

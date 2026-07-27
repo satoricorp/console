@@ -10,7 +10,7 @@ The usual path is:
 1. Install the CLI.
 2. Sign in with GitHub.
 3. Initialize GX in a repository.
-4. Stage, commit with GX, inspect, and push.
+4. Stage and commit with Git, review, and push.
 
 ## Install
 
@@ -22,13 +22,12 @@ curl -fsSL https://download.gx.run/install.sh | sh
 
 On Windows, run GX inside WSL. You can request a native Windows build from the [download page](/download).
 
-The installer places four binaries in `~/.local/bin`:
+The installer places three binaries in `~/.local/bin`:
 
 | Binary | Purpose |
 | --- | --- |
 | `gx` | the CLI |
 | `gx-mcp` | stdio MCP server for coding agents ([MCP setup](/docs/mcp)) |
-| `gxs` | shortcut for `gx status` |
 | `gxr` | shortcut for `gx review` |
 
 Verify the install:
@@ -67,25 +66,25 @@ Run `gx init` once, from the repository you want GX to manage:
 $ gx init
 
 Configured     gx identity as Ada Doc <ada@example.com>
-Pre-push hook  ok: capture on git push
+Git hooks      ok: record on commit, capture on git push
 Claude hooks   ok: Stop/SessionEnd transcript capture
-Session        30 days retention
 MCP            ok: claude
 AGENTS.md      ok: added GX workflow instructions
 
-Next           git add <files> && gx commit -m "..."
+Next           git add <files> && git commit -m "..."
 ```
 
 Line by line:
 
 - **gx identity** — the name and email recorded on GX revisions. Defaults to your Git identity; override with `gx init --name "..." --email "..."`.
-- **Pre-push hook** — a Git pre-push hook, so plain `git push` also captures sessions and publishes GX metadata on the way out.
+- **Git hooks** — `prepare-commit-msg` and `post-commit` record each `git commit` as a GX revision, and a `pre-push` hook captures sessions and publishes GX metadata when you `git push`.
 - **Claude hooks** — Claude Code `Stop`/`SessionEnd` hooks, so agent transcripts are captured as GX sessions.
-- **Session retention** — captured sessions are kept locally for 30 days.
 - **MCP** — registers the [GX MCP server](/docs/mcp) with supported agent CLIs found on the machine.
-- **AGENTS.md** — offers to append GX workflow instructions so agents working in this repo use `gx commit` instead of `git commit`.
+- **AGENTS.md** — offers to append GX workflow instructions telling agents working in this repo to use plain Git (GX's hooks record the revision).
 
 For scripts and agent sandboxes, `gx init -y` accepts all defaults and suppresses interactive prompts.
+
+To skip the per-repository step entirely, `gx init --global` installs the hooks once for every repository on the machine — useful when you don't want to remember `gx init` in a new clone. See [CLI → Machine-wide hooks](/docs/cli#machine-wide-hooks).
 
 ## Optional: bring your own model key
 
@@ -104,99 +103,68 @@ Paid pull request features (PR Summaries, `@gx` chat) always run through GX Clou
 
 ## First revision
 
-After making changes, stage the files that belong together and record them:
+After making changes, stage the files that belong together and commit them with plain Git:
 
 ```text
 $ git add src/retry.js
-$ gx commit -m "add retry helper with attempt limit"
-
-Revision recorded
-Message       add retry helper with attempt limit
-Revision      qltmnmynnyzk
-Commit        b694d3be
-Stack         main
-Provenance    absent
+$ git commit -m "add retry helper with attempt limit"
+[main b694d3be] add retry helper with attempt limit
+ 1 file changed, 12 insertions(+)
 ```
 
 What happened:
 
 - `git add` chose the scope — only `src/retry.js` is part of this revision. Use `git add -p` to select individual hunks.
-- `gx commit` recorded the staged changes as a GX revision. Like `git commit`, it landed on the current branch and `HEAD` did not move.
-- The revision is JJ-backed, so it stays editable through GX tools later — no interactive rebase needed.
-- `Provenance: absent` means no captured coding session was linked. When an agent session is captured, GX matches it automatically and this shows the linked status instead.
-
-If nothing is staged, `gx commit` refuses with exit code `2`:
-
-```text
-$ gx commit -m "nothing staged"
-no staged changes; run git add first
-```
+- `git commit` landed the change on the current branch as usual. Behind it, GX's `prepare-commit-msg` and `post-commit` hooks recorded a GX revision (`qltmnmynnyzk`) that carries the review context around the commit.
+- Because no coding session was captured for this commit, the revision's provenance is `absent`. When an agent session is captured, GX matches it automatically and links it instead.
 
 Then publish:
 
 ```bash
-gx status   # inspect first (alias: gxs)
-git push    # the GX pre-push hook captures sessions and publishes metadata
+git status   # inspect first
+git push     # the GX pre-push hook captures sessions and publishes metadata
 ```
 
-`git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out. You can also publish explicitly with `gx push`, which prints GitHub and review URLs when available.
+`git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out.
 
 ## Build a stack
 
-Pass `-b` to start a new branch for a line of work, then keep committing to grow the stack:
+A stack is just an ordinary Git branch with more than one commit on it. Start a branch for a line of work, then keep committing to grow it:
 
 ```text
-$ git add src/backoff.js
-$ gx commit -m "add exponential backoff helper" -b feature/retry-backoff
+$ git checkout -b feature/retry-backoff
+Switched to a new branch 'feature/retry-backoff'
 
-Revision recorded
-Created branch feature/retry-backoff (from main)
-Message       add exponential backoff helper
-Revision      qlmmuyyyupkm
-Commit        14c101a1
-Stack         feature/retry-backoff
+$ git add src/backoff.js
+$ git commit -m "add exponential backoff helper"
+[feature/retry-backoff 14c101a1] add exponential backoff helper
+ 1 file changed, 18 insertions(+)
 
 $ git add src/jitter.js
-$ gx commit -m "add jitter to backoff delays"
-
-Revision recorded
-Message       add jitter to backoff delays
-Revision      zlsrnukorkyz
-Commit        ae0d5b62
-Stack         feature/retry-backoff
+$ git commit -m "add jitter to backoff delays"
+[feature/retry-backoff ae0d5b62] add jitter to backoff delays
+ 1 file changed, 6 insertions(+)
 ```
 
-`gx status` now shows one stack with two ordered revisions, newest first:
+GX recorded a revision for each commit as it landed. Inspect the stack with plain Git — it is just the branch's own commits, newest first:
 
 ```text
-$ gx status
-
-demo-repo  ● retry-backoff
-
-› ● retry-backoff  s1 · feature/retry-backoff · main · draft · ↑2
-        ↑ zlsrnuk  add jitter to backoff delays  latest
-        ↑ qlmmuyy  add exponential backoff helper
+$ git log --oneline main..feature/retry-backoff
+ae0d5b62 add jitter to backoff delays
+14c101a1 add exponential backoff helper
 ```
 
-Reading the stack line: `s1` is a short alias you can use in commands, `feature/retry-backoff` is the Git branch it exports to, `main` is the base, `draft` means it has not been published, and `↑2` means two revisions are ahead of the remote.
+The branch `feature/retry-backoff` is the stack: `main` is its base, and each commit on it is a GX revision. When you `git push`, the pre-push hook publishes the whole branch as a reviewable stack.
 
 ## Agent workflow
 
-Prefer MCP tools over asking agents to run the CLI directly. The expected save flow is:
+Agents work in plain Git, exactly like you do:
 
 1. Stage with `git add`
-2. `gx_commit` — record the revision (agents can attach a task summary and the commands/tests they ran)
-3. `gx_status` — inspect before publish
-4. Plain `git push` — the pre-push hook captures sessions and publishes metadata
+2. Commit with `git commit` — GX's hooks record the revision
+3. Push with `git push` — the pre-push hook captures sessions and publishes metadata
 
-Use `gx_edit` when continuing or amending an existing revision.
+The MCP server adds one tool worth wiring up: agents can run `gx_review` for review context on the current change.
 
 See [MCP setup](/docs/mcp) for `add-mcp`, Executor, and per-tool parameters.
 
-## Optional: first-run demo
-
-```bash
-gx demo
-```
-
-Walks through how GX works in an interactive scratch session, without touching your repository.

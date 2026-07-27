@@ -1,0 +1,83 @@
+---
+title: Changelog
+description: Breaking changes and notable updates to the GX CLI, MCP server, and Cloud APIs.
+---
+
+Breaking changes land here first. Subscribe to the repo or check back before upgrading.
+
+## July 2026 — GX is no longer a Git porcelain
+
+GX now does one thing: capture your coding sessions and make review great. You work in
+plain Git; GX's surface is `gx init` (hooks), `gx review` (AI review), and PR Summaries.
+This shipped as a series of CLI releases in July 2026.
+
+### Removed CLI commands
+
+`gx commit`, `gx status`, `gx push`, `gx edit`, `gx base`, `gx generate`, and `gx sync`
+have been removed. Use plain Git instead:
+
+| You used to run | Now run |
+| --- | --- |
+| `gx commit` | `git commit` |
+| `gx status` | `git status` |
+| `gx push` | `git push` |
+| `gx sync` | `git fetch` / `git pull` — GX publishes automatically on push |
+
+Capture is unaffected: the hooks installed by `gx init` record revisions on `git commit`
+and publish sessions on `git push`. Uploads that fail retry automatically on your next
+push, and `gx doctor` can retry them on demand.
+
+### Removed ambient capture (LaunchAgent)
+
+The background capture service (`gx ops capture` / the GX LaunchAgent) is removed.
+Session capture is transcript-based via the hooks `gx init` installs — nothing runs in
+the background anymore. Upgraded CLIs remove an existing LaunchAgent automatically the
+next time `gx init` runs; you can also remove it manually from `~/Library/LaunchAgents`.
+
+### A smaller command surface
+
+`gx demo` and the hidden `gx ops` tree are removed, and `gx report` folded into
+`gx doctor --report` (the old `gx report` still works as a hidden alias for one
+release). What remains: `gx init`, `gx review` (alias `gxr`), `gx auth`, `gx set`,
+`gx doctor`, and `gx version`.
+
+### MCP server exposes `gx_review` only
+
+The MCP tools `gx_commit`, `gx_status`, `gx_push`, `gx_publish`, and `gx_edit` were
+removed along with the porcelain. Agent configurations that reference them should call
+plain Git commands instead; review stays available as the `gx_review` tool.
+
+### Publish API: bundle schema v2
+
+`POST /v1/publish` bundles are now `schema_version: 2`: the `stack` array and the
+jj-era `change.jj_change_id` field are gone, replaced by a flat `revisions` list
+(commit, `GX:` trailer ID, description, files, branch, base branch, patch). Version 1
+bundles remain accepted, so older CLIs keep working during the transition — but
+upgrade to keep PR Summaries at full quality.
+
+### `GET /bookmarks` is now `GET /v1/reviews`
+
+"Bookmark" was jj's word for a branch, and the row it returns is really one review per
+pull request. The endpoint is now `GET /v1/reviews`. `GET /bookmarks` still works and
+returns an identical response — it forwards to the new path and sets a `Deprecation`
+header — so nothing breaks today. Point integrations at `/v1/reviews`; the old path
+will be removed once traffic to it stops.
+
+### Session retention
+
+Captured sessions are staged locally as lightweight references and published on
+`git push`; published sessions are kept with your review history in GX Cloud. Earlier
+docs described a 30-day local retention window — that description was inaccurate and
+has been removed.
+
+### Unchanged, and stable going forward
+
+- The `GX: https://gx.run/r/<id>` commit trailer format.
+- The PR Summary block and its `<!-- gx:pr-summary:v1 -->` marker — your PR
+  description stays above it, GX writes below it.
+- `gx init`, `gx init --global`, `gx review`, `gx doctor`, and the capture hooks.
+
+### Discontinued
+
+The GX menu bar app for macOS is discontinued as of July 2026. The CLI hooks replace
+everything it did.

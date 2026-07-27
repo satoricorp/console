@@ -26,6 +26,23 @@ jobs:
     name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    # Postgres 16 to match the RDS engine in infra/lib/gx-server-stack.ts.
+    # Without it the ~59 database-backed server tests skip and the deploy gate
+    # goes green having verified none of the publish / webhook / auth paths.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gx_console_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -87,6 +104,11 @@ jobs:
 
       - name: Check server
         working-directory: server
+        env:
+          # An empty CI database means `bun test` also replays migrations
+          # 001..028 end to end, which nothing else does. test/db-gate.ts turns
+          # a missing DATABASE_URL into a hard failure here rather than a skip.
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gx_console_test
         run: |
           bun run typecheck
           bun test

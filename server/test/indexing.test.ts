@@ -1,13 +1,17 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { getSql, runMigrations, closeDatabase } from "../src/db";
+
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const indexingUserId = `index-test-user-${crypto.randomUUID()}`;
 import {
   resetIndexingFetch,
   runIncrementalIndex,
   setIndexingFetch,
 } from "../src/indexing/turbopuffer";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 describeDb("indexing turbopuffer", () => {
   let orgId: string;
@@ -33,7 +37,7 @@ describeDb("indexing turbopuffer", () => {
       ) VALUES (
         ${now}, '0.1.0-test', 'abc123',
         ${JSON.stringify({ refRange: "main..HEAD" })}::jsonb,
-        ${orgId}, 'index-test-user', '/Users/joe/git/gx'
+        ${orgId}, ${indexingUserId}, '/Users/joe/git/gx'
       )
       RETURNING id
     `;
@@ -42,7 +46,7 @@ describeDb("indexing turbopuffer", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        'index-test-user', 'acme/gx', 'main', ${now}, ${now}, ${orgId}, ${event.id}
+        ${indexingUserId}, 'acme/gx', 'main', ${now}, ${now}, ${orgId}, ${event.id}
       )
       RETURNING id
     `;

@@ -9,9 +9,13 @@ import {
 } from "../src/metering/quota";
 import { generateSummary } from "../src/summary/generate";
 import { authHeaders, installTestAuth } from "./auth";
+import { describeDb } from "./db-gate";
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// made these seeds succeed exactly once per database and then fail with 23505
+// on every later run. Tests must not assume the database was just created.
+const meteringUserId = `metering-test-user-${crypto.randomUUID()}`;
 
 async function seedBookmark(
   db: ReturnType<typeof getSql>,
@@ -28,7 +32,7 @@ async function seedBookmark(
       ${`meter${suffix}`},
       ${JSON.stringify({ refRange: "main..HEAD", intentCandidates: [`quota test ${suffix}`] })}::jsonb,
       ${orgId},
-      'metering-test-user',
+      ${meteringUserId},
       '/Users/joe/git/gx'
     )
     RETURNING id
@@ -38,7 +42,7 @@ async function seedBookmark(
     INSERT INTO bookmarks (
       user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
     ) VALUES (
-      'metering-test-user',
+      ${meteringUserId},
       ${`acme/quota-${suffix}`},
       ${`feat/quota-${suffix}`},
       ${atMs},
@@ -102,7 +106,7 @@ describeDb("PR Summary metering", () => {
       const bookmarkId = await seedBookmark(db, activeOrgId, `active-${i}`, now + i);
       await generateSummary(db, {
         orgId: activeOrgId,
-        userId: "metering-test-user",
+        userId: meteringUserId,
         bookmarkId,
         provider: createMockProvider(`quota test active ${i}`),
       });
@@ -117,7 +121,7 @@ describeDb("PR Summary metering", () => {
     await expect(
       generateSummary(db, {
         orgId: expiredOrgId,
-        userId: "metering-test-user",
+        userId: meteringUserId,
         bookmarkId,
         provider: createMockProvider("blocked"),
       }),
@@ -172,7 +176,7 @@ describeDb("PR Summary metering", () => {
     const res = await app.request("http://localhost/v1/summaries/generate", {
       method: "POST",
       headers: {
-        ...authHeaders("metering-test-user", expiredOrgId),
+        ...authHeaders(meteringUserId, expiredOrgId),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ bookmarkId }),
@@ -184,6 +188,11 @@ describeDb("PR Summary metering", () => {
       upgradeUrl: string;
     };
     expect(json.error).toContain("free trial has ended");
-    expect(json.upgradeUrl).toContain("upgrade");
+    // The checkout URL is a placeholder until pricing ships, so pin the part
+    // that is actually a contract: the 402 hands back an absolute URL scoped to
+    // the caller's org. (This used to assert the path contained "upgrade",
+    // which stopped being true when the fallback moved to the gx.run root.)
+    expect(json.upgradeUrl).toStartWith("https://");
+    expect(json.upgradeUrl).toContain(`org=${expiredOrgId}`);
   });
 });

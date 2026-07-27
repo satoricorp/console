@@ -4,9 +4,7 @@ import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import { validateSummary } from "../src/summary/validate";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 const WEBHOOK_SECRET = "test-webhook-secret";
 const INSTALLATION_ID = 424242;
@@ -106,6 +104,16 @@ describeDb("GitHub webhook", () => {
       if (url.includes("/access_tokens")) {
         return new Response(JSON.stringify({ token: "installation-token-test" }), {
           status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // handleGxMention gates rule vetoes on the commenter having write access
+      // (src/gx-mention/handler.ts authorCanVetoRules). Unmocked this fell to
+      // the 404 default, so the veto was silently denied and no rule retired.
+      if (url.match(/\/collaborators\/[^/]+\/permission$/)) {
+        return new Response(JSON.stringify({ permission: "write" }), {
+          status: 200,
           headers: { "Content-Type": "application/json" },
         });
       }

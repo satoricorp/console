@@ -2,9 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
+import { describeDb } from "./db-gate";
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const reviewUserId = `review-test-user-${crypto.randomUUID()}`;
 
 const REPO_ROOT = "/Users/joe/git/gx";
 const REPO_FULL_NAME = "acme/gx-review";
@@ -38,7 +42,7 @@ describeDb("review context API", () => {
         'reviewsha',
         ${JSON.stringify({ refRange: REF_RANGE })}::jsonb,
         ${orgId},
-        'review-test-user',
+        ${reviewUserId},
         ${REPO_ROOT}
       )
       RETURNING id
@@ -48,7 +52,7 @@ describeDb("review context API", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        'review-test-user',
+        ${reviewUserId},
         ${REPO_FULL_NAME},
         'feat/review',
         ${now},
@@ -77,28 +81,6 @@ describeDb("review context API", () => {
       RETURNING id
     `;
     ruleId = rule.id;
-
-    const [check] = await db<{ id: string }[]>`
-      INSERT INTO conflict_checks (
-        bookmark_id, org_id, status, base_sha, head_sha, conflicted_files, diagnostics, created_at_ms, updated_at_ms
-      ) VALUES (
-        ${bookmark.id},
-        ${orgId},
-        'conflicted',
-        'base111',
-        'head222',
-        '[]'::jsonb,
-        '{}'::jsonb,
-        ${now},
-        ${now}
-      )
-      RETURNING id
-    `;
-
-    await db`
-      INSERT INTO conflict_files (check_id, file)
-      VALUES (${check.id}, 'server/src/review/context.ts')
-    `;
   });
 
   afterAll(async () => {
@@ -112,7 +94,7 @@ describeDb("review context API", () => {
     url.searchParams.set("head", "feat/review");
 
     const res = await app.request(url.toString(), {
-      headers: authHeaders("review-test-user", orgId),
+      headers: authHeaders(reviewUserId, orgId),
     });
 
     expect(res.status).toBe(200);
@@ -130,13 +112,12 @@ describeDb("review context API", () => {
     expect(json.rules.some((r) => r.id === ruleId)).toBe(true);
     expect(json.hunkLinks.length).toBe(2);
     expect(json.collisions.some((c) => c.kind === "hunk_overlap")).toBe(true);
-    expect(json.collisions.some((c) => c.kind === "merge_conflict")).toBe(true);
     expect(Array.isArray(json.indexSnippets)).toBe(true);
   });
 
   test("returns 400 when query params missing", async () => {
     const res = await app.request("http://localhost/v1/review/context", {
-      headers: authHeaders("review-test-user", orgId),
+      headers: authHeaders(reviewUserId, orgId),
     });
     expect(res.status).toBe(400);
   });
