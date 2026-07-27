@@ -25,8 +25,23 @@ type GxServerStackProps = StackProps & {
 
 const containerName = "gx-server";
 const containerPort = 3201;
-const bedrockModelId = "anthropic.claude-sonnet-4-6";
-const bedrockInferenceProfileId = "us.anthropic.claude-sonnet-4-6";
+
+/**
+ * Every Bedrock model the task role may invoke: the server's own summary model
+ * plus the three the /gx/bedrock/fight passthrough allows (two Opus reviewers
+ * and the Sonnet judge). Keep in sync with BEDROCK_FIGHT_MODELS in
+ * server/src/routes/bedrock.ts — an ID allowed by the route but missing here is
+ * an AccessDeniedException in production and a green test suite locally.
+ *
+ * These are `us.` cross-region inference profiles. Invoking one needs BOTH the
+ * profile ARN in this region and the underlying foundation model in every region
+ * the profile can route to, hence the region-wildcard foundation-model ARN.
+ */
+const bedrockInferenceProfileIds = [
+  "us.anthropic.claude-sonnet-4-6",
+  "us.anthropic.claude-opus-4-6-v1",
+  "us.anthropic.claude-opus-4-5-20251101-v1:0",
+];
 
 export class GxServerStack extends Stack {
   constructor(scope: Construct, id: string, props: GxServerStackProps) {
@@ -243,8 +258,10 @@ export class GxServerStack extends Stack {
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
         resources: [
-          `arn:${Stack.of(this).partition}:bedrock:*::foundation-model/${bedrockModelId}`,
-          `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:inference-profile/${bedrockInferenceProfileId}`,
+          ...bedrockInferenceProfileIds.flatMap((profileId) => [
+            `arn:${Stack.of(this).partition}:bedrock:*::foundation-model/${profileId.replace(/^us\./, "")}`,
+            `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:inference-profile/${profileId}`,
+          ]),
           `arn:${Stack.of(this).partition}:bedrock:${Stack.of(this).region}:${Stack.of(this).account}:application-inference-profile/*`,
         ],
       }),

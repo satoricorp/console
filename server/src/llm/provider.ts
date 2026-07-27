@@ -16,7 +16,26 @@ export type LLMProvider = {
 
 const defaultOpenAIBaseURL = "https://api.openai.com/v1";
 const defaultModel = "gpt-4o-mini";
-const bedrockAnthropicModel = "anthropic.claude-sonnet-4-6";
+
+/**
+ * The Bedrock model this server calls directly (PR summaries, review plans,
+ * `@gx` mention answers).
+ *
+ * It MUST be the `us.`-prefixed inference profile form. bedrock-runtime rejects
+ * the bare `anthropic.*` ID for on-demand invocation with
+ *
+ *   ValidationException: Invocation of model ID anthropic.claude-sonnet-4-6
+ *   with on-demand throughput isn't supported. Retry your request with the ID
+ *   or ARN of an inference profile that contains this model.
+ *
+ * — verified live against bedrock-runtime in both us-east-1 and us-west-2.
+ * The inference profile was introduced in 2f160eb and silently reverted to the
+ * bare ID in 5491d60, which made every Bedrock-backed completion throw (there
+ * is no fallback: generateSummary lets the provider error propagate, so the
+ * GitHub webhook 500s instead of posting a summary). bedrock-models.test.ts is
+ * the regression test that keeps the bare form from coming back.
+ */
+export const SERVER_BEDROCK_ANTHROPIC_MODEL = "us.anthropic.claude-sonnet-4-6";
 
 function openAIBaseURL(): string {
   const baseURL = (
@@ -140,7 +159,7 @@ export function createMockProvider(contextHint?: string): LLMProvider {
   };
 }
 
-function awsRegion(): string {
+export function awsRegion(): string {
   return (
     process.env.AWS_REGION?.trim() ||
     process.env.AWS_DEFAULT_REGION?.trim() ||
@@ -148,7 +167,7 @@ function awsRegion(): string {
   );
 }
 
-function bedrockConfigured(): boolean {
+export function bedrockConfigured(): boolean {
   return Boolean(
     process.env.AWS_REGION?.trim() ||
       process.env.AWS_DEFAULT_REGION?.trim() ||
@@ -161,11 +180,19 @@ function bedrockConfigured(): boolean {
 
 let bedrockClient: BedrockRuntimeClient | null = null;
 
-function getBedrockClient(): BedrockRuntimeClient {
+/** The one Bedrock client. The /gx/bedrock/fight passthrough shares it so the
+ * server has a single place where region and the credential chain are decided. */
+export function getBedrockClient(): BedrockRuntimeClient {
   if (!bedrockClient) {
     bedrockClient = new BedrockRuntimeClient({ region: awsRegion() });
   }
   return bedrockClient;
+}
+
+/** Test seam: swap in a fake client (anything with `send`), or pass null to
+ * drop the cached one so the next call rebuilds it from the current env. */
+export function setBedrockClientForTesting(client: BedrockRuntimeClient | null): void {
+  bedrockClient = client;
 }
 
 async function bedrockAnthropicComplete(system: string, user: string): Promise<LLMCompletion> {
@@ -180,7 +207,7 @@ async function bedrockAnthropicComplete(system: string, user: string): Promise<L
     accept: "application/json",
     body: new TextEncoder().encode(body),
     contentType: "application/json",
-    modelId: bedrockAnthropicModel,
+    modelId: SERVER_BEDROCK_ANTHROPIC_MODEL,
   }));
 
   if (!response.body) {
@@ -201,7 +228,7 @@ async function bedrockAnthropicComplete(system: string, user: string): Promise<L
     throw new Error("Bedrock Anthropic response returned empty content");
   }
 
-  return { text, model: bedrockAnthropicModel };
+  return { text, model: SERVER_BEDROCK_ANTHROPIC_MODEL };
 }
 
 function extractResponseText(json: {
