@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
+import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
 import type * as githubAccess from "../githubAccess.js";
 import type * as githubAppInstall from "../githubAppInstall.js";
@@ -17,18 +18,13 @@ import type * as githubProfile from "../githubProfile.js";
 import type * as gxAuth from "../gxAuth.js";
 import type * as gxAuthActions from "../gxAuthActions.js";
 import type * as gxAuthUtils from "../gxAuthUtils.js";
-import type * as gxPr from "../gxPr.js";
-import type * as gxPrActions from "../gxPrActions.js";
 import type * as gxPrHttp from "../gxPrHttp.js";
 import type * as gxReviewArtifacts from "../gxReviewArtifacts.js";
-import type * as gxRevisions from "../gxRevisions.js";
 import type * as http from "../http.js";
 import type * as indexing from "../indexing.js";
 import type * as indexingActions from "../indexingActions.js";
 import type * as lib_bookmarkActionContext from "../lib/bookmarkActionContext.js";
 import type * as lib_chatPin from "../lib/chatPin.js";
-import type * as lib_codeStorageAdapter from "../lib/codeStorageAdapter.js";
-import type * as lib_gxPrGithub from "../lib/gxPrGithub.js";
 import type * as lib_gxPrPayload from "../lib/gxPrPayload.js";
 import type * as lib_gxStack from "../lib/gxStack.js";
 import type * as lib_prChat_generateChatResponse from "../lib/prChat/generateChatResponse.js";
@@ -56,6 +52,8 @@ import type * as stripeActions from "../stripeActions.js";
 import type * as stripeUrls from "../stripeUrls.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
 import type * as userAppState from "../userAppState.js";
+import type * as watchlist from "../watchlist.js";
+import type * as watchlistActions from "../watchlistActions.js";
 
 import type {
   ApiFromModules,
@@ -66,6 +64,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
+  crons: typeof crons;
   devices: typeof devices;
   githubAccess: typeof githubAccess;
   githubAppInstall: typeof githubAppInstall;
@@ -73,18 +72,13 @@ declare const fullApi: ApiFromModules<{
   gxAuth: typeof gxAuth;
   gxAuthActions: typeof gxAuthActions;
   gxAuthUtils: typeof gxAuthUtils;
-  gxPr: typeof gxPr;
-  gxPrActions: typeof gxPrActions;
   gxPrHttp: typeof gxPrHttp;
   gxReviewArtifacts: typeof gxReviewArtifacts;
-  gxRevisions: typeof gxRevisions;
   http: typeof http;
   indexing: typeof indexing;
   indexingActions: typeof indexingActions;
   "lib/bookmarkActionContext": typeof lib_bookmarkActionContext;
   "lib/chatPin": typeof lib_chatPin;
-  "lib/codeStorageAdapter": typeof lib_codeStorageAdapter;
-  "lib/gxPrGithub": typeof lib_gxPrGithub;
   "lib/gxPrPayload": typeof lib_gxPrPayload;
   "lib/gxStack": typeof lib_gxStack;
   "lib/prChat/generateChatResponse": typeof lib_prChat_generateChatResponse;
@@ -112,6 +106,8 @@ declare const fullApi: ApiFromModules<{
   stripeUrls: typeof stripeUrls;
   stripeWebhookActions: typeof stripeWebhookActions;
   userAppState: typeof userAppState;
+  watchlist: typeof watchlist;
+  watchlistActions: typeof watchlistActions;
 }>;
 
 /**

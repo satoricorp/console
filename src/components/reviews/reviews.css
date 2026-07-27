@@ -223,43 +223,34 @@
   .usage-foot { padding: 4px 16px 13px; font-size: 11.5px; color: var(--gx-faint); line-height: 1.5; }
   .usage-foot .warn-note { color: var(--gx-warn); }
 
-  /* ── approve bar ──────────────────────────────────── */
-  .approve-bar {
+  /* ── github bar ───────────────────────────────────── */
+  .github-bar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
     border-top: 1px solid var(--gx-line);
     background: color-mix(in srgb, var(--gx-bg) 88%, transparent);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
-  .approve-inner {
+  .github-bar-inner {
     box-sizing: border-box; width: 100%; max-width: min(1400px, calc(100vw - 48px)); margin: 0 auto; padding: 12px 20px;
     display: flex; align-items: center; gap: 16px;
   }
-  .approve-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .github-bar-status { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
   .ci { display: flex; align-items: center; gap: 8px; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 12px; color: var(--gx-ok); }
   .ci .tick { font-size: 13px; }
-  .ci-detail { color: var(--gx-muted); }
-  .btn-group { display: flex; align-items: center; gap: 10px; flex: none; }
-  .btn-secondary {
-    font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 12.5px; padding: 9px 16px;
-    border: 1px solid var(--gx-line); border-radius: 8px; background: transparent; color: var(--gx-fg);
-    text-decoration: none;
-  }
-  .btn-secondary:hover { border-color: var(--gx-muted); }
-  .btn-approve {
-    font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; letter-spacing: 0.01em;
-    padding: 10px 22px; border: 1px solid var(--gx-btn-bg); border-radius: 8px;
-    background: var(--gx-btn-bg); color: var(--gx-btn-fg);
-  }
-  .btn-approve:hover { background: transparent; color: var(--gx-fg); }
-  .approve-hint,
-  .approve-feedback {
+  .ci.closed { color: var(--gx-muted); }
+  .github-bar-hint {
     font-family: var(--font-geist-mono), ui-monospace, monospace;
     font-size: 10.5px;
     color: var(--gx-faint);
   }
-  .approve-feedback { line-height: 1.35; word-break: break-word; }
-  /* Hide the helper hint on narrow screens, but never hide merge errors/notices. */
-  @media (max-width: 700px) { .approve-hint { display: none; } .btn-secondary { padding: 9px 12px; } }
+  a.btn-github {
+    font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 13px; font-weight: 600; letter-spacing: 0.01em;
+    padding: 10px 22px; border: 1px solid var(--gx-btn-bg); border-radius: 8px;
+    background: var(--gx-btn-bg); color: var(--gx-btn-fg);
+    text-decoration: none; flex: none;
+  }
+  a.btn-github:hover { background: transparent; color: var(--gx-fg); }
+  @media (max-width: 700px) { .github-bar-hint { display: none; } }
 
   /* ── pending state ────────────────────────────────── */
   .pending-hero {

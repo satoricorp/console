@@ -4,8 +4,8 @@ import { PatchDiff } from "@pierre/diffs/react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityPanel } from "@/components/reviews/activity-panel";
-import { ApproveMergeBar } from "@/components/reviews/approve-merge-bar";
 import { CriticalReviewSection } from "@/components/reviews/critical-review-card";
+import { GithubPrBar } from "@/components/reviews/github-pr-bar";
 import { NarrativeSection } from "@/components/reviews/narrative-section";
 import { PlanFallback, PlanPending } from "@/components/reviews/plan-pending";
 import { ReviewHeader, ReviewSiteHeader } from "@/components/reviews/review-header";
@@ -164,9 +164,7 @@ export function ReviewView({
           </>
         ) : null}
       </main>
-      {demoMode ? null : (
-        <ApproveMergeBar review={review} onMerged={() => void reload()} />
-      )}
+      {demoMode ? null : <GithubPrBar review={review} />}
     </div>
   );
 }
