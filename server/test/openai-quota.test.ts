@@ -3,9 +3,7 @@ import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import { authHeaders, installTestAuth } from "./auth";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 const chatPayload = {
   model: "gpt-4o-mini",

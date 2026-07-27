@@ -2,9 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 const originalFetch = globalThis.fetch;
 const originalOpenAIKey = process.env.GX_OPENAI_API_KEY;
@@ -50,6 +48,31 @@ describeDb("compat bookmarks route", () => {
 
   beforeAll(async () => {
     installTestAuth();
+    // GET /bookmarks and /v1/reviews both call reconcileOpenBookmarkMergeStatuses
+    // before filtering, which hits api.github.com for every merge_status=open
+    // row. Unmocked, that is a live network call from the test suite: GitHub
+    // 404s on the synthetic acme/* repo and the reconcile marks the bookmark
+    // closed, so the row under test disappears from merge_status=open. Answer
+    // the PR-list endpoints with "this branch has an open PR" so the reconcile
+    // is deterministic and offline.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("api.github.com")) {
+        return new Response(
+          JSON.stringify([
+            {
+              number: 4242,
+              html_url: `https://github.com/${repoFullName}/pull/4242`,
+              state: "open",
+              merged: false,
+              merged_at: null,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected fetch in compat bookmarks test: ${url}`);
+    }) as typeof fetch;
     await runMigrations();
 
     const db = getSql();
@@ -92,6 +115,7 @@ describeDb("compat bookmarks route", () => {
   });
 
   afterAll(async () => {
+    globalThis.fetch = originalFetch;
     await closeDatabase();
   });
 
@@ -125,6 +149,44 @@ describeDb("compat bookmarks route", () => {
       merge_status: "open",
     });
     expect(typeof rows[0]!.updated_at_ms).toBe("number");
+  });
+
+  test("GET /v1/reviews is canonical and /bookmarks forwards to it", async () => {
+    const query = `repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=open`;
+    const headers = authHeaders("compat-test-user", orgId);
+
+    const canonical = await app.request(`http://localhost/v1/reviews?${query}`, {
+      headers,
+    });
+    const legacy = await app.request(`http://localhost/bookmarks?${query}`, {
+      headers,
+    });
+
+    expect(canonical.status).toBe(200);
+    expect(legacy.status).toBe(200);
+    // Same handler, byte-identical body — the legacy path is an alias, not a redirect.
+    expect(await legacy.json()).toEqual(await canonical.json());
+
+    expect(canonical.headers.get("Deprecation")).toBeNull();
+    expect(legacy.headers.get("Deprecation")).toBe("true");
+    expect(legacy.headers.get("Link")).toContain("/v1/reviews");
+  });
+
+  test("GET /v1/reviews keeps the fields released CLIs read", async () => {
+    const res = await app.request(
+      `http://localhost/v1/reviews?repo_full_name=${encodeURIComponent(repoFullName)}&merge_status=open`,
+      { headers: authHeaders("compat-test-user", orgId) },
+    );
+
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{
+      revision: number;
+      remote_head_sha: string | null;
+    }>;
+    // Installed gx binaries gate catch-up on these two; do not drop them until
+    // deprecated-route telemetry shows no old-CLI traffic.
+    expect(rows[0]!.revision).toBe(3);
+    expect(rows[0]!.remote_head_sha).toBe("remote123");
   });
 
   test("GET /bookmarks includes the user's own bookmarks from other orgs", async () => {

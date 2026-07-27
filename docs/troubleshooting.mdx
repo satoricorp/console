@@ -6,11 +6,11 @@ description: Diagnose and fix common GX problems — and know exactly what each 
 Start with the built-in doctor:
 
 ```bash
-gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
+gx doctor          # diagnose capture, hooks, and the publish queue
 gx doctor --fix    # apply safe repairs automatically
 ```
 
-If something still misbehaves, `gx report` uploads recent GX logs to support and prints a report ID you can share.
+If something still misbehaves, `gx doctor --report` uploads the diagnosis and recent GX logs to support and prints a report ID you can share.
 
 ## Common errors
 
@@ -81,8 +81,6 @@ gx doctor          # shows capture and hook state
 gx doctor --fix
 ```
 
-Captured sessions are retained locally for 30 days.
-
 ## Environment
 
 | Variable | Meaning |
@@ -103,7 +101,7 @@ This removes the installed binaries only. Local GX data remains in `~/.gx`; dele
 ## Send logs to support
 
 ```bash
-gx report
+gx doctor --report
 ```
 
-Uploads recent GX logs (requires `gx auth login`) and prints a report ID and URL to share with the team.
+Runs the diagnosis and uploads it with recent GX logs (requires `gx auth login`), then prints a report ID and URL to share with the team.

@@ -15,7 +15,7 @@ export async function POST(
   const { bookmarkId } = await context.params;
   const upstream = await gxApiRequest(
     viewer.id,
-    `/bookmarks/${encodeURIComponent(bookmarkId)}/archive`,
+    `/v1/reviews/${encodeURIComponent(bookmarkId)}/archive`,
     { method: "POST" },
   );
   const body = await upstream.text();

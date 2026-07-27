@@ -103,6 +103,47 @@ export async function postIssueComment(
   };
 }
 
+/**
+ * Edit a comment we previously posted (used by the OSS watch rail to refresh a
+ * summary in place on a new push, rather than posting a fresh comment each time).
+ * Works with any token whose user authored the comment — including a bot PAT.
+ */
+export async function patchIssueComment(
+  accessToken: string,
+  repoFullName: string,
+  commentId: number,
+  body: string,
+): Promise<PostedComment> {
+  const response = await fetch(
+    `https://api.github.com/repos/${repoFullName}/issues/comments/${commentId}`,
+    {
+      method: "PATCH",
+      headers: {
+        ...githubHeaders(accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ body }),
+    },
+  );
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `GitHub patch comment failed (${response.status}): ${text.slice(0, 500)}`,
+    );
+  }
+
+  const payload = JSON.parse(text) as { id?: number; html_url?: string };
+  if (typeof payload.id !== "number") {
+    throw new Error("GitHub patch comment response missing id");
+  }
+
+  return {
+    id: payload.id,
+    htmlUrl: payload.html_url ?? null,
+  };
+}
+
 export async function postPullRequestReviewReply(
   accessToken: string,
   repoFullName: string,

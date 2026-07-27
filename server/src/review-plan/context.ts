@@ -250,16 +250,20 @@ export async function loadReviewPlanContext(
   const [event] = await db<{
     id: string;
     head_commit_id: string;
+    revisions: unknown;
     stack: unknown;
     sessions: unknown;
     change_provenance: unknown;
     change_risk: unknown;
     push_branch: string | null;
-    base_from_stack: string | null;
   }[]>`
     SELECT
       id,
       head_commit_id,
+      CASE
+        WHEN jsonb_typeof(payload->'revisions') = 'array' THEN payload->'revisions'
+        ELSE '[]'::jsonb
+      END AS revisions,
       CASE
         WHEN jsonb_typeof(payload->'stack') = 'array' THEN payload->'stack'
         ELSE '[]'::jsonb
@@ -274,27 +278,38 @@ export async function loadReviewPlanContext(
         ELSE '[]'::jsonb
       END AS change_provenance,
       payload->'change'->'review_context'->'risk' AS change_risk,
-      payload->'push'->>'branch_name' AS push_branch,
-      (
-        SELECT entry->>'base_branch_name'
-        FROM jsonb_array_elements(
-          CASE
-            WHEN jsonb_typeof(payload->'stack') = 'array' THEN payload->'stack'
-            ELSE '[]'::jsonb
-          END
-        ) AS entry
-        WHERE entry->>'base_branch_name' IS NOT NULL
-        LIMIT 1
-      ) AS base_from_stack
+      payload->'push'->>'branch_name' AS push_branch
     FROM pr_events
     WHERE id = ${eventId}::uuid
     LIMIT 1
   `;
   if (!event) return null;
 
+  // Schema v2 publishes a flat `revisions` list; adapt it onto the legacy
+  // StackEntry shape so the mapping below serves both bundle generations.
+  const revisionEntries = (Array.isArray(event.revisions) ? event.revisions : [])
+    .filter((row): row is Record<string, unknown> => !!row && typeof row === "object")
+    .map((row): StackEntry => ({
+      change: {
+        jj_change_id: typeof row.revision_id === "string" ? row.revision_id : undefined,
+        description: typeof row.description === "string" ? row.description : undefined,
+        files: Array.isArray(row.files)
+          ? row.files.filter((f): f is string => typeof f === "string")
+          : undefined,
+        review_context: (row.review_context ?? undefined) as NonNullable<
+          StackEntry["change"]
+        >["review_context"],
+      },
+      branch_name: typeof row.branch_name === "string" ? row.branch_name : undefined,
+      base_branch_name:
+        typeof row.base_branch_name === "string" ? row.base_branch_name : undefined,
+      patch: typeof row.patch === "string" ? row.patch : undefined,
+    }));
+
   const stack = (Array.isArray(event.stack) ? event.stack : []) as StackEntry[];
-  // If stack empty, synthesize from top-level change via a second projection
-  let entries = stack;
+  // Prefer v2 revisions; if the v1 stack is empty too, synthesize from the
+  // top-level change via a second projection.
+  let entries = revisionEntries.length > 0 ? revisionEntries : stack;
   if (entries.length === 0) {
     const [fallback] = await db<{
       change: unknown;
@@ -488,7 +503,6 @@ export async function loadReviewPlanContext(
     branchName: bookmark.branch_name,
     baseBranch:
       bookmark.app_base_branch ||
-      asString(event.base_from_stack) ||
       revisions.find((r) => r.baseBranchName)?.baseBranchName ||
       "main",
     title: bookmark.title,

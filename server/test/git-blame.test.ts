@@ -4,9 +4,13 @@ import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { loadGitBlameContext, parsePatchHunks } from "../src/github/git-blame";
 import { buildGxChatUserPrompt } from "../src/llm/prompts/gx-chat";
 import type { ExtractContext } from "../src/summary/generate";
+import { describeDb } from "./db-gate";
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const blameUserId = `test-user-${crypto.randomUUID()}`;
 
 describe("parsePatchHunks", () => {
   test("parses old and new ranges from GitHub patch hunks", () => {
@@ -388,7 +392,7 @@ describeDb("loadGitBlameContext", () => {
         'prevsha',
         ${JSON.stringify({ refRange: "main..old" })}::jsonb,
         ${orgId},
-        'test-user',
+        ${blameUserId},
         '/repo'
       )
       RETURNING id
@@ -400,7 +404,7 @@ describeDb("loadGitBlameContext", () => {
         user_id, repo_full_name, branch_name, github_pr_number, github_pr_url,
         published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        'test-user',
+        ${blameUserId},
         'acme/gx',
         'old-webhook',
         12,
@@ -440,7 +444,7 @@ describeDb("loadGitBlameContext", () => {
         'headsha',
         ${JSON.stringify({ refRange: "main..head" })}::jsonb,
         ${orgId},
-        'test-user',
+        ${blameUserId},
         '/repo'
       )
       RETURNING id

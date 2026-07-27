@@ -128,7 +128,7 @@ export async function loadReviewContext(
     );
   }
 
-  const collisions = await loadCollisionHints(db, orgId, input.repoRoot, hunkLinks);
+  const collisions = collisionHints(hunkLinks);
 
   let indexSnippets: IndexSnippet[] = [];
   let indexAvailable = false;
@@ -216,12 +216,7 @@ async function resolveRepoFullName(
   return bookmark?.repo_full_name ?? null;
 }
 
-async function loadCollisionHints(
-  db: postgres.Sql,
-  orgId: string,
-  repoRoot: string,
-  hunkLinks: HunkLinkContext[],
-): Promise<CollisionHint[]> {
+function collisionHints(hunkLinks: HunkLinkContext[]): CollisionHint[] {
   const hints: CollisionHint[] = [];
 
   const fileSessions = new Map<string, Set<string>>();
@@ -238,32 +233,6 @@ async function loadCollisionHints(
         detail: `Multiple sessions (${[...sessions].join(", ")}) touched this file`,
       });
     }
-  }
-
-  const conflictRows = await db<{
-    file: string;
-    status: string;
-    base_sha: string | null;
-    head_sha: string | null;
-  }[]>`
-    SELECT cf.file, cc.status, cc.base_sha, cc.head_sha
-    FROM conflict_checks cc
-    JOIN conflict_files cf ON cf.check_id = cc.id
-    JOIN bookmarks b ON b.id = cc.bookmark_id
-    JOIN pr_events pe ON pe.id = b.latest_event_id
-    WHERE cc.org_id = ${orgId}
-      AND pe.repo_root_path = ${repoRoot}
-      AND cc.status = 'conflicted'
-    ORDER BY cc.updated_at_ms DESC
-    LIMIT 50
-  `;
-
-  for (const row of conflictRows) {
-    hints.push({
-      file: row.file,
-      kind: "merge_conflict",
-      detail: `Merge conflict (${row.base_sha ?? "?"}..${row.head_sha ?? "?"})`,
-    });
   }
 
   return hints;

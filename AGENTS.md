@@ -1,11 +1,15 @@
-Version control: use GX, not `git commit`.
+Version control: plain Git. GX's surface here is **review**, not committing.
 
 Default flow:
-- `git add` to stage files for this revision
-- `gx commit -m "…"` (or MCP `gx_commit`) to record a GX revision
-- `gx status` to inspect local/remote stack state
-- plain `git push` to publish (GX pre-push hook captures and uploads) — do not run `gx push`
-- `gh pr create` to open the PR; leave the body for human notes only — do not seed a `## Summary` section. GX Cloud appends the rich PR summary below whatever description is already there.
+- `git add` to stage
+- `git commit -m "…"` — plain Git. Capture is hook-driven: the `prepare-commit-msg` hook stamps
+  the trailer and `pre-push` matches sessions, so a plain commit is captured. Do not use
+  `gx commit`.
+- `git push` to publish — the GX pre-push hook captures and uploads. Do not run `gx push` or
+  `gx capture push`; the hook is the only publish path.
+- `gh pr create` to open the PR; leave the body for human notes only — do not seed a `## Summary`
+  section. GX Cloud appends the rich PR summary below whatever description is already there.
+- `gx review` (or MCP `gx_review`) to review changes.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

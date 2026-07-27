@@ -9,8 +9,8 @@ export function getGxApiBaseUrl(): string {
 
 export function normalizeGxApiPath(path: string): string {
   const trimmed = path.trim();
-  // Bookmark routes are registered without a /v1 prefix on the Hono server
-  // (server/src/routes/bookmarks.ts), so paths pass through as given.
+  // Paths pass through as given: the Hono server registers a mix of /v1-prefixed
+  // routes and legacy unprefixed ones (server/src/routes/review-list.ts).
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 

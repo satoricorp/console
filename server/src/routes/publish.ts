@@ -20,6 +20,7 @@ import {
   summaryLinkContextFromExtract,
 } from "../summary/generate";
 import { capture, Events } from "../telemetry/posthog";
+import { publishRevisions } from "../publish/revisions";
 import type { PublishRegistration, PushBundle } from "../types";
 
 type SqlExecutor = postgres.Sql | postgres.TransactionSql;
@@ -98,7 +99,8 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
           head_commit_id,
           github_pr_url,
           payload,
-          org_id
+          org_id,
+          schema_version
         ) VALUES (
           ${payload.event},
           ${payload.created_at || now},
@@ -115,7 +117,8 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
           ${payload.push.head_commit_id},
           ${githubPrUrl},
           ${tx.json(payload as postgres.JSONValue)},
-          ${orgId}
+          ${orgId},
+          ${payload.schema_version ?? 1}
         )
         RETURNING id
       `;
@@ -851,10 +854,10 @@ function inferPublishBranchName(payload: PushBundle): string {
   const pushBranch = payload.push.branch_name?.trim();
   const repoBranch = payload.repo.branch_name?.trim();
 
-  for (const entry of payload.stack ?? []) {
-    const stackBranch = entry.branch_name?.trim();
-    if (stackBranch && stackBranch !== defaultBranch) {
-      return stackBranch;
+  for (const revision of publishRevisions(payload)) {
+    const revisionBranch = revision.branch_name?.trim();
+    if (revisionBranch && revisionBranch !== defaultBranch) {
+      return revisionBranch;
     }
   }
 
@@ -868,12 +871,10 @@ function inferPublishBranchName(payload: PushBundle): string {
 }
 
 function inferBookmarkTitle(payload: PushBundle, branchName: string): string {
-  for (const entry of payload.stack ?? []) {
-    const title = entry.change?.description?.split("\n")[0]?.trim();
+  for (const revision of publishRevisions(payload)) {
+    const title = revision.description?.split("\n")[0]?.trim();
     if (title) return title;
   }
-  const title = payload.change?.description?.split("\n")[0]?.trim();
-  if (title) return title;
   return branchSlugTitle(branchName);
 }
 
@@ -922,10 +923,7 @@ function capturePublishRegistration(
 }
 
 function publishRevisionCount(payload: PushBundle): number {
-  if (payload.stack?.length) {
-    return payload.stack.length;
-  }
-  return payload.change ? 1 : 0;
+  return publishRevisions(payload).length;
 }
 
 function captureGitHubCommentPosted(
@@ -963,8 +961,8 @@ function collectPublishFiles(payload: PushBundle): string[] {
     const trimmed = file.trim();
     if (trimmed) files.add(trimmed);
   }
-  for (const entry of payload.stack ?? []) {
-    for (const file of entry.change?.files ?? []) {
+  for (const revision of publishRevisions(payload)) {
+    for (const file of revision.files ?? []) {
       const trimmed = file.trim();
       if (trimmed) files.add(trimmed);
     }
@@ -978,12 +976,10 @@ async function refreshBookmarkAppFields(
   payload: PushBundle,
 ) {
   const files = collectPublishFiles(payload);
-  const stackCount = Math.max(
-    payload.stack?.length ?? 0,
-    payload.change ? 1 : 0,
-  );
+  const revisions = publishRevisions(payload);
+  const stackCount = revisions.length;
   const baseBranch =
-    payload.stack?.find((entry) => entry.base_branch_name?.trim())?.base_branch_name?.trim() ||
+    revisions.find((revision) => revision.base_branch_name?.trim())?.base_branch_name?.trim() ||
     payload.repo.default_branch?.trim() ||
     "main";
 

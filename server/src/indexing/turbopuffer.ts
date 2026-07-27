@@ -2,14 +2,23 @@ import { createHash } from "node:crypto";
 import type postgres from "postgres";
 import {
   embeddingDimensions,
+  embeddingProfileForNamespace,
   indexingConfig,
   namespaceForOrgRepo,
-  openAIEmbeddingModel,
+  primaryEmbeddingProfile,
+  type EmbeddingProfile,
   type IndexingConfig,
 } from "./config";
+// openAIEmbeddingModel is intentionally not imported: every embed call now goes
+// through an EmbeddingProfile so the model and width always travel together.
+import { publishRevisions } from "../publish/revisions";
 import type { PushBundle } from "../types";
 
-const maxChunkBytes = 4_000;
+// Byte budget for one embedded chunk. Diffs are split into per-file parts
+// rather than truncated at this cap (see splitPatchIntoParts), so it bounds a
+// single embedding input instead of bounding how much of a revision is
+// searchable at all.
+const maxChunkBytes = 8_000;
 
 export type IndexChunk = {
   id: string;
@@ -204,6 +213,12 @@ export async function searchIndex(args: {
   extraFilters?: Array<[string, string, string]>;
   /** Precomputed embedding — avoids duplicate OpenAI calls when querying multiple buckets. */
   vector?: number[];
+  /**
+   * Add BM25 legs alongside the vector search and fuse with RRF. Defaults on:
+   * exact identifiers are the highest-signal query a reviewer issues and a
+   * pure ANN search regularly misses them.
+   */
+  lexical?: boolean;
 }): Promise<IndexSearchResult[]> {
   const cfg = indexingConfig();
   if (!cfg) {
@@ -215,7 +230,17 @@ export async function searchIndex(args: {
   }
 
   const namespace = args.namespace ?? namespaceForOrgRepo(args.orgId, args.repoFullName);
-  const vector = args.vector ?? (await embedTexts(cfg, [query]))[0];
+  // Namespaces do not all share one vector width. A caller that fans one
+  // precomputed embedding across several buckets would otherwise send a
+  // wrong-width vector to any namespace built at a different width, and
+  // TurboPuffer rejects the query — losing that bucket entirely. Re-embed
+  // rather than fail.
+  const profile = embeddingProfileForNamespace(namespace);
+  let vector = args.vector;
+  if (vector && vector.length !== profile.dimensions) {
+    vector = undefined;
+  }
+  vector ??= (await embedTexts(cfg, [query], profile))[0];
   if (!vector) {
     return [];
   }
@@ -238,16 +263,25 @@ export async function searchIndex(args: {
     filterClauses.push(extra);
   }
 
-  const body: Record<string, unknown> = {
-    rank_by: ["vector", "ANN", vector],
-    limit: Math.min(Math.max(args.limit ?? 8, 1), 50),
-    include_attributes: true,
-  };
+  const limit = Math.min(Math.max(args.limit ?? 8, 1), 50);
+  let filters: unknown;
   if (filterClauses.length === 1) {
-    body.filters = filterClauses[0];
+    filters = filterClauses[0];
   } else if (filterClauses.length > 1) {
-    body.filters = ["And", filterClauses];
+    filters = ["And", filterClauses];
   }
+
+  const body = buildSearchBody({
+    vector,
+    query,
+    limit,
+    filters,
+    // Lexical legs are only safe where this codebase owns the schema. An
+    // explicit namespace override points at a foreign corpus (the shared
+    // review-knowledge namespace has no `symbol` field), so it stays
+    // vector-only unless the caller asks otherwise.
+    lexical: args.lexical ?? !args.namespace,
+  });
 
   const response = await fetchImpl(namespaceURL(cfg, namespace, "query"), {
     method: "POST",
@@ -261,8 +295,12 @@ export async function searchIndex(args: {
     );
   }
 
-  const decoded = (await response.json()) as { rows?: unknown[] };
-  return (decoded.rows ?? []).flatMap((row) => {
+  const decoded = (await response.json()) as {
+    rows?: unknown[];
+    results?: Array<{ rows?: unknown[] }>;
+  };
+  const rows = decoded.rows ?? decoded.results?.[0]?.rows ?? [];
+  return rows.flatMap((row) => {
     if (!isRecord(row)) return [];
     const sourceAttributes = isRecord(row.attributes) ? row.attributes : row;
     const { vector: _vector, ...attributes } = sourceAttributes;
@@ -274,6 +312,86 @@ export async function searchIndex(args: {
       attributes,
     }];
   });
+}
+
+/**
+ * Build the query body: a vector leg, plus BM25 legs over `text` and (when the
+ * query looks like it names an identifier) `symbol`, fused with reciprocal rank
+ * fusion.
+ *
+ * RRF is used rather than weighted score blending because BM25 scores and
+ * cosine distances are not on a comparable scale; RRF only needs each leg's
+ * ordering, so no per-corpus tuning is required.
+ */
+export function buildSearchBody(args: {
+  vector: number[];
+  query: string;
+  limit: number;
+  filters?: unknown;
+  lexical: boolean;
+}): Record<string, unknown> {
+  const withFilters = (leg: Record<string, unknown>): Record<string, unknown> => {
+    if (args.filters !== undefined) leg.filters = args.filters;
+    return leg;
+  };
+  const vectorLeg = withFilters({
+    rank_by: ["vector", "ANN", args.vector],
+    limit: args.limit,
+    include_attributes: true,
+  });
+
+  const text = args.query.trim();
+  if (!args.lexical || !text) {
+    return vectorLeg;
+  }
+
+  const legs: Record<string, unknown>[] = [vectorLeg, withFilters({
+    rank_by: ["text", "BM25", text],
+    limit: args.limit,
+    include_attributes: true,
+  })];
+  const identifiers = identifierTerms(text);
+  if (identifiers) {
+    legs.push(
+      withFilters({
+        rank_by: ["symbol", "BM25", identifiers],
+        limit: args.limit,
+        include_attributes: true,
+      }),
+    );
+  }
+  for (const leg of legs) {
+    leg.limit = { total: args.limit };
+  }
+  return { queries: legs, rerank_by: ["RRF"] };
+}
+
+/**
+ * Extract identifier-shaped tokens from a query and expand them into the same
+ * word parts the writer stored, so `symbol` BM25 matches both the verbatim
+ * identifier and its camelCase pieces. Returns "" when the query names no
+ * identifier, so the symbol leg is skipped rather than diluting the fusion.
+ */
+export function identifierTerms(query: string): string {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  const add = (value: string) => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    terms.push(value);
+  };
+  for (const token of query.split(/[^A-Za-z0-9_$.]+/)) {
+    if (!token || token.length < 3) continue;
+    const looksLikeIdentifier =
+      /[a-z][A-Z]/.test(token) || token.includes("_") || token.includes(".") || /[A-Z]{2,}/.test(token);
+    if (!looksLikeIdentifier) continue;
+    add(token);
+    for (const part of token.split(/[_.]|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/)) {
+      const lower = part.toLowerCase();
+      if (lower.length >= 2) add(lower);
+    }
+  }
+  return terms.join(" ");
 }
 
 /** Upsert pre-chunked client content into the org/repo namespace (stamps org_id). */
@@ -441,66 +559,73 @@ function buildCodeReviewHistoryChunks(input: CodeReviewHistoryIndexInput): Index
 
 function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexChunk[] {
   const chunks: IndexChunk[] = [];
-  const stack = Array.isArray(input.payload.stack) ? input.payload.stack : [];
-  stack.forEach((revision, index) => {
-    const change = isRecord(revision.change) ? revision.change : {};
-    const files = stringArray(change.files);
-    const patch = typeof revision.patch === "string" ? revision.patch : "";
-    const description =
-      typeof change.description === "string" ? change.description.trim() : "";
+  publishRevisions(input.payload).forEach((revision, index) => {
+    const files = revision.files ?? [];
+    const patch = revision.patch ?? "";
+    const description = revision.description?.trim() ?? "";
     if (!patch && !description && files.length === 0) {
       return;
     }
-    const branchName =
-      typeof revision.branch_name === "string" && revision.branch_name.trim()
-        ? revision.branch_name.trim()
-        : input.branchName;
-    const baseBranchName =
-      typeof revision.base_branch_name === "string"
-        ? revision.base_branch_name.trim()
-        : "";
-    const text = limitBytes(
-      [
-        "GX published revision diff.",
-        `Repo: ${input.repoFullName}`,
-        `Branch: ${branchName}`,
-        baseBranchName ? `Base: ${baseBranchName}` : "",
-        `Head: ${input.headSha}`,
-        description ? `Description: ${description}` : "",
-        files.length ? `Files:\n${files.join("\n")}` : "",
-        patch ? `Patch:\n${patch}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      maxChunkBytes,
-    );
-    chunks.push(
-      chunk(
-        "published-revision",
-        [input.orgId, input.eventId, String(index), branchName],
-        text,
-        {
-          org_id: input.orgId,
-          repo_full_name: input.repoFullName,
-          branch_name: branchName,
-          source_kind: "published_revision_diff",
-          file: files[0] ?? "",
-          session_id: "",
-          head_sha: input.headSha,
-          indexed_reason: "gx_pr_artifact",
-          event_id: input.eventId,
+    const branchName = revision.branch_name?.trim() || input.branchName;
+    const baseBranchName = revision.base_branch_name?.trim() ?? "";
+    const header = [
+      "GX published revision diff.",
+      `Repo: ${input.repoFullName}`,
+      `Branch: ${branchName}`,
+      baseBranchName ? `Base: ${baseBranchName}` : "",
+      `Head: ${input.headSha}`,
+      description ? `Description: ${description}` : "",
+      files.length ? `Files:\n${files.join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    // One chunk per file of the patch, windowed if a single file's diff is
+    // still oversized. Previously the entire patch was one chunk hard-truncated
+    // at the byte cap, so everything past the first few kilobytes of any real
+    // revision was never embedded and never searchable.
+    const parts = splitPatchIntoParts(patch, maxChunkBytes - header.length - 32);
+    const bodies = parts.length > 0 ? parts : [{ file: files[0] ?? "", body: "" }];
+    bodies.forEach((part, partIndex) => {
+      const text = limitBytes(
+        [header, part.body ? `Patch:\n${part.body}` : ""].filter(Boolean).join("\n"),
+        maxChunkBytes,
+      );
+      chunks.push(
+        chunk(
+          "published-revision",
+          [input.orgId, input.eventId, String(index), branchName, String(partIndex)],
           text,
-        },
-      ),
-    );
+          {
+            org_id: input.orgId,
+            repo_full_name: input.repoFullName,
+            branch_name: branchName,
+            source_kind: "published_revision_diff",
+            file: part.file || files[0] || "",
+            file_path: part.file || files[0] || "",
+            session_id: "",
+            head_sha: input.headSha,
+            indexed_reason: "gx_pr_artifact",
+            event_id: input.eventId,
+            text,
+          },
+        ),
+      );
+    });
   });
 
   const sessions = Array.isArray(input.payload.sessions) ? input.payload.sessions : [];
   sessions.slice(0, 20).forEach((session, index) => {
     if (!isRecord(session)) return;
     const sessionId = typeof session.id === "string" ? session.id : "";
-    const command = typeof session.command === "string" ? session.command : "";
-    const cwd = typeof session.cwd === "string" ? session.cwd : "";
+    const command =
+      (typeof session.command === "string" && session.command) ||
+      (typeof session.source === "string" && session.source) ||
+      "";
+    const cwd =
+      (typeof session.cwd === "string" && session.cwd) ||
+      (typeof session.repo_root === "string" && session.repo_root) ||
+      "";
     const requests = Array.isArray(session.requests) ? session.requests : [];
     if (!sessionId && !command && requests.length === 0) {
       return;
@@ -537,6 +662,60 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
   });
 
   return chunks;
+}
+
+/**
+ * Split a unified diff into indexable parts: one per `diff --git` section, and
+ * further into line windows when a single file's diff exceeds the byte budget.
+ * Returns the touched path alongside each part so a hit can be attributed to a
+ * file rather than to the whole revision.
+ */
+export function splitPatchIntoParts(
+  patch: string,
+  maxBytes: number,
+): Array<{ file: string; body: string }> {
+  const trimmed = patch.trim();
+  if (!trimmed) return [];
+  const budget = Math.max(maxBytes, 1_000);
+
+  const sections: Array<{ file: string; body: string }> = [];
+  let current: { file: string; lines: string[] } | null = null;
+  for (const line of trimmed.split("\n")) {
+    const match = /^diff --git a\/(\S+) b\/(\S+)/.exec(line);
+    if (match) {
+      if (current) sections.push({ file: current.file, body: current.lines.join("\n") });
+      current = { file: match[2] ?? match[1] ?? "", lines: [line] };
+      continue;
+    }
+    if (current) {
+      current.lines.push(line);
+    } else {
+      current = { file: "", lines: [line] };
+    }
+  }
+  if (current) sections.push({ file: current.file, body: current.lines.join("\n") });
+
+  const parts: Array<{ file: string; body: string }> = [];
+  for (const section of sections) {
+    if (Buffer.byteLength(section.body, "utf8") <= budget) {
+      parts.push(section);
+      continue;
+    }
+    let window: string[] = [];
+    let size = 0;
+    for (const line of section.body.split("\n")) {
+      const lineSize = Buffer.byteLength(line, "utf8") + 1;
+      if (window.length > 0 && size + lineSize > budget) {
+        parts.push({ file: section.file, body: window.join("\n") });
+        window = [];
+        size = 0;
+      }
+      window.push(line);
+      size += lineSize;
+    }
+    if (window.length > 0) parts.push({ file: section.file, body: window.join("\n") });
+  }
+  return parts;
 }
 
 async function buildIncrementalChunks(
@@ -631,7 +810,11 @@ async function buildIncrementalChunks(
   return chunks;
 }
 
-async function embedTexts(cfg: IndexingConfig, inputs: string[]): Promise<number[][]> {
+async function embedTexts(
+  cfg: IndexingConfig,
+  inputs: string[],
+  profile: EmbeddingProfile = primaryEmbeddingProfile,
+): Promise<number[][]> {
   const response = await fetchImpl(`${cfg.openAIBaseURL}/embeddings`, {
     method: "POST",
     headers: {
@@ -639,10 +822,10 @@ async function embedTexts(cfg: IndexingConfig, inputs: string[]): Promise<number
       Authorization: `Bearer ${cfg.openAIAPIKey}`,
     },
     body: JSON.stringify({
-      model: openAIEmbeddingModel,
+      model: profile.model,
       input: inputs,
       encoding_format: "float",
-      dimensions: embeddingDimensions,
+      dimensions: profile.dimensions,
     }),
   });
   if (!response.ok) {
@@ -705,20 +888,69 @@ function namespaceURL(cfg: IndexingConfig, namespace: string, suffix = ""): stri
   return suffix ? `${base}/${suffix}` : base;
 }
 
+/**
+ * One schema for every row kind in the namespace.
+ *
+ * Two full-text columns exist on purpose. `text` holds the embedded body and is
+ * stemmed, so a query for "retry" reaches a chunk that says "retries". `symbol`
+ * holds identifier terms and is NOT stemmed, because identifier lookups must be
+ * exact — TurboPuffer's tokenizer does not split camelCase, so sub-word recall
+ * comes from the writer storing pre-split word parts in the value (see
+ * CodeChunk.SymbolText in the gx CLI), not from the tokenizer.
+ *
+ * Must stay in sync with transcriptTurboPufferSchema in
+ * internal/semantic/transcript_row.go: both processes push a schema on every
+ * upsert into the same namespace.
+ */
 function turboPufferSchema(): Record<string, unknown> {
   const filterableString = { type: "string", filterable: true };
+  const filterableUint = { type: "uint", filterable: true };
   return {
     vector: { type: `[${embeddingDimensions}]f32`, ann: true },
-    text: { type: "string", full_text_search: true },
+    text: {
+      type: "string",
+      full_text_search: { stemming: true, remove_stopwords: false, case_sensitive: false },
+    },
+    symbol: {
+      type: "string",
+      full_text_search: { stemming: false, remove_stopwords: false, case_sensitive: false },
+    },
     org_id: filterableString,
     repo_full_name: filterableString,
+    repo_root: filterableString,
     branch_name: filterableString,
     source_kind: filterableString,
+    source_id: filterableString,
     file: filterableString,
+    file_path: filterableString,
+    symbol_name: filterableString,
+    symbol_kind: filterableString,
+    package_name: filterableString,
+    language: filterableString,
+    doc_type: filterableString,
+    chunk_hash: filterableString,
     session_id: filterableString,
     head_sha: filterableString,
+    commit_id: filterableString,
     event_id: filterableString,
     indexed_reason: filterableString,
+    tool: filterableString,
+    model: filterableString,
+    review_run_id: filterableString,
+    review_summary_id: filterableString,
+    review_finding_id: filterableString,
+    review_fingerprint: filterableString,
+    review_outcome: filterableString,
+    review_category: filterableString,
+    review_language: filterableString,
+    review_scope: filterableString,
+    review_mode: filterableString,
+    start_line: filterableUint,
+    end_line: filterableUint,
+    line_start: filterableUint,
+    line_end: filterableUint,
+    indexed_at: { type: "uint" },
+    created_at: { type: "uint" },
   };
 }
 
@@ -747,10 +979,4 @@ function limitBytes(text: string, maxBytes: number): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 }

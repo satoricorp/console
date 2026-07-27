@@ -91,6 +91,12 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_userId", ["userId"]),
 
+  // TEMP-FOR-PAYWALL-DEPLOY: these two tables are dead (no readers/writers; the
+  // gxPr.ts / gxRevisions.ts modules are already deleted) and are removed from
+  // the dev deployment. They are restored here ONLY so a prod deploy does not
+  // attempt to drop them while prod rows still exist — Convex rejects that.
+  // Remove these definitions again after purging both tables in the prod
+  // dashboard. See the porcelain-pivot cleanup plan.
   gxPrPushes: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),
@@ -182,4 +188,23 @@ export default defineSchema({
   })
     .index("by_fullName", ["fullName"])
     .index("by_status", ["status"]),
+
+  // OSS "watch" rail: operator-curated public repos that GX summarizes for free,
+  // sessionless, posting as the GX bot user. Rows are written ONLY by the
+  // internalMutations in watchlist.ts (Convex dashboard / CLI) — never from any
+  // client-reachable path. Membership here is the sole gate for the free rail.
+  watchedRepos: defineTable({
+    // "owner/name" — the GitHub repo to watch. Must be public.
+    fullName: v.string(),
+    // Attribution tag baked into the tracked link (utm_campaign).
+    campaign: v.optional(v.string()),
+    // When false, the cron skips this repo without deleting its history.
+    enabled: v.boolean(),
+    // Free-text note for the operator (e.g. why it's on the list).
+    note: v.optional(v.string()),
+    addedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_fullName", ["fullName"])
+    .index("by_enabled", ["enabled"]),
 });

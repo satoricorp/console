@@ -2,9 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
+import { describeDb } from "./db-gate";
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const activityUserId = `activity-test-user-${crypto.randomUUID()}`;
 
 describeDb("activity feed API", () => {
   let orgId: string;
@@ -30,7 +34,7 @@ describeDb("activity feed API", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id
       ) VALUES (
-        'activity-test-user', 'acme/activity', 'main', ${now}, ${now}, ${orgId}
+        ${activityUserId}, 'acme/activity', 'main', ${now}, ${now}, ${orgId}
       )
       RETURNING id
     `;
@@ -72,7 +76,7 @@ describeDb("activity feed API", () => {
 
   test("GET /v1/activity returns recent summaries, sessions, and rules", async () => {
     const res = await app.request("http://localhost/v1/activity?limit=20", {
-      headers: authHeaders("activity-test-user", orgId),
+      headers: authHeaders(activityUserId, orgId),
     });
 
     expect(res.status).toBe(200);
@@ -94,7 +98,7 @@ describeDb("activity feed API", () => {
 
   test("GET /v1/activity supports cursor pagination", async () => {
     const first = await app.request("http://localhost/v1/activity?limit=1", {
-      headers: authHeaders("activity-test-user", orgId),
+      headers: authHeaders(activityUserId, orgId),
     });
     expect(first.status).toBe(200);
     const firstJson = (await first.json()) as {
@@ -106,7 +110,7 @@ describeDb("activity feed API", () => {
 
     const second = await app.request(
       `http://localhost/v1/activity?limit=1&cursor=${encodeURIComponent(firstJson.nextCursor ?? "")}`,
-      { headers: authHeaders("activity-test-user", orgId) },
+      { headers: authHeaders(activityUserId, orgId) },
     );
     expect(second.status).toBe(200);
     const secondJson = (await second.json()) as { items: Array<{ id: string }> };

@@ -1,12 +1,42 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { reconcileOpenBookmarkMergeStatuses } from "../bookmarks/merge-status";
 import { getSql } from "../db";
 import { requireAuth, type AppEnv } from "../middleware/auth";
+import { capture, Events } from "../telemetry/posthog";
 
-export const bookmarksRoutes = new Hono<AppEnv>();
+export const reviewListRoutes = new Hono<AppEnv>();
 
-bookmarksRoutes.use("/bookmarks", requireAuth);
-bookmarksRoutes.use("/bookmarks/*", requireAuth);
+// Canonical: /v1/reviews. Legacy: /bookmarks — "bookmark" was jj's word for a
+// branch, and the row is really one review per pull request. The legacy paths
+// forward to the same handlers (no redirect: released CLIs call /bookmarks
+// directly and a 3xx would change their auth/retry behavior). They are marked
+// deprecated in the response headers and counted in telemetry by CLI version so
+// removal can be gated on observed traffic rather than on a calendar.
+const LEGACY_SUNSET_NOTE = 'https://docs.gx.run/docs/changelog; use /v1/reviews';
+
+reviewListRoutes.use("/v1/reviews", requireAuth);
+reviewListRoutes.use("/bookmarks", requireAuth);
+reviewListRoutes.use("/bookmarks/*", requireAuth);
+
+function markDeprecated(c: Context<AppEnv>, canonicalPath: string) {
+  c.header("Deprecation", "true");
+  c.header("Link", `<${canonicalPath}>; rel="successor-version"`);
+  c.header("Warning", `299 - "Deprecated endpoint: ${LEGACY_SUNSET_NOTE}"`);
+
+  const auth = c.get("auth");
+  capture(
+    Events.DeprecatedRouteUsed,
+    {
+      route: c.req.path,
+      canonical: canonicalPath,
+      // The gx CLI sends "gx/<version>"; this is how we tell whether any
+      // installed binary still depends on the legacy path.
+      user_agent: c.req.header("user-agent") ?? null,
+      user_id: auth?.userId ?? null,
+    },
+    auth?.orgId,
+  );
+}
 
 type BookmarkListRow = {
   id: string;
@@ -54,7 +84,7 @@ function mapBookmarkRow(row: BookmarkListRow) {
   };
 }
 
-bookmarksRoutes.get("/bookmarks", async (c) => {
+async function listReviews(c: Context<AppEnv>) {
   const auth = c.get("auth");
   const mergeStatus = c.req.query("merge_status")?.trim();
   const repoFullName = c.req.query("repo_full_name")?.trim();
@@ -129,11 +159,14 @@ bookmarksRoutes.get("/bookmarks", async (c) => {
   `;
 
   return c.json(rows.map(mapBookmarkRow));
-});
+}
 
-bookmarksRoutes.post("/bookmarks/:id/archive", async (c) => {
+async function archiveReview(c: Context<AppEnv>) {
   const auth = c.get("auth");
   const id = c.req.param("id");
+  if (!id) {
+    return c.json({ error: "Review id is required" }, 400);
+  }
   const db = getSql();
   const now = Date.now();
 
@@ -163,15 +196,18 @@ bookmarksRoutes.post("/bookmarks/:id/archive", async (c) => {
   `;
 
   if (!row) {
-    return c.json({ error: "Bookmark not found" }, 404);
+    return c.json({ error: "Review not found" }, 404);
   }
 
   return c.json(mapBookmarkRow(row));
-});
+}
 
-bookmarksRoutes.post("/bookmarks/:id/unarchive", async (c) => {
+async function unarchiveReview(c: Context<AppEnv>) {
   const auth = c.get("auth");
   const id = c.req.param("id");
+  if (!id) {
+    return c.json({ error: "Review id is required" }, 400);
+  }
   const db = getSql();
   const now = Date.now();
 
@@ -201,8 +237,27 @@ bookmarksRoutes.post("/bookmarks/:id/unarchive", async (c) => {
   `;
 
   if (!row) {
-    return c.json({ error: "Bookmark not found" }, 404);
+    return c.json({ error: "Review not found" }, 404);
   }
 
   return c.json(mapBookmarkRow(row));
+}
+
+// Canonical routes.
+reviewListRoutes.get("/v1/reviews", listReviews);
+reviewListRoutes.post("/v1/reviews/:id/archive", archiveReview);
+reviewListRoutes.post("/v1/reviews/:id/unarchive", unarchiveReview);
+
+// Legacy aliases — same handlers, deprecation headers, counted in telemetry.
+reviewListRoutes.get("/bookmarks", (c) => {
+  markDeprecated(c, "/v1/reviews");
+  return listReviews(c);
+});
+reviewListRoutes.post("/bookmarks/:id/archive", (c) => {
+  markDeprecated(c, "/v1/reviews/:id/archive");
+  return archiveReview(c);
+});
+reviewListRoutes.post("/bookmarks/:id/unarchive", (c) => {
+  markDeprecated(c, "/v1/reviews/:id/unarchive");
+  return unarchiveReview(c);
 });

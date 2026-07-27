@@ -13,6 +13,7 @@ export const Events = {
   GitHubWebhook: "server.github.webhook",
   IndexJob: "server.index.job",
   GxMentionHandled: "server.gx_mention.handled",
+  DeprecatedRouteUsed: "server.route.deprecated",
 } as const;
 
 export type PostHogEvent = (typeof Events)[keyof typeof Events];
