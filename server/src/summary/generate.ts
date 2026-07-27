@@ -11,6 +11,7 @@ import {
   recordPrSummaryUsage,
 } from "../metering/quota";
 import { capture, Events } from "../telemetry/posthog";
+import { publishRevisions } from "../publish/revisions";
 import {
   buildPRSummaryUserPrompt,
   PR_SUMMARY_SYSTEM_PROMPT,
@@ -137,26 +138,20 @@ type PrEventPayload = {
   humanOverrides?: unknown[];
   fileStats?: unknown;
   toolVersions?: Record<string, string>;
-  // gx.pr artifact shape (see PushBundle)
+  // gx.pr artifact shape (see PushBundle): schema v2 `revisions`, or the
+  // legacy v1 stack/change pair. publishRevisions() normalizes both.
   event?: string;
-  stack?: Array<{
-    branch_name?: string;
-    base_branch_name?: string;
-    patch?: string;
-    github_pull_request_url?: string;
-    change?: {
-      description?: string;
-      files?: string[];
-    };
-  }>;
-  change?: {
-    description?: string;
-    files?: string[];
-  };
+  revisions?: unknown;
+  stack?: unknown;
+  change?: unknown;
   sessions?: Array<{
     id?: string;
+    // v1 process-shaped fields.
     command?: string;
     cwd?: string;
+    // v2 transcript-shaped fields.
+    source?: string;
+    repo_root?: string;
     requests?: unknown[];
   }>;
 };
@@ -361,26 +356,14 @@ export async function loadExtractContext(
 function publishedRevisionsFromPayload(
   payload: PrEventPayload,
 ): PublishedRevisionRow[] {
-  const stack = Array.isArray(payload.stack) ? payload.stack : [];
-  const revisions: PublishedRevisionRow[] = stack.map((entry) => ({
-    branchName: entry.branch_name ?? null,
-    baseBranchName: entry.base_branch_name ?? null,
-    description: entry.change?.description ?? null,
-    files: Array.isArray(entry.change?.files) ? entry.change.files : [],
-    patch: typeof entry.patch === "string" && entry.patch ? entry.patch : null,
-    githubPrUrl: entry.github_pull_request_url ?? null,
+  return publishRevisions(payload).map((revision) => ({
+    branchName: revision.branch_name ?? null,
+    baseBranchName: revision.base_branch_name ?? null,
+    description: revision.description ?? null,
+    files: revision.files ?? [],
+    patch: revision.patch ?? null,
+    githubPrUrl: revision.github_pull_request_url ?? null,
   }));
-  if (revisions.length === 0 && payload.change) {
-    revisions.push({
-      branchName: null,
-      baseBranchName: null,
-      description: payload.change.description ?? null,
-      files: Array.isArray(payload.change.files) ? payload.change.files : [],
-      patch: null,
-      githubPrUrl: null,
-    });
-  }
-  return revisions;
 }
 
 function publishedSessionsFromPayload(
@@ -389,10 +372,18 @@ function publishedSessionsFromPayload(
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
   return sessions.slice(0, 20).flatMap((session) => {
     if (!session || typeof session !== "object") return [];
+    const command =
+      (typeof session.command === "string" && session.command) ||
+      (typeof session.source === "string" && session.source) ||
+      null;
+    const cwd =
+      (typeof session.cwd === "string" && session.cwd) ||
+      (typeof session.repo_root === "string" && session.repo_root) ||
+      null;
     return [{
       sessionId: typeof session.id === "string" ? session.id : "",
-      command: typeof session.command === "string" ? session.command : null,
-      cwd: typeof session.cwd === "string" ? session.cwd : null,
+      command,
+      cwd,
       requestCount: Array.isArray(session.requests) ? session.requests.length : 0,
       responseCount: 0,
     }];

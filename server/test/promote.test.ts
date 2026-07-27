@@ -1,9 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { getSql, runMigrations, closeDatabase } from "../src/db";
 import { parseSessionContent, promoteSessionRaw } from "../src/ingest/promote";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 describe("parseSessionContent", () => {
   test("parses edit and message lines", () => {

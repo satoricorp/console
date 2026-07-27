@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   const qs = params.toString();
   const upstream = await gxApiRequest(
     viewer.id,
-    qs ? `/bookmarks?${qs}` : "/bookmarks",
+    qs ? `/v1/reviews?${qs}` : "/v1/reviews",
   );
   const body = await upstream.text();
   return new NextResponse(body, {

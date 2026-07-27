@@ -68,7 +68,6 @@ $ gx init
 Configured     gx identity as Ada Doc <ada@example.com>
 Git hooks      ok: record on commit, capture on git push
 Claude hooks   ok: Stop/SessionEnd transcript capture
-Session        30 days retention
 MCP            ok: claude
 AGENTS.md      ok: added GX workflow instructions
 
@@ -80,7 +79,6 @@ Line by line:
 - **gx identity** — the name and email recorded on GX revisions. Defaults to your Git identity; override with `gx init --name "..." --email "..."`.
 - **Git hooks** — `prepare-commit-msg` and `post-commit` record each `git commit` as a GX revision, and a `pre-push` hook captures sessions and publishes GX metadata when you `git push`.
 - **Claude hooks** — Claude Code `Stop`/`SessionEnd` hooks, so agent transcripts are captured as GX sessions.
-- **Session retention** — captured sessions are kept locally for 30 days.
 - **MCP** — registers the [GX MCP server](/docs/mcp) with supported agent CLIs found on the machine.
 - **AGENTS.md** — offers to append GX workflow instructions telling agents working in this repo to use plain Git (GX's hooks record the revision).
 
@@ -170,10 +168,3 @@ The MCP server adds one tool worth wiring up: agents can run `gx_review` for rev
 
 See [MCP setup](/docs/mcp) for `add-mcp`, Executor, and per-tool parameters.
 
-## Optional: first-run demo
-
-```bash
-gx demo
-```
-
-Walks through how GX works in an interactive scratch session, without touching your repository.

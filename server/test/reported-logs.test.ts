@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import app from "../src/app";
+import { authHeaders, installTestAuth } from "./auth";
+import { describeDb, hasDatabase as hasDb } from "./db-gate";
 
 const orgId = "00000000-0000-4000-8000-000000000221";
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
 
 if (hasDb) {
   beforeAll(async () => {
     process.env.NODE_ENV = "test";
+    installTestAuth();
     await runMigrations();
     await getSql()`
       INSERT INTO orgs (id, plan, created_at_ms)
@@ -26,11 +27,12 @@ describeDb("reported logs API", () => {
   test("POST /v1/reported-logs stores a user report", async () => {
     const response = await app.request("/v1/reported-logs", {
       method: "POST",
+      // requireAuth reads X-User-Id / X-Org-Id. The old X-GX-* spelling was
+      // never read by anything, so auth silently fell through to the local-dev
+      // identity and the row was attributed to "local-user".
       headers: {
         "Content-Type": "application/json",
-        Authorization: "Bearer local-test",
-        "X-GX-Org-ID": orgId,
-        "X-GX-User-ID": "user-1",
+        ...authHeaders("user-1", orgId),
       },
       body: JSON.stringify({
         gx_version: "dev",

@@ -41,7 +41,7 @@ gx review    # AI review of your current change, with codebase + session context
 gx doctor    # check capture, hooks, and workflow state
 ```
 
-Setup and support commands round out the surface: `gx auth`, `gx set`, `gx version`, `gx report`, and `gx demo`.
+Setup and support commands round out the surface: `gx auth`, `gx set`, and `gx version`.
 
 ## gx init
 
@@ -66,7 +66,6 @@ $ gx init
 Configured     gx identity as Ada Doc <ada@example.com>
 Git hooks      ok: record on commit, capture on git push
 Claude hooks   ok: Stop/SessionEnd transcript capture
-Session        30 days retention
 MCP            ok: claude
 AGENTS.md      ok: added GX workflow instructions
 
@@ -187,20 +186,15 @@ Optional — GX works without a key, and signed-in users get AI features through
 ## gx doctor
 
 ```bash
-gx doctor          # diagnose capture, hooks, Codex routing, stale stacks
-gx doctor --fix    # apply safe repairs
-gx doctor --json   # machine-readable report
+gx doctor            # diagnose capture, hooks, and the publish queue
+gx doctor --fix      # apply safe repairs
+gx doctor --json     # machine-readable report
+gx doctor --report   # send this diagnosis and recent logs to support
 ```
 
-Checks local GX setup and workflow state: session capture health, Codex config routing, stacks whose base ref went missing, and stale stacks. `--fix` cleans up stale stacks, repairs missing base refs, and rewires configuration where it is safe to do so.
+Checks local GX state: session capture health, the Git and Claude hooks, the publish upload queue (and retries anything stuck there), and repository workflow state. `--fix` applies the repairs it can make safely.
 
-## gx report
-
-```bash
-gx report          # --json for the report id/URL
-```
-
-Uploads recent GX logs to support and prints a report ID and URL. Use it when something misbehaves and you want the team to see what happened. Needs GX Cloud: use a released install and `gx auth login`.
+`--report` uploads the diagnosis together with recent GX logs and prints a report ID and URL — use it when something misbehaves and you want the team to see what happened. It needs GX Cloud: use a released install and `gx auth login`.
 
 ## gx version
 
@@ -208,14 +202,6 @@ Uploads recent GX logs to support and prints a report ID and URL. Use it when so
 gx version
 gx version --json   # machine-readable build metadata
 ```
-
-## gx demo
-
-```bash
-gx demo
-```
-
-Interactive first-run walkthrough in a scratch session — safe to run anywhere; it does not touch your repository.
 
 ## Shortcuts
 
@@ -229,11 +215,10 @@ It is a symlink to the same `gx` binary.
 
 ## Diagnostics (advanced)
 
-Hidden utility commands for capture and support:
+One hidden utility command, for forcing a capture upload out of band:
 
 ```bash
-gx capture sync         # force a session capture sync
-gx ops diagnose doctor  # deeper ops diagnosis surface
+gx capture sync   # force a session capture sync
 ```
 
-Prefer the public `gx doctor` and `gx report` unless you need the deeper ops surface.
+Everything else lives on `gx doctor`.

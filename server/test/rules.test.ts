@@ -1,6 +1,13 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { classifyReviewComment } from "../src/rules/classifier";
 import { containsGxMention, handleGxMention } from "../src/gx-mention/handler";
+import { describeDb } from "./db-gate";
+
+// Unique per process run. bookmarks carries a UNIQUE index on
+// (user_id, repo_full_name, branch_name) (migration 018), so a fixed user id
+// seeds cleanly exactly once per database and then fails with 23505 on every
+// later run. Tests must not assume the database was just created.
+const rulesUserId = `test-user-${crypto.randomUUID()}`;
 
 describe("classifyReviewComment", () => {
   test("maps approved review state to approve decision", () => {
@@ -74,9 +81,6 @@ describe("gx mention helpers", () => {
   });
 });
 
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
-
 describeDb("handleGxMention integration", () => {
   afterAll(async () => {
     const { closeDatabase } = await import("../src/db");
@@ -96,7 +100,7 @@ describeDb("handleGxMention integration", () => {
       INSERT INTO pr_events (
         created_at_ms, gx_version, head_commit_id, payload, org_id, user_id
       ) VALUES (
-        ${now}, 'test', 'abc123', '{}'::jsonb, ${org.id}, 'test-user'
+        ${now}, 'test', 'abc123', '{}'::jsonb, ${org.id}, ${rulesUserId}
       )
       RETURNING id
     `;
@@ -104,7 +108,7 @@ describeDb("handleGxMention integration", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        'test-user', 'acme/gx', 'feat/rules', ${now}, ${now}, ${org.id}, ${event.id}
+        ${rulesUserId}, 'acme/gx', 'feat/rules', ${now}, ${now}, ${org.id}, ${event.id}
       )
       RETURNING id
     `;

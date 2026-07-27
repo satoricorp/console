@@ -3,9 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import app from "../src/app";
 import { closeDatabase, getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
-
-const hasDb = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDb ? describe : describe.skip;
+import { describeDb } from "./db-gate";
 
 describeDb("publish artifact upsert", () => {
   const originalFetch = globalThis.fetch;
@@ -16,12 +14,6 @@ describeDb("publish artifact upsert", () => {
   beforeAll(async () => {
     installTestAuth();
     await runMigrations();
-    const db = getSql();
-    await db.unsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS bookmarks_org_repo_pr_unique
-        ON bookmarks (org_id, repo_full_name, github_pr_number)
-        WHERE github_pr_number IS NOT NULL
-    `);
   });
 
   afterAll(async () => {

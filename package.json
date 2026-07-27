@@ -13,7 +13,8 @@
     "infra:cdk": "cd infra && bun run cdk",
     "infra:synth": "cd infra && bun run synth",
     "infra:typecheck": "cd infra && bun run typecheck",
-    "test:server": "cd server && bun test"
+    "test:server": "cd server && bun test",
+    "test:server:db": "cd server && bun run test:db"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.2",
