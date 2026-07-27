@@ -199,17 +199,19 @@ Example Cursor / Claude `mcp.json` entry:
 
 `gx_review` is the only MCP tool. Saving and publishing are plain Git, not MCP calls: `git add` + `git commit` record the revision through GX's hooks, and `git push` captures the session and publishes the review bundle through the pre-push hook. Open the PR with `gh pr create`.
 
-`gx_review` accepts an optional `cwd` (repository working directory; defaults to the MCP server process cwd) and may run up to 5 minutes.
+`gx_review` may run up to 5 minutes.
 
 ### gx_review
 
 | Parameter | Type | Meaning |
 | --- | --- | --- |
-| `prompt` | string | reviewer prompt, e.g. `"check auth rollback risks"` |
-| `scope` | enum | `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
-| `focus` | string | limit review to files under this path prefix |
-| `deep` | boolean | full-spectrum review with more local and indexed context |
-| `verbose` | boolean | include repo facts, docs, and changed files |
+| `prompt` | string | optional reviewer prompt, e.g. `"check auth rollback risks"` |
+| `scope` | enum | optional focused review scope: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `focus` | string | optional; limit review to files under this path prefix |
+| `deep` | boolean | optional; full-spectrum review with more local and indexed context |
+| `verbose` | boolean | optional; include repo facts, docs, and changed files |
+| `repo` | boolean | optional; review the whole repository instead of just the current change (use this to ask about the codebase itself, or when uncommitted work would narrow the review to the diff) |
+| `cwd` | string | optional; repository working directory (defaults to the MCP server process cwd) |
 
 ## Agent workflow
 
