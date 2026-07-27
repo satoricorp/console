@@ -3,6 +3,7 @@ import { githubWebhookRoutes } from "./github/webhook";
 import type { AppEnv } from "./middleware/auth";
 import { activityRoutes } from "./routes/activity";
 import { authRoutes } from "./routes/auth";
+import { bedrockRoutes } from "./routes/bedrock";
 import { reviewListRoutes } from "./routes/review-list";
 import { healthRoutes } from "./routes/health";
 import { ingestRoutes } from "./routes/ingest";
@@ -31,6 +32,7 @@ app.route("/", publishRoutes);
 app.route("/", reportedLogsRoutes);
 app.route("/", indexRoutes);
 app.route("/gx/openai", openAIRoutes);
+app.route("/gx/bedrock", bedrockRoutes);
 app.route("/", githubWebhookRoutes);
 app.route("/", watchRoutes);
 
