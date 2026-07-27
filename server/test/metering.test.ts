@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
 import {
   BASE_TRIAL_DAYS,
@@ -95,7 +95,6 @@ describeDb("PR Summary metering", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("allows unlimited PR Summaries during the free trial week", async () => {

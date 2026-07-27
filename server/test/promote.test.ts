@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { getSql, runMigrations, closeDatabase } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { parseSessionContent, promoteSessionRaw } from "../src/ingest/promote";
 import { describeDb } from "./db-gate";
 
@@ -50,7 +50,6 @@ describeDb("promoteSessionRaw", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("promotes sessions_raw to session_events with raw_line lookup", async () => {

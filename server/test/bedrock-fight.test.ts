@@ -1,7 +1,7 @@
 import type { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { setBedrockClientForTesting } from "../src/llm/provider";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import {
@@ -265,7 +265,6 @@ describeDb("POST /gx/bedrock/fight", () => {
     else process.env.AWS_REGION = originalRegion;
     if (originalMaxBody === undefined) delete process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES;
     else process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES = originalMaxBody;
-    await closeDatabase();
   });
 
   function post(body: unknown, headers: Record<string, string> = authHeaders("local-user", orgId)) {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -71,7 +71,6 @@ describeDb("activity feed API", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("GET /v1/activity returns recent summaries, sessions, and rules", async () => {

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -116,7 +116,6 @@ describeDb("compat bookmarks route", () => {
 
   afterAll(async () => {
     globalThis.fetch = originalFetch;
-    await closeDatabase();
   });
 
   test("GET /bookmarks returns org-scoped bookmark rows for CLI sync", async () => {

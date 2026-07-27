@@ -1,7 +1,7 @@
 import { createHmac, generateKeyPairSync } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import { validateSummary } from "../src/summary/validate";
 import { describeDb } from "./db-gate";
@@ -279,7 +279,6 @@ describeDb("GitHub webhook", () => {
     } else {
       process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
     }
-    await closeDatabase();
   });
 
   test("rejects invalid webhook signature", async () => {

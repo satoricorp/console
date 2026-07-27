@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
@@ -21,7 +21,6 @@ describeDb("ingest routes", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("POST /v1/extracts inserts pr_event and hunk_links", async () => {

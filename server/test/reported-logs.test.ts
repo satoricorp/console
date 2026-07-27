@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import app from "../src/app";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb, hasDatabase as hasDb } from "./db-gate";
@@ -19,7 +19,6 @@ if (hasDb) {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 }
 

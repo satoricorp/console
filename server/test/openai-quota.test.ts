@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
@@ -40,7 +40,6 @@ describeDb("OpenAI proxy quota gate", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("past-trial free org gets 402 with upgrade info", async () => {

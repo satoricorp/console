@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import { createMockProvider } from "../src/llm/provider";
 import { generateSummary } from "../src/summary/generate";
 import { validateSummary, REQUIRED_SECTIONS } from "../src/summary/validate";
@@ -223,7 +223,6 @@ describeDb("generateSummary integration", () => {
   });
 
   afterAll(async () => {
-    await closeDatabase();
   });
 
   test("mock generate inserts summaries and summary_events", async () => {

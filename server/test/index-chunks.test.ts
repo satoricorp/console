@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import app from "../src/app";
-import { closeDatabase, getSql, runMigrations } from "../src/db";
+import { getSql, runMigrations } from "../src/db";
 import {
   resetIndexingFetch,
   setIndexingFetch,
@@ -89,7 +89,6 @@ describeDb("POST /v1/index/chunks", () => {
     globalThis.fetch = originalFetch;
     resetIndexingFetch();
     setOrgMemberCheckForTests(null);
-    await closeDatabase();
   });
 
   afterEach(() => {
