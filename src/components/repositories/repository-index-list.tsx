@@ -6,10 +6,11 @@ import {
   ChevronRight,
   GitBranch,
   Lock,
+  RefreshCw,
   Unlock,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { SignInLink } from "@/components/sign-in-link";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,11 @@ type IndexedRepo = {
   private: boolean;
   defaultBranch?: string;
   indexStatus: string | null;
+  indexedCommitId: string | null;
+  indexedAt: number | null;
+  indexedFiles: number | null;
+  indexedChunks: number | null;
+  indexError: string | null;
 };
 
 const REPOS_PER_PAGE = 9;
@@ -41,7 +47,54 @@ function statusClass(status: string | null) {
   return "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400";
 }
 
+/**
+ * What the index actually holds, so someone sent here by a "not indexed"
+ * warning can tell the difference between never indexed, indexed and current,
+ * and indexed but failed partway. A status word alone answers none of those.
+ */
+function indexDetail(repo: IndexedRepo): string {
+  if (repo.indexStatus === "failed") {
+    return repo.indexError
+      ? `Last attempt failed: ${repo.indexError}`
+      : "Last attempt failed";
+  }
+  if (repo.indexStatus === "indexing") {
+    return "Indexing now";
+  }
+  if (!repo.indexStatus || !repo.indexedCommitId) {
+    return "Never indexed — reviews will only see the diff";
+  }
+  const parts = [`Indexed ${repo.indexedCommitId.slice(0, 7)}`];
+  if (repo.indexedFiles !== null) {
+    parts.push(`${repo.indexedFiles} files`);
+  }
+  if (repo.indexedChunks !== null) {
+    parts.push(`${repo.indexedChunks} chunks`);
+  }
+  if (repo.indexedAt) {
+    parts.push(new Date(repo.indexedAt).toLocaleDateString());
+  }
+  return parts.join(" · ");
+}
+
 function RepositoryRow({ repo }: { repo: IndexedRepo }) {
+  const reindex = useAction(api.repoActions.reindexRepo);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const onReindex = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await reindex({ fullName: repo.fullName });
+      setNote(result.started ? "Re-index started" : (result.reason ?? "Not started"));
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Re-index failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <li className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
@@ -60,15 +113,29 @@ function RepositoryRow({ repo }: { repo: IndexedRepo }) {
             ? `${repo.defaultBranch} branch`
             : "Default branch unavailable"}
         </p>
+        <p className="mt-0.5 truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
+          {note ?? indexDetail(repo)}
+        </p>
       </div>
-      <span
-        className={cn(
-          "inline-flex w-fit shrink-0 items-center border px-2 py-1 text-[11px] font-medium capitalize leading-4",
-          statusClass(repo.indexStatus),
-        )}
-      >
-        {formatIndexStatus(repo.indexStatus)}
-      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={cn(
+            "inline-flex w-fit shrink-0 items-center border px-2 py-1 text-[11px] font-medium capitalize leading-4",
+            statusClass(repo.indexStatus),
+          )}
+        >
+          {formatIndexStatus(repo.indexStatus)}
+        </span>
+        <button
+          type="button"
+          onClick={onReindex}
+          disabled={busy || repo.indexStatus === "indexing"}
+          className="inline-flex shrink-0 items-center gap-1 border border-zinc-200 px-2 py-1 text-[11px] font-medium leading-4 text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+        >
+          <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
+          {busy ? "Starting" : "Re-index"}
+        </button>
+      </div>
     </li>
   );
 }
