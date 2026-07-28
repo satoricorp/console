@@ -145,6 +145,7 @@ describe("PR summary prompt: diff stats", () => {
           added: 137,
           removed: 0,
           revisions: 1,
+          revisionsSeen: 1,
           perFile: [
             { file: "internal/cli/doctor.go", added: 92, removed: 0 },
             {

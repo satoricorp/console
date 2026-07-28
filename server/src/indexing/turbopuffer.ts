@@ -19,6 +19,15 @@ import type { PushBundle } from "../types";
 // single embedding input instead of bounding how much of a revision is
 // searchable at all.
 const maxChunkBytes = 8_000;
+/**
+ * Ceiling on a published-revision chunk header, so it can never consume the
+ * chunk it is supposed to label. Leaves ~5 KB for diff text in every chunk.
+ */
+const maxHeaderBytes = 3_000;
+/** How many paths to name before the file list is summarised as a count. */
+const maxHeaderFiles = 40;
+/** Smallest patch budget worth splitting against; below this, refuse. */
+const patchBudgetFloor = 1_000;
 
 export type IndexChunk = {
   id: string;
@@ -576,23 +585,36 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
     }
     const branchName = revision.branch_name?.trim() || input.branchName;
     const baseBranchName = revision.base_branch_name?.trim() ?? "";
-    const header = [
-      "GX published revision diff.",
-      `Repo: ${input.repoFullName}`,
-      `Branch: ${branchName}`,
-      baseBranchName ? `Base: ${baseBranchName}` : "",
-      `Head: ${input.headSha}`,
-      description ? `Description: ${description}` : "",
-      files.length ? `Files:\n${files.join("\n")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const header = limitBytes(
+      [
+        "GX published revision diff.",
+        `Repo: ${input.repoFullName}`,
+        `Branch: ${branchName}`,
+        baseBranchName ? `Base: ${baseBranchName}` : "",
+        `Head: ${input.headSha}`,
+        description ? `Description: ${description}` : "",
+        files.length ? `Files:\n${summariseFileList(files)}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      maxHeaderBytes,
+    );
 
     // One chunk per file of the patch, windowed if a single file's diff is
     // still oversized. Previously the entire patch was one chunk hard-truncated
     // at the byte cap, so everything past the first few kilobytes of any real
     // revision was never embedded and never searchable.
-    const parts = splitPatchIntoParts(patch, maxChunkBytes - header.length - 32);
+    //
+    // The header is capped above and measured in bytes here. Uncapped, one
+    // commit touching a couple of hundred paths produced a header larger than
+    // the whole chunk: the budget went negative, splitPatchIntoParts clamped it
+    // to its floor, and limitBytes then cut inside the header — so every chunk
+    // was byte-identical, the `Patch:` section was never reached, and the
+    // revision's diff was embedded nowhere while publish reported success.
+    // `header.length` also counted UTF-16 units against a byte cap, over-
+    // budgeting on any non-ASCII path.
+    const patchBudget = maxChunkBytes - Buffer.byteLength(header, "utf8") - 32;
+    const parts = splitPatchIntoParts(patch, patchBudget);
     const bodies = parts.length > 0 ? parts : [{ file: files[0] ?? "", body: "" }];
     bodies.forEach((part, partIndex) => {
       const text = limitBytes(
@@ -678,13 +700,34 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
  * Returns the touched path alongside each part so a hit can be attributed to a
  * file rather than to the whole revision.
  */
+/**
+ * The paths a header names, elided past a cap.
+ *
+ * A bulk rename or codegen drop can list hundreds of paths, and inlining all of
+ * them is what pushed the header past the chunk size. The first N still carry
+ * the retrieval signal; the rest become a count.
+ */
+function summariseFileList(files: string[]): string {
+  if (files.length <= maxHeaderFiles) return files.join("\n");
+  const shown = files.slice(0, maxHeaderFiles).join("\n");
+  return `${shown}\n… and ${files.length - maxHeaderFiles} more file(s)`;
+}
+
 export function splitPatchIntoParts(
   patch: string,
   maxBytes: number,
 ): Array<{ file: string; body: string }> {
   const trimmed = patch.trim();
   if (!trimmed) return [];
-  const budget = Math.max(maxBytes, 1_000);
+  if (maxBytes < patchBudgetFloor) {
+    // Clamping a sub-floor budget is what let the caller's arithmetic go
+    // negative unnoticed and emit hundreds of identical chunks. Callers must
+    // leave room for a patch; refusing here makes the mistake visible.
+    throw new Error(
+      `splitPatchIntoParts: budget ${maxBytes} is below the ${patchBudgetFloor}-byte floor; the caller left no room for patch text`,
+    );
+  }
+  const budget = maxBytes;
 
   const sections: Array<{ file: string; body: string }> = [];
   let current: { file: string; lines: string[] } | null = null;

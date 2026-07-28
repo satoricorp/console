@@ -55,6 +55,27 @@ export type ExternalSummary = {
   headSha: string;
 };
 
+/**
+ * Pull request numbers a human actually referenced, taken from the PR body.
+ *
+ * The scan used to include the raw unified diff, where `#(\d{2,6})` matches
+ * anything: CSS hex colours (`#1a2b3c`), anchors, ids, array indices in
+ * comments. Those arrived as "PRs referenced" and were then licensed for
+ * prior-PR citation, so a summary could cite a pull request that exists only
+ * because a stylesheet changed. The body is prose a person wrote; the diff is
+ * not, and no reference in it is worth the false positives.
+ */
+export function collectReferencedPrs(body: string, self: number): number[] {
+  const seen = new Set<number>();
+  // Require the reference to start a word and not be part of a longer hex or
+  // alphanumeric token, so `#1a2b3c` and `abc#12` are both rejected.
+  for (const match of `${body ?? ""}`.matchAll(/(^|[\s([{,;:])#(\d{1,6})(?![\w-])/g)) {
+    const n = Number(match[2]);
+    if (Number.isFinite(n) && n > 0 && n !== self) seen.add(n);
+  }
+  return [...seen].slice(0, 12);
+}
+
 function detectCoverage(comments: IssueComment[]): Coverage | null {
   const cc = comments.find(
     (c) => /codecov/i.test(c.author) || /Codecov Report/i.test(c.body),
@@ -82,13 +103,7 @@ export async function fetchExternalDossier(
     fetchIssueComments(token, repoFullName, number),
   ]);
 
-  const referencedPrs = [
-    ...new Set(
-      [...`${meta.body}\n${diff}`.matchAll(/#(\d{2,6})\b/g)].map((m) => Number(m[1])),
-    ),
-  ]
-    .filter((n) => n !== number)
-    .slice(0, 12);
+  const referencedPrs = collectReferencedPrs(meta.body, number);
 
   return {
     repoFullName,
@@ -128,6 +143,9 @@ function buildExternalUserPrompt(d: ExternalDossier): string {
       added: d.additions,
       removed: d.deletions,
       revisions: 1,
+      // GitHub's totals cover the whole pull request, so nothing is uncounted
+      // and the authoritative wording stays correct for this rail.
+      revisionsSeen: 1,
       perFile: d.files.map((f) => ({
         file: f.path,
         added: f.additions,

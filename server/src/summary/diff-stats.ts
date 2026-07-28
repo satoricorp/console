@@ -32,6 +32,14 @@ export type DiffStats = {
    * presenting a commit-wise sum as if it were GitHub's two-dot total.
    */
   revisions: number;
+  /**
+   * How many revisions were present at all, patched or not. `revisions` counts
+   * only those whose patch was carried, so the two differ whenever a commit
+   * arrived with its file list but no diff — the CLI blanks any single commit
+   * patch over 512 KB. Without this the line totals silently undercount, or
+   * read `+0/-0`, with nothing to caveat them against.
+   */
+  revisionsSeen: number;
   perFile: FileDiffStat[];
 };
 
@@ -152,6 +160,7 @@ export function computeDiffStats(
     added: values.reduce((sum, stat) => sum + stat.added, 0),
     removed: values.reduce((sum, stat) => sum + stat.removed, 0),
     revisions: patched,
+    revisionsSeen: revisions.length,
     perFile: values,
   };
 }
@@ -167,6 +176,24 @@ export function computeDiffStats(
  * obtained.
  */
 export function formatDiffStatsFact(stats: DiffStats): string {
+  // Nothing was counted, so there is no line total to state. Saying
+  // "+0/-0 lines" here is not a conservative estimate, it is a fabricated fact
+  // the prompt then orders the model to reproduce verbatim — which published
+  // "🟢 LOW (3 file(s), +0/-0 lines)" over real multi-hundred-line changes.
+  // Give the file count, which is genuinely known, and explicitly withhold the
+  // rest so the model does not invent it from the truncated diff text.
+  if (stats.revisions === 0) {
+    return `Diff stats (partial — no commit patch was carried, so line counts are unknown): ${stats.files} file(s). Do not state a +X/-Y line count anywhere in the summary.`;
+  }
+
+  const unpatched = Math.max(0, stats.revisionsSeen - stats.revisions);
+  if (unpatched > 0) {
+    // Some patches were carried and some were not, so the totals are a floor.
+    // The commit-wise caveat below only fires above one patched revision, so
+    // without this a mixed bundle presented an undercount as exact.
+    return `Diff stats (partial — counted over ${stats.revisions} of ${stats.revisionsSeen} commit patches; ${unpatched} commit patch(es) were not carried, so the line counts are a lower bound): ${stats.files} file(s), at least +${stats.added}/-${stats.removed} lines. Do not present the line counts as exact.`;
+  }
+
   const basis =
     stats.revisions > 1
       ? ` (summed over ${stats.revisions} commit patches, so the net PR diff may be smaller)`

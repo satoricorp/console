@@ -264,3 +264,58 @@ describe("formatDiffStatsFact", () => {
     expect(fact).not.toContain("summed over");
   });
 });
+
+describe("formatDiffStatsFact: what was not counted", () => {
+  // The CLI blanks any single commit patch over 512 KB while keeping its file
+  // list, so a push can arrive with files and no diff. computeDiffStats seeds
+  // its map from revision.files, so the empty-map guard never fires and the
+  // line was emitted as "+0/-0 lines", labelled authoritative, with the prompt
+  // ordering the model to reproduce it verbatim.
+  test("withholds line counts when no patch was carried", () => {
+    const stats = computeDiffStats([
+      { patch: null, files: ["a.ts", "b.ts", "c.ts"] },
+    ] as never);
+    expect(stats).not.toBeNull();
+    expect(stats!.revisions).toBe(0);
+    expect(stats!.revisionsSeen).toBe(1);
+
+    const fact = formatDiffStatsFact(stats!);
+    expect(fact).not.toContain("authoritative");
+    expect(fact).not.toContain("+0/-0");
+    expect(fact).toContain("3 file(s)");
+    expect(fact).toContain("line counts are unknown");
+  });
+
+  // A mixed bundle: the commit-wise caveat only fires above one patched
+  // revision, so an undercount from a dropped patch was presented as exact.
+  test("marks a partly counted bundle as a lower bound", () => {
+    const stats = computeDiffStats([
+      {
+        patch: "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -0,0 +1 @@\n+one\n",
+        files: ["a.ts"],
+      },
+      { patch: null, files: ["big.ts"] },
+    ] as never);
+    expect(stats!.revisions).toBe(1);
+    expect(stats!.revisionsSeen).toBe(2);
+
+    const fact = formatDiffStatsFact(stats!);
+    expect(fact).not.toContain("authoritative");
+    expect(fact).toContain("lower bound");
+    expect(fact).toContain("1 of 2");
+  });
+
+  // A fully counted bundle keeps the exact wording: the gate must not become
+  // uselessly hedged.
+  test("keeps the authoritative wording when everything was counted", () => {
+    const stats = computeDiffStats([
+      {
+        patch: "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -0,0 +1 @@\n+one\n",
+        files: ["a.ts"],
+      },
+    ] as never);
+    const fact = formatDiffStatsFact(stats!);
+    expect(fact).toContain("authoritative");
+    expect(fact).toContain("+1/-0 lines");
+  });
+});

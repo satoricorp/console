@@ -79,6 +79,31 @@ type MemoEntry = {
 
 const memo = new Map<string, MemoEntry>();
 const MEMO_TTL_MS = 45_000;
+/**
+ * Hard ceiling on retained entries.
+ *
+ * The TTL was consulted only on read: an expired entry was skipped and left in
+ * place, and the only `memo.clear()` is test-only. Because the key hashes
+ * headSha and changeCommits, every push mints fresh keys, so nothing was ever
+ * reclaimed by overwrite either — a long-lived task grew by roughly 40 KB per
+ * distinct retrieval until it was restarted or OOM-killed. The cache is useful
+ * within one review window (the summary and review paths collide on a key) and
+ * pure accumulation outside it, so a small bound loses nothing.
+ */
+const MEMO_MAX_ENTRIES = 256;
+
+/** Drop expired entries, then the oldest, until the map is within bounds. */
+function pruneMemo(now: number): void {
+  for (const [key, entry] of memo) {
+    if (entry.expiresAt <= now) memo.delete(key);
+  }
+  // Map iterates in insertion order, so the front is the oldest.
+  while (memo.size > MEMO_MAX_ENTRIES) {
+    const oldest = memo.keys().next();
+    if (oldest.done) break;
+    memo.delete(oldest.value);
+  }
+}
 
 export type RetrieveReviewContextArgs = {
   orgId: string;
@@ -100,6 +125,19 @@ export type RetrieveReviewContextArgs = {
   /** When true, skip feature flag (tests). */
   force?: boolean;
 };
+
+/**
+ * A result with every bucket present and empty.
+ *
+ * Exported because "retrieval failed" must reach consumers as a manifest of
+ * zeros rather than as an absent manifest: the attribution clamp treats a
+ * missing manifest as "the broker is switched off" and keeps the model's
+ * self-reported percentages, so a failure that returned nothing would publish
+ * attribution for context that was never retrieved.
+ */
+export function emptyBrokerResult(): ReviewContextBrokerResult {
+  return emptyResult();
+}
 
 function emptyResult(): ReviewContextBrokerResult {
   const buckets = {
@@ -478,7 +516,21 @@ export async function retrieveReviewContext(
   const totalChars = args.limits?.totalChars ?? DEFAULT_TOTAL_CHARS;
 
   const knowledgeNs = reviewKnowledgeNamespace();
-  const vector = await embedQueryText(query);
+  // Guarded, because this one await used to decide the whole call. A 429 or a
+  // timeout from the embeddings API threw straight out of retrieveReviewContext,
+  // past every safeBucketSearch warning and past the REVIEW.md fetch — which
+  // needs no embedding and would have succeeded — and all three callers catch
+  // bare. The result was a review generated from nothing, logged nowhere, and
+  // indistinguishable from a repository whose index is genuinely empty. Each
+  // searchIndex call re-embeds on its own when the vector is null, so the
+  // buckets still fail individually, and audibly.
+  const vector = await embedQueryText(query).catch((error) => {
+    console.warn("context broker query embed failed", {
+      repo: args.repoFullName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  });
 
   const [agentRows, codeRows, prRows, policyRows, corpusRows, reviewMd] =
     await Promise.all([
@@ -660,12 +712,19 @@ export async function retrieveReviewContext(
     };
   }
 
-  memo.set(key, { expiresAt: Date.now() + MEMO_TTL_MS, value: result });
+  const now = Date.now();
+  memo.set(key, { expiresAt: now + MEMO_TTL_MS, value: result });
+  pruneMemo(now);
   return result;
 }
 
 export function clearBrokerMemoForTests(): void {
   memo.clear();
+}
+
+/** Retained entry count, so a test can assert the cache stays bounded. */
+export function brokerMemoSizeForTests(): number {
+  return memo.size;
 }
 
 export function formatContextManifestLine(

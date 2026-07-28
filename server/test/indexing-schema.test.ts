@@ -389,3 +389,56 @@ describe("hybrid query construction", () => {
     delete process.env.TURBOPUFFER_API_KEY;
   });
 });
+
+describe("published-revision chunks: a header must not eat the chunk", () => {
+  // A bulk rename or codegen drop touches hundreds of paths in one commit. The
+  // header inlined every path with no cap, so it grew past the 8000-byte chunk:
+  // the patch budget went negative, splitPatchIntoParts clamped it to its
+  // floor, and limitBytes then truncated inside the header — every chunk came
+  // out byte-identical under a distinct id, the diff was embedded nowhere, and
+  // indexPublishedArtifact still returned {status:"indexed"}.
+  test("indexes the diff of a commit touching hundreds of files", async () => {
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf";
+    const calls: Array<{ url: string; body: any }> = [];
+    mockIndexingFetch(calls);
+
+    const files = Array.from({ length: 250 }, (_, i) => `src/very/deeply/nested/module-${i}/index.ts`);
+    const patch = files
+      .map(
+        (f) =>
+          `diff --git a/${f} b/${f}\n--- a/${f}\n+++ b/${f}\n@@ -1,2 +1,2 @@\n-const marker = "old-${f}";\n+const marker = "new-${f}";\n`,
+      )
+      .join("");
+
+    const result = await indexPublishedArtifact({
+      orgId: "org-1",
+      repoFullName: "acme/app",
+      eventId: "event-big",
+      branchName: "main",
+      headSha: "abc123",
+      payload: { revisions: [{ revision_id: "r1", files, patch, description: "Bulk rename" }] },
+    } as never);
+
+    expect(result.status).toBe("indexed");
+
+    const upserts = calls.filter((c) => !c.url.includes("/embeddings"));
+    const texts: string[] = upserts.flatMap((c) =>
+      (c.body?.upsert_rows ?? c.body?.upserts ?? []).map((r: any) => String(r.text ?? "")),
+    );
+    expect(texts.length).toBeGreaterThan(0);
+
+    // The load-bearing assertions: real diff content is embedded, and the
+    // chunks are not all the same truncated header.
+    const withPatch = texts.filter((t) => t.includes("Patch:"));
+    expect(withPatch.length).toBeGreaterThan(0);
+    expect(new Set(texts).size).toBeGreaterThan(1);
+    // Marker lines from the actual diff must survive into the index.
+    expect(texts.some((t) => t.includes("new-src/very/deeply/nested/module-0/index.ts"))).toBe(true);
+  });
+
+  // The caller's arithmetic going negative is what made the failure silent.
+  test("refuses a budget that leaves no room for patch text", () => {
+    expect(() => splitPatchIntoParts("diff --git a/a b/a\n+x\n", 10)).toThrow(/floor/);
+  });
+});
