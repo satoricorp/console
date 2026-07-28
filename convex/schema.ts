@@ -179,6 +179,10 @@ export default defineSchema({
     // worth keeping. Drained when the running pass finalizes.
     queuedCommitId: v.optional(v.string()),
     queuedInstallationId: v.optional(v.number()),
+    // When it was queued. Draining compares this against the run's startedAt,
+    // because "different commit" is not the same question as "arrived while
+    // this run was going" — and only the second one should start a new pass.
+    queuedAt: v.optional(v.number()),
     indexFiles: v.optional(
       v.array(v.object({ path: v.string(), sha: v.string() })),
     ),
