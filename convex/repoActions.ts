@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { installationIdForOwner } from "./githubAppInstall";
 import { authComponent } from "./auth";
 import {
   getGithubAccessToken,
@@ -128,12 +129,22 @@ export const connectRepos = action({
       const defaultBranch =
         verification.defaultBranch ?? repo.defaultBranch ?? "main";
 
+      // The index namespace is per org, so a repository cannot be indexed
+      // until we know which org's installation covers it. Everything else
+      // about connecting still succeeds; only the indexing is deferred, and
+      // the message says what to do.
+      const installationId = await installationIdForOwner(accessToken, repo.owner);
+      const orgId = installationId
+        ? await ctx.runQuery(internal.orgs.getOrgForInstallation, { installationId })
+        : null;
+
       const { inserted } = await ctx.runMutation(
         internal.repos.insertConnectedRepo,
         {
           userId: user._id,
           repo: { ...repo, defaultBranch },
           accessVerifiedAt: now,
+          installationId: installationId ?? undefined,
         },
       );
 
@@ -141,9 +152,17 @@ export const connectRepos = action({
 
       connected.push(repo.fullName);
 
+      if (!orgId) {
+        errors.push(
+          `${repo.fullName}: connected, but not indexed yet — install the GX GitHub App on ${repo.owner} so GX Cloud can index it`,
+        );
+        continue;
+      }
+
       const { shouldEnqueue, batchOffset } = await ctx.runMutation(
         internal.indexing.ensureIndexJob,
         {
+          orgId,
           fullName: repo.fullName,
           githubId: repo.githubId,
           owner: repo.owner,
@@ -155,6 +174,7 @@ export const connectRepos = action({
 
       if (shouldEnqueue) {
         await ctx.runMutation(internal.indexing.scheduleIndexRepo, {
+          orgId,
           fullName: repo.fullName,
           githubId: repo.githubId,
           trigger: "connect",

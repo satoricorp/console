@@ -20,6 +20,16 @@ import { updatePullRequestWithSummary } from "./pr-body";
 
 export const githubWebhookRoutes = new Hono();
 
+// Deliveries the Convex indexer needs. push is what re-indexes a repository on
+// merge; the installation pair is how Convex learns which org owns an
+// installation, since it has no org table of its own and the namespace it
+// writes is gx-{orgId}-{repo}.
+const CONVEX_FORWARDED_EVENTS = new Set([
+  "push",
+  "installation",
+  "installation_repositories",
+]);
+
 type GitHubAccount = {
   id?: number;
   login?: string;
@@ -142,6 +152,15 @@ githubWebhookRoutes.post("/github/webhook", async (c) => {
         return c.json({ ok: true, ignored: true, event, delivery });
     }
 
+    if (CONVEX_FORWARDED_EVENTS.has(event)) {
+      const installationId = body.installation?.id;
+      const orgId =
+        typeof installationId === "number"
+          ? await resolveOrgIdForInstallation(db, installationId)
+          : null;
+      await forwardToConvex(event, payload, signature, orgId);
+    }
+
     capture(
       Events.GitHubWebhook,
       { event_type: event, delivery },
@@ -245,6 +264,33 @@ async function handleInstallationRepositories(
   });
 }
 
+// withUnindexedNotice says when a summary was written without the repository's
+// source, and where to fix that.
+//
+// A summary with no indexed code reads exactly like one with it — same shape,
+// same confidence, just thinner and blind to anything the diff does not show.
+// That is the failure worth surfacing: the reader cannot tell, and neither can
+// we, unless it is stated.
+//
+// It points at the website rather than at `gx index`, which is a hidden
+// maintenance command that fills one developer's namespace from one
+// developer's checkout. The index a summary reads is the one GX Cloud
+// maintains from the GitHub App on merge, and that is connected on the site.
+export function withUnindexedNotice(content: string, sawIndexedCode: boolean): string {
+  if (sawIndexedCode) {
+    return content;
+  }
+  return (
+    content.trimEnd() +
+    "\n\n> This summary was written without " +
+    UNINDEXED_NOTICE
+  );
+}
+
+const UNINDEXED_NOTICE =
+  "this repository's source indexed, so it could only see the diff. " +
+  "Connect the repository at https://gx.run/repositories to have GX Cloud index it.";
+
 async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const action = payload.action ?? "";
   if (action === "closed") {
@@ -324,7 +370,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
 
   let bodyUpdated = false;
   let postedOk = false;
-  let postedBody = result.content;
+  let postedBody = withUnindexedNotice(result.content, result.sawIndexedCode);
   try {
     const token = await getInstallationAccessToken(installationId);
     const posted = await updatePullRequestWithSummary(
@@ -635,6 +681,65 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     reviewState: null as ClassifyInput["reviewState"],
     webhookAction: action,
   });
+}
+
+// forwardToConvex hands the delivery on to the Convex indexer.
+//
+// A GitHub App has exactly one webhook URL, and this server is it. The only
+// thing that indexes repository source lives in Convex, behind
+// /cx/github/webhook, so until this forward existed that indexer received
+// nothing: `handlePush` below writes push metadata and hunk links, never file
+// contents. The result was that no repository was ever re-indexed on merge.
+//
+// installation and installation_repositories go with it because Convex has no
+// org table of its own: it learns which org owns an installation from these
+// deliveries, and a push repairs the mapping if one was ever missed.
+//
+// The delivery is forwarded verbatim — same bytes, same signature header — so
+// Convex verifies exactly what GitHub signed rather than trusting this server.
+// A failure here must not fail the delivery back to GitHub: the metadata work
+// has already succeeded, and GitHub's retry would repeat it.
+async function forwardToConvex(
+  event: string,
+  payload: string,
+  signature: string | undefined,
+  orgId: string | null,
+) {
+  const base = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/, "");
+  if (!base || !signature) {
+    // Worth saying out loud. With CONVEX_SITE_URL unset this returns quietly on
+    // every delivery, and the symptom is not an error anywhere — it is that no
+    // repository is ever indexed and reviews are thinner than they should be.
+    console.warn("convex forward skipped", {
+      event,
+      reason: base ? "missing signature" : "CONVEX_SITE_URL is not set",
+    });
+    return;
+  }
+  try {
+    const response = await fetch(`${base}/cx/github/webhook`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-GitHub-Event": event,
+        "X-Hub-Signature-256": signature,
+        // Postgres owns installation -> org. Convex indexes into
+        // gx-{orgId}-{repo}, and deriving the org there independently is how
+        // the two would come to disagree about who owns an installation.
+        ...(orgId ? { "X-GX-Org-Id": orgId } : {}),
+      },
+      body: payload,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      console.error("forward to convex failed", { event,
+        status: response.status,
+        body: (await response.text().catch(() => "")).slice(0, 500),
+      });
+    }
+  } catch (error) {
+    console.error("forward to convex threw", { event, error });
+  }
 }
 
 async function handlePush(db: postgres.Sql, payload: WebhookPayload) {

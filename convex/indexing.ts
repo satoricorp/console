@@ -14,27 +14,62 @@ const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
 
 const indexFile = v.object({ path: v.string(), sha: v.string() });
 
-function namespaceForRepo(fullName: string) {
-  return `repo-${fullName.replace("/", "-")}`;
+/**
+ * The TurboPuffer namespace for one org's copy of a repository.
+ *
+ * This is the same name the GX Cloud server builds in
+ * `server/src/indexing/config.ts` and the gx CLI builds in
+ * `internal/semantic/config.go`, so all three writers and every reader address
+ * one namespace. It used to be `repo-{owner}-{repo}`, which had no org in it:
+ * two orgs with access to the same repository shared one index and the
+ * commit-id sweep had them deleting each other's rows, and the server's PR
+ * summaries never read it at all because they look up `gx-{orgId}-…`.
+ */
+export function namespaceForOrgRepo(orgId: string, fullName: string) {
+  const slug = fullName.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase().replace(/^-|-$/g, "");
+  return `gx-${orgId}-${slug}-v2`;
+}
+
+/**
+ * Finds a repository's index job within an org, adopting a pre-org row if it
+ * finds one.
+ *
+ * Rows written before org identity carry no orgId, and there is at most one per
+ * repository because fullName used to be globally unique. Claiming it on first
+ * touch migrates it in place rather than orphaning an indexed repository behind
+ * a lookup that can no longer see it. `.unique()` is deliberately not used on
+ * the legacy index: once two orgs have rows for one repository it would throw.
+ */
+async function findJob(
+  ctx: { db: any },
+  orgId: string,
+  fullName: string,
+): Promise<any | null> {
+  const scoped = await ctx.db
+    .query("repoIndexJobs")
+    .withIndex("by_org_fullName", (q: any) => q.eq("orgId", orgId).eq("fullName", fullName))
+    .unique();
+  if (scoped) {
+    return scoped;
+  }
+  return await ctx.db
+    .query("repoIndexJobs")
+    .withIndex("by_fullName", (q: any) => q.eq("fullName", fullName))
+    .filter((q: any) => q.eq(q.field("orgId"), undefined))
+    .first();
 }
 
 export const getJobByFullName = internalQuery({
-  args: { fullName: v.string() },
-  handler: async (ctx, { fullName }) => {
-    return await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-      .unique();
+  args: { orgId: v.string(), fullName: v.string() },
+  handler: async (ctx, { orgId, fullName }) => {
+    return await findJob(ctx, orgId, fullName);
   },
 });
 
 export const getIndexPlan = internalQuery({
-  args: { fullName: v.string() },
-  handler: async (ctx, { fullName }) => {
-    const job = await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-      .unique();
+  args: { orgId: v.string(), fullName: v.string() },
+  handler: async (ctx, { orgId, fullName }) => {
+    const job = await findJob(ctx, orgId, fullName);
 
     if (!job?.indexFiles || !job.commitId || !job.defaultBranch) {
       return null;
@@ -55,6 +90,7 @@ export const getIndexPlan = internalQuery({
 
 export const ensureIndexJob = internalMutation({
   args: {
+    orgId: v.string(),
     fullName: v.string(),
     githubId: v.number(),
     owner: v.string(),
@@ -63,12 +99,17 @@ export const ensureIndexJob = internalMutation({
     trigger: indexTrigger,
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
-      .unique();
+    const existing = await findJob(ctx, args.orgId, args.fullName);
 
     if (existing) {
+      // Claim a pre-org row and move it onto this org's namespace. Leaving the
+      // old name in place would keep writing to an index nothing reads.
+      if (!existing.orgId) {
+        await ctx.db.patch(existing._id, {
+          orgId: args.orgId,
+          turbopufferNamespace: namespaceForOrgRepo(args.orgId, args.fullName),
+        });
+      }
       if (isIndexJobIncomplete(existing)) {
         const batchOffset = existing.filesIndexed ?? 0;
         const line = indexLogMessage(
@@ -123,12 +164,13 @@ export const ensureIndexJob = internalMutation({
     }
 
     const jobId = await ctx.db.insert("repoIndexJobs", {
+      orgId: args.orgId,
       fullName: args.fullName,
       githubId: args.githubId,
       owner: args.owner,
       name: args.name,
       defaultBranch: args.defaultBranch,
-      turbopufferNamespace: namespaceForRepo(args.fullName),
+      turbopufferNamespace: namespaceForOrgRepo(args.orgId, args.fullName),
       status: "pending",
       trigger: args.trigger,
     });
@@ -139,6 +181,7 @@ export const ensureIndexJob = internalMutation({
 
 export const saveIndexPlan = internalMutation({
   args: {
+    orgId: v.string(),
     fullName: v.string(),
     commitId: v.string(),
     defaultBranch: v.string(),
@@ -150,13 +193,10 @@ export const saveIndexPlan = internalMutation({
     filesIndexed: v.number(),
   },
   handler: async (ctx, args) => {
-    const job = await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
-      .unique();
+    const job = await findJob(ctx, args.orgId, args.fullName);
 
     if (!job) {
-      throw new Error(`No index job found for ${args.fullName}`);
+      throw new Error(`No index job found for ${args.fullName} in org ${args.orgId}`);
     }
 
     await ctx.db.patch(job._id, {
@@ -175,6 +215,7 @@ export const saveIndexPlan = internalMutation({
 
 export const updateJobStatus = internalMutation({
   args: {
+    orgId: v.string(),
     fullName: v.string(),
     status: indexJobStatus,
     commitId: v.optional(v.string()),
@@ -190,14 +231,11 @@ export const updateJobStatus = internalMutation({
     clearIndexFiles: v.optional(v.boolean()),
     indexLog: v.optional(v.string()),
   },
-  handler: async (ctx, { fullName, status, clearIndexFiles, ...fields }) => {
-    const job = await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-      .unique();
+  handler: async (ctx, { orgId, fullName, status, clearIndexFiles, ...fields }) => {
+    const job = await findJob(ctx, orgId, fullName);
 
     if (!job) {
-      throw new Error(`No index job found for ${fullName}`);
+      throw new Error(`No index job found for ${fullName} in org ${orgId}`);
     }
 
     await ctx.db.patch(job._id, {
@@ -210,6 +248,7 @@ export const updateJobStatus = internalMutation({
 
 export const scheduleIndexRepo = internalMutation({
   args: {
+    orgId: v.string(),
     fullName: v.string(),
     githubId: v.number(),
     trigger: indexTrigger,
@@ -224,6 +263,7 @@ export const scheduleIndexRepo = internalMutation({
 });
 
 const stallWatchdogArgs = {
+  orgId: v.string(),
   fullName: v.string(),
   githubId: v.number(),
   trigger: indexTrigger,
@@ -247,10 +287,7 @@ export const scheduleStallWatchdog = internalMutation({
 export const resumeIfStalled = internalMutation({
   args: stallWatchdogArgs,
   handler: async (ctx, args) => {
-    const job = await ctx.db
-      .query("repoIndexJobs")
-      .withIndex("by_fullName", (q) => q.eq("fullName", args.fullName))
-      .unique();
+    const job = await findJob(ctx, args.orgId, args.fullName);
 
     if (!job || !isIndexJobIncomplete(job)) return;
     if ((job.filesIndexed ?? 0) > args.checkpoint) return;
@@ -272,6 +309,7 @@ export const resumeIfStalled = internalMutation({
     await ctx.db.patch(job._id, { indexLog: line });
 
     await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, {
+      orgId: args.orgId,
       fullName: args.fullName,
       githubId: args.githubId,
       trigger: args.trigger,
@@ -279,6 +317,79 @@ export const resumeIfStalled = internalMutation({
       githubAccessToken: args.githubAccessToken,
       githubAppInstallationId: args.githubAppInstallationId,
       batchOffset,
+    });
+  },
+});
+
+/**
+ * Records a merge that arrived while this repository was already indexing.
+ *
+ * Not a queue: three merges during one pass leave the newest, because indexing
+ * commit C supersedes A and B. Two runs at once would be worse than a delayed
+ * one — they address the same rows and each one's stale sweep would delete the
+ * other's work.
+ *
+ * Skipping outright is the tempting alternative and is wrong: the running pass
+ * finishes at its own commit, the newer one is never indexed, and the index
+ * sits behind HEAD until someone merges again.
+ */
+export const queueCommitWhileIndexing = internalMutation({
+  args: {
+    orgId: v.string(),
+    fullName: v.string(),
+    commitId: v.string(),
+    githubAppInstallationId: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const job = await findJob(ctx, args.orgId, args.fullName);
+    if (!job) return;
+    if (job.commitId === args.commitId) return;
+
+    await ctx.db.patch(job._id, {
+      queuedCommitId: args.commitId,
+      queuedInstallationId: args.githubAppInstallationId,
+    });
+  },
+});
+
+/**
+ * Starts the commit that landed mid-run, if one did. Called once a pass has
+ * finalized, so there is never more than one indexing pass per repository.
+ */
+export const drainQueuedCommit = internalMutation({
+  args: { orgId: v.string(), fullName: v.string() },
+  handler: async (ctx, args) => {
+    const job = await findJob(ctx, args.orgId, args.fullName);
+    const queued = job?.queuedCommitId;
+    if (!job || !queued || queued === job.commitId) {
+      // Clear a queued commit that the finished pass happened to cover.
+      if (job?.queuedCommitId) {
+        await ctx.db.patch(job._id, {
+          queuedCommitId: undefined,
+          queuedInstallationId: undefined,
+        });
+      }
+      return;
+    }
+
+    await ctx.db.patch(job._id, {
+      queuedCommitId: undefined,
+      queuedInstallationId: undefined,
+      status: "pending",
+      indexFiles: undefined,
+      filesIndexed: undefined,
+      filesTotal: undefined,
+      chunksIndexed: undefined,
+      error: undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, {
+      orgId: args.orgId,
+      fullName: args.fullName,
+      githubId: job.githubId,
+      trigger: "merge" as const,
+      commitId: queued,
+      githubAppInstallationId: job.queuedInstallationId,
     });
   },
 });

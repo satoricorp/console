@@ -10,12 +10,13 @@ import { withRetry } from "./retry";
 const UPSERT_BATCH = 100;
 
 export async function upsertDocuments(
+  orgId: string,
   fullName: string,
   documents: IndexedDocument[],
 ) {
   if (documents.length === 0) return;
 
-  const ns = getNamespace(fullName);
+  const ns = getNamespace(orgId, fullName);
 
   for (let i = 0; i < documents.length; i += UPSERT_BATCH) {
     const batch = documents.slice(i, i + UPSERT_BATCH);

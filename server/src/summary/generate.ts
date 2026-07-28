@@ -134,6 +134,14 @@ export type GenerateSummaryResult = {
   model: string;
   latencyMs: number;
   lineCount: number;
+  /**
+   * Whether the repository's own source was in front of the model.
+   *
+   * Derived from what retrieval returned, not from whether an index exists:
+   * those are different questions, and only the first describes the summary
+   * the reader is about to get.
+   */
+  sawIndexedCode: boolean;
 };
 
 type PrEventPayload = {
@@ -551,6 +559,13 @@ export async function generateSummary(
     model: completion.model,
     latencyMs,
     lineCount,
+    // Whether this summary actually had the repository's source in front of
+    // it. Derived from what retrieval returned rather than from whether an
+    // index exists, because those are different questions and only the first
+    // one describes the summary the reader is about to get.
+    sawIndexedCode: (ctx.indexSnippets ?? []).some(
+      (snippet) => snippet.sourceKind === "code_file",
+    ),
   };
 }
 

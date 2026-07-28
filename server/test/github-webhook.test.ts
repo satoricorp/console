@@ -38,6 +38,7 @@ describeDb("GitHub webhook", () => {
   let bookmarkId: string;
   let eventId: string;
   const originalFetch = globalThis.fetch;
+  let convexWebhookStatus = 200;
   const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
   const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
@@ -77,6 +78,10 @@ describeDb("GitHub webhook", () => {
     globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       fetchCalls.push({ url, init });
+
+      if (url === "https://convex.test/cx/github/webhook") {
+        return new Response(null, { status: convexWebhookStatus });
+      }
 
       if (url === "https://convex.test/cx/trial/entitlement") {
         return new Response(JSON.stringify(trialEntitlement.body), {
@@ -844,5 +849,109 @@ describeDb("GitHub webhook", () => {
 
     delete process.env.OPENAI_API_KEY;
     delete process.env.TURBOPUFFER_API_KEY;
+  });
+
+  // A GitHub App has one webhook URL and this server is it, but the only thing
+  // that indexes repository source lives in Convex. Without this forward that
+  // indexer receives nothing and no repository is ever re-indexed on merge,
+  // which is a silent failure: everything here still returns 200.
+  test("push webhook forwards the delivery to the Convex indexer", async () => {
+    const body = {
+      installation: { id: INSTALLATION_ID },
+      repository: { full_name: REPO_FULL_NAME, default_branch: "main" },
+      ref: "refs/heads/main",
+      after: "def456",
+      commits: [{ message: "feat: merge the branch" }],
+    };
+    const payload = JSON.stringify(body);
+
+    const res = await postWebhook("push", body);
+    expect(res.status).toBe(200);
+
+    const forwarded = fetchCalls.find((c) =>
+      c.url === "https://convex.test/cx/github/webhook",
+    );
+    if (!forwarded) {
+      throw new Error(
+        `no forward to Convex; fetches were:\n${fetchCalls.map((c) => c.url).join("\n")}`,
+      );
+    }
+    // Verbatim: Convex verifies the signature GitHub produced over these exact
+    // bytes, so re-serializing the body here would fail verification there.
+    expect(forwarded.init?.body).toBe(payload);
+    const headers = forwarded.init?.headers as Record<string, string>;
+    expect(headers["X-GitHub-Event"]).toBe("push");
+    expect(headers["X-Hub-Signature-256"]).toBe(signPayload(payload));
+    // Convex writes gx-{orgId}-{repo}; without this it cannot name a namespace
+    // and drops the delivery.
+    expect(headers["X-GX-Org-Id"]).toBe(orgId);
+  });
+
+  // Convex has no org table of its own — it learns installation -> org from
+  // these deliveries. Before they were forwarded, a repository connected on the
+  // website could not be indexed because nothing knew which org owned it.
+  test("installation events are forwarded so Convex learns the org", async () => {
+    for (const event of ["installation", "installation_repositories"]) {
+      const before = fetchCalls.length;
+      const res = await postWebhook(event, {
+        action: "created",
+        installation: {
+          id: INSTALLATION_ID,
+          account: { id: 1, login: "acme", type: "Organization" },
+        },
+        repositories: [],
+      });
+      expect(res.status).toBe(200);
+
+      const forwarded = fetchCalls
+        .slice(before)
+        .find((c) => c.url === "https://convex.test/cx/github/webhook");
+      if (!forwarded) {
+        throw new Error(`${event} was not forwarded to Convex`);
+      }
+      const headers = forwarded.init?.headers as Record<string, string>;
+      expect(headers["X-GitHub-Event"]).toBe(event);
+      expect(headers["X-GX-Org-Id"]).toBe(orgId);
+    }
+  });
+
+  // An event for an installation this server has never seen has no org to
+  // stamp. Forwarding it without one is correct — Convex falls back to its
+  // stored mapping — but inventing an org id would file the repository under
+  // the wrong tenant.
+  test("an unknown installation is forwarded without an org header", async () => {
+    const before = fetchCalls.length;
+    const res = await postWebhook("push", {
+      installation: { id: 999999 },
+      repository: { full_name: "someone/else", default_branch: "main" },
+      ref: "refs/heads/main",
+      after: "aaa111",
+      commits: [{ message: "unrelated" }],
+    });
+    expect(res.status).toBe(200);
+
+    const forwarded = fetchCalls
+      .slice(before)
+      .find((c) => c.url === "https://convex.test/cx/github/webhook");
+    if (!forwarded) {
+      throw new Error("push for an unknown installation was not forwarded");
+    }
+    const headers = forwarded.init?.headers as Record<string, string>;
+    expect(headers["X-GX-Org-Id"]).toBeUndefined();
+  });
+
+  test("a failing Convex forward does not fail the delivery back to GitHub", async () => {
+    convexWebhookStatus = 500;
+    const res = await postWebhook("push", {
+      installation: { id: INSTALLATION_ID },
+      repository: { full_name: REPO_FULL_NAME, default_branch: "main" },
+      ref: "refs/heads/main",
+      after: "ghi789",
+      commits: [{ message: "fix: something" }],
+    });
+    // GitHub retries a non-2xx by redelivering, which would repeat the Postgres
+    // work this handler already finished. The forward is best-effort.
+    expect(res.status).toBe(200);
+    convexWebhookStatus = 200;
   });
 });
