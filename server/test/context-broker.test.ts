@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  brokerMemoSizeForTests,
   clearBrokerMemoForTests,
   formatContextManifestLine,
   retrieveReviewContext,
@@ -356,5 +357,38 @@ describe("retrieveReviewContext broker", () => {
         expect(snip.text.replace("\n[truncated]\n", "").length).toBeGreaterThan(0);
       }
     }
+  });
+});
+describe("broker memo bounds", () => {
+  test("expired entries are removed, not merely skipped", async () => {
+    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf";
+    setIndexingFetch((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/embeddings")) {
+        return new Response(
+          JSON.stringify({ data: [{ index: 0, embedding: Array.from({ length: 1536 }, () => 0.01) }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ rows: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch);
+
+    // Every push mints a fresh key, so nothing is reclaimed by overwrite. The
+    // TTL only decided whether a hit was served — an expired entry stayed
+    // resident for the life of the process.
+    for (let i = 0; i < 300; i += 1) {
+      await retrieveReviewContext({} as never, {
+        orgId: "org-a",
+        repoFullName: "acme/app",
+        queryTerms: { intent: `change ${i}`, headSha: `sha-${i}` },
+        force: true,
+      });
+    }
+    expect(brokerMemoSizeForTests()).toBeLessThanOrEqual(256);
   });
 });

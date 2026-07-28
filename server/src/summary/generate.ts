@@ -363,8 +363,14 @@ export async function loadExtractContext(
       if (attached.indexSnippets.length > 0) {
         indexSnippets = attached.indexSnippets;
       }
-    } catch {
-      // fail open
+    } catch (error) {
+      // Fail open — a summary without retrieved context is better than none —
+      // but say so. Silently, a retrieval outage and an empty index produce the
+      // same thinner summary and nothing distinguishes them after the fact.
+      console.warn("summary broker context failed", {
+        repo: bookmarkMeta.repo_full_name,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

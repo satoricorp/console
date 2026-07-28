@@ -310,3 +310,34 @@ describe("placeholder line refs", () => {
     expect(enriched).toContain("server/src/context/broker.ts:42");
   });
 });
+
+describe("cross-repository PR references", () => {
+  const ctx = {
+    prUrl: "https://github.com/satoricorp/console/pull/57",
+    headSha: "9b7b7743a006e651af6fb2897a191e208298bb1a",
+    repoFullName: "satoricorp/console",
+    changedFiles: ["server/src/app.ts"],
+    hunks: [],
+  } as never;
+
+  function enrich(attribution: string): string {
+    return enrichSummaryLinks(
+      ["## Notable Changes", "", "- Did a thing.", `  Attribution: ${attribution}`].join("\n"),
+      ctx,
+    );
+  }
+
+  // Pull request numbers are per-repository, so matching on the number alone
+  // resolved another project's #57 to this project's #57 — a real, unrelated
+  // page presented as the cited source.
+  test("does not link another repository's pull request", () => {
+    const enriched = enrich("previous-prs otherorg/otherrepo#57");
+    expect(enriched).not.toContain("<a ");
+    expect(enriched).toContain("otherorg/otherrepo#57");
+  });
+
+  test("still links this repository's own pull request", () => {
+    const enriched = enrich("previous-prs satoricorp/console#57");
+    expect(enriched).toContain("github.com/satoricorp/console/pull/57");
+  });
+});

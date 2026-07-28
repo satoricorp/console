@@ -207,7 +207,11 @@ export async function loadReviewContext(
               : undefined,
         }));
       }
-    } catch {
+    } catch (error) {
+      console.warn("review broker context failed", {
+        repo: repoFullName,
+        error: error instanceof Error ? error.message : String(error),
+      });
       indexSnippets = [];
     }
   }
