@@ -105,6 +105,59 @@ http.route({
   }),
 });
 
+// Bulk installation -> org upsert, called by the GX Cloud server.
+//
+// Deliveries keep the mapping current but cannot start it: on a fresh deploy
+// the table is empty and nothing fills it until each installation emits an
+// event, and until then no org resolves, so nothing indexes and console search
+// returns nothing. Postgres is the source of truth, so this is a projection
+// catching up rather than a migration.
+http.route({
+  path: "/cx/orgs/installations",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const expected = process.env.GX_CLOUD_API_KEY?.trim();
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : "";
+    if (!expected || token !== expected) {
+      return jsonError("Unauthorized", 401);
+    }
+
+    let body: {
+      installations?: Array<{
+        installationId?: number;
+        orgId?: string;
+        accountLogin?: string;
+      }>;
+    };
+    try {
+      body = await request.json();
+    } catch {
+      return jsonError("Invalid JSON", 400);
+    }
+
+    let synced = 0;
+    for (const entry of body.installations ?? []) {
+      if (typeof entry.installationId !== "number" || !entry.orgId?.trim()) {
+        continue;
+      }
+      await ctx.runMutation(internal.orgs.upsertInstallationOrg, {
+        installationId: entry.installationId,
+        orgId: entry.orgId.trim(),
+        accountLogin: entry.accountLogin,
+      });
+      synced += 1;
+    }
+
+    return new Response(JSON.stringify({ synced }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }),
+});
+
 http.route({
   path: "/cx/github/webhook",
   method: "POST",

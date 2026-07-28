@@ -680,6 +680,13 @@ async function forwardToConvex(
 ) {
   const base = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/, "");
   if (!base || !signature) {
+    // Worth saying out loud. With CONVEX_SITE_URL unset this returns quietly on
+    // every delivery, and the symptom is not an error anywhere — it is that no
+    // repository is ever indexed and reviews are thinner than they should be.
+    console.warn("convex forward skipped", {
+      event,
+      reason: base ? "missing signature" : "CONVEX_SITE_URL is not set",
+    });
     return;
   }
   try {
