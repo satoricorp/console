@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from "bun:test";
 import { getSql, runMigrations } from "../src/db";
 import app from "../src/app";
+import { listConnectedRepos } from "../src/routes/connected-repos";
 import { authHeaders, installTestAuth } from "./auth";
 import { describeDb, hasDatabase as hasDb } from "./db-gate";
 
@@ -39,13 +40,13 @@ async function seed() {
 
   const repos: Array<[number, number, string, string, string | null]> = [
     // Connected to this org.
-    [7710, installationId, "satoricorp/gx", "installed", null],
-    [7711, installationId, "SatoriCorp/Console", "installed", null],
+    [7710, installationId, "connectedfixture/alpha", "installed", null],
+    [7711, installationId, "ConnectedFixture/Beta", "installed", null],
     // Access was removed: connecting once must not be permanent.
-    [7712, installationId, "satoricorp/yeet", "removed", null],
-    [7713, installationId, "satoricorp/old", "installed", String(now)],
+    [7712, installationId, "connectedfixture/removed", "removed", null],
+    [7713, installationId, "connectedfixture/gone", "installed", String(now)],
     // A different organization's repository.
-    [7714, otherInstallationId, "acme/secrets", "installed", null],
+    [7714, otherInstallationId, "connectedother/secrets", "installed", null],
   ];
   for (const [repoId, install, fullName, state, removedAt] of repos) {
     const [owner, name] = fullName.split("/");
@@ -59,6 +60,10 @@ async function seed() {
         true, 'main', ${state}, ${removedAt}, ${now}
       )
       ON CONFLICT (github_repo_id) DO UPDATE SET
+        installation_id = EXCLUDED.installation_id,
+        full_name = EXCLUDED.full_name,
+        owner_login = EXCLUDED.owner_login,
+        name = EXCLUDED.name,
         access_state = EXCLUDED.access_state,
         removed_at_ms = EXCLUDED.removed_at_ms
     `;
@@ -89,8 +94,8 @@ describeDb("connected repos API", () => {
     const origins = body.repos.map((r) => r.origin).sort();
     // Lowercased regardless of how GitHub spells the owner or repo, because
     // this is compared against a normalized local remote URL.
-    expect(origins).toEqual(["github.com/satoricorp/console", "github.com/satoricorp/gx"]);
-    expect(body.repos.map((r) => r.fullName).sort()).toEqual(["SatoriCorp/Console", "satoricorp/gx"]);
+    expect(origins).toEqual(["github.com/connectedfixture/alpha", "github.com/connectedfixture/beta"]);
+    expect(body.repos.map((r) => r.fullName).sort()).toEqual(["ConnectedFixture/Beta", "connectedfixture/alpha"]);
   });
 
   test("omits repositories whose access was removed", async () => {
@@ -98,17 +103,17 @@ describeDb("connected repos API", () => {
     const origins = body.repos.map((r) => r.origin);
     // Connecting once must not be permanent: revoking access has to actually
     // stop the indexing, by both the access_state and removed_at_ms routes.
-    expect(origins).not.toContain("github.com/satoricorp/yeet");
-    expect(origins).not.toContain("github.com/satoricorp/old");
+    expect(origins).not.toContain("github.com/connectedfixture/removed");
+    expect(origins).not.toContain("github.com/connectedfixture/gone");
   });
 
   test("never returns another organization's repositories", async () => {
     const { body } = await connectedRepos(orgId);
-    expect(body.repos.map((r) => r.origin)).not.toContain("github.com/acme/secrets");
+    expect(body.repos.map((r) => r.origin)).not.toContain("github.com/connectedother/secrets");
 
     // And the other org sees only its own.
     const other = await connectedRepos(otherOrgId);
-    expect(other.body.repos.map((r) => r.origin)).toEqual(["github.com/acme/secrets"]);
+    expect(other.body.repos.map((r) => r.origin)).toEqual(["github.com/connectedother/secrets"]);
   });
 
   test("returns nothing for an installation that is suspended", async () => {
@@ -119,9 +124,12 @@ describeDb("connected repos API", () => {
         github_repo_id, installation_id, full_name, owner_login, name,
         private, default_branch, access_state, updated_at_ms
       )
-      VALUES (7715, ${suspendedInstallationId}, 'satoricorp/suspended', 'satoricorp', 'suspended',
+      VALUES (7715, ${suspendedInstallationId}, 'connectedfixture/suspended', 'connectedfixture', 'suspended',
               true, 'main', 'installed', ${Date.now()})
-      ON CONFLICT (github_repo_id) DO NOTHING
+      ON CONFLICT (github_repo_id) DO UPDATE SET
+        installation_id = EXCLUDED.installation_id,
+        full_name = EXCLUDED.full_name,
+        access_state = EXCLUDED.access_state
     `;
     try {
       const { body } = await connectedRepos(orgId);
@@ -138,5 +146,80 @@ describeDb("connected repos API", () => {
     const { status, body } = await connectedRepos("00000000-0000-4000-8000-0000000007ff");
     expect(status).toBe(200);
     expect(body.repos).toEqual([]);
+  });
+});
+
+
+// A GitHub App is installed per account, so somebody with a personal
+// installation and an organization installation has two orgs — orgs.installation_id
+// is unique, so each installation makes its own row. Org resolution takes the
+// oldest membership and stops, which answers with whichever they connected
+// first and hides the rest. The personal install is usually older, so the
+// organization repositories they actually work in are the ones hidden.
+//
+// Membership is the boundary that spans them, and it is already maintained:
+// installing on an organization syncs an org_members row for every member.
+//
+// These call listConnectedRepos directly rather than going through the auth
+// middleware. Reaching it that way needs a test to stub global fetch and
+// NODE_ENV, and that leaks across files — doing it that way broke five tests
+// elsewhere that had nothing to do with this route.
+const memberGithubUserId = 771234;
+
+async function joinOrgs(orgs: string[]) {
+  const sql = getSql();
+  await sql`DELETE FROM org_members WHERE github_user_id = ${memberGithubUserId}`;
+  for (const org of orgs) {
+    await sql`
+      INSERT INTO org_members (org_id, github_user_id, role, source, created_at_ms)
+      VALUES (${org}::uuid, ${memberGithubUserId}, 'member', 'github_sync', ${Date.now()})
+      ON CONFLICT (org_id, github_user_id) DO NOTHING
+    `;
+  }
+}
+
+describeDb("connected repos across every org a user belongs to", () => {
+  test("spans every org the caller is a member of, not just the resolved one", async () => {
+    await joinOrgs([orgId, otherOrgId]);
+    // The resolved org names only the first; the second must still appear,
+    // because the caller belongs to it.
+    const repos = await listConnectedRepos(getSql(), {
+      orgId,
+      githubUserId: memberGithubUserId,
+    });
+    expect(repos.map((r) => r.origin).sort()).toEqual([
+      "github.com/connectedfixture/alpha",
+      "github.com/connectedfixture/beta",
+      "github.com/connectedother/secrets",
+    ]);
+    await joinOrgs([]);
+  });
+
+  test("membership is still the boundary", async () => {
+    await joinOrgs([otherOrgId]);
+    const repos = await listConnectedRepos(getSql(), {
+      orgId: "",
+      githubUserId: memberGithubUserId,
+    });
+    // Spanning orgs must not mean spanning every org.
+    expect(repos.map((r) => r.origin)).toEqual(["github.com/connectedother/secrets"]);
+    await joinOrgs([]);
+  });
+
+  test("a caller with no memberships still sees the resolved org", async () => {
+    await joinOrgs([]);
+    const repos = await listConnectedRepos(getSql(), {
+      orgId,
+      githubUserId: memberGithubUserId,
+    });
+    expect(repos.map((r) => r.origin).sort()).toEqual([
+      "github.com/connectedfixture/alpha",
+      "github.com/connectedfixture/beta",
+    ]);
+  });
+
+  test("no org and no identity returns nothing", async () => {
+    const repos = await listConnectedRepos(getSql(), { orgId: "", githubUserId: null });
+    expect(repos).toEqual([]);
   });
 });
