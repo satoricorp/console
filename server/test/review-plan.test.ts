@@ -296,6 +296,7 @@ describe("parseAndValidateReviewPlan", () => {
       revisions: [
         {
           changeId: "r1",
+          commitId: "c1",
           branchName: "feat",
           baseBranchName: "main",
           description: "test change",
