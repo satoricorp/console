@@ -97,6 +97,10 @@ export const ensureIndexJob = internalMutation({
     name: v.string(),
     defaultBranch: v.optional(v.string()),
     trigger: indexTrigger,
+    // Re-index an already-ready repository. Without it the ready short-circuit
+    // below makes an explicit re-index request a no-op, which is the one case
+    // someone actually asks for one.
+    force: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const existing = await findJob(ctx, args.orgId, args.fullName);
@@ -147,7 +151,7 @@ export const ensureIndexJob = internalMutation({
         return { jobId: existing._id, shouldEnqueue: true, batchOffset: 0 };
       }
 
-      if (existing.status === "ready" && args.trigger === "connect") {
+      if (existing.status === "ready" && args.trigger === "connect" && !args.force) {
         return { jobId: existing._id, shouldEnqueue: false };
       }
 

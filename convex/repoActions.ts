@@ -191,3 +191,88 @@ export const connectRepos = action({
     return { connected, errors };
   },
 });
+
+/**
+ * Re-indexes a repository on demand.
+ *
+ * This is where the "not indexed" warnings in `gx review` and PR summaries send
+ * people, so it has to be reachable without waiting for the next merge — a
+ * repository whose index failed, or that was connected before indexing worked,
+ * would otherwise have no way forward but pushing a commit.
+ *
+ * Access is checked against GitHub on every call rather than trusted from the
+ * connection record: a user who has lost access to a repository must not be
+ * able to spend an org's embedding budget on it.
+ */
+export const reindexRepo = action({
+  args: { fullName: v.string() },
+  handler: async (ctx, { fullName }): Promise<{ started: boolean; reason?: string }> => {
+    const user = await authComponent.getAuthUser(ctx);
+
+    const verification = await verifyGithubRepoAccess(ctx, user._id, fullName);
+    if (!verification.ok) {
+      throw new Error(verification.message);
+    }
+
+    const [owner, name] = fullName.split("/");
+    if (!owner || !name) {
+      throw new Error(`${fullName} is not an owner/name repository`);
+    }
+
+    const accessToken = await getGithubAccessToken(ctx, user._id);
+    const installationId = await installationIdForOwner(accessToken, owner);
+    const orgId: string | null = installationId
+      ? await ctx.runQuery(internal.orgs.getOrgForInstallation, { installationId })
+      : null;
+    if (!orgId) {
+      return {
+        started: false,
+        reason: `Install the GX GitHub App on ${owner} so GX Cloud can index this repository.`,
+      };
+    }
+
+    const connected: { githubId: number } | null = await ctx.runQuery(
+      internal.repos.getConnectedRepo,
+      { userId: user._id, fullName },
+    );
+    if (!connected) {
+      return { started: false, reason: "Connect this repository first." };
+    }
+
+    const existing: { status: string } | null = await ctx.runQuery(
+      internal.indexing.getJobByFullName,
+      { orgId, fullName },
+    );
+    // A pass already running would only fight this one for the same rows.
+    if (existing?.status === "indexing") {
+      return { started: false, reason: "An index is already running for this repository." };
+    }
+
+    const { shouldEnqueue, batchOffset } = await ctx.runMutation(
+      internal.indexing.ensureIndexJob,
+      {
+        orgId,
+        fullName,
+        githubId: connected.githubId,
+        owner,
+        name,
+        defaultBranch: verification.defaultBranch ?? "main",
+        trigger: "connect",
+        force: true,
+      },
+    );
+
+    if (shouldEnqueue) {
+      await ctx.runMutation(internal.indexing.scheduleIndexRepo, {
+        orgId,
+        fullName,
+        githubId: connected.githubId,
+        trigger: "connect",
+        githubAccessToken: accessToken,
+        batchOffset,
+      });
+    }
+
+    return { started: true };
+  },
+});
