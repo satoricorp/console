@@ -62,6 +62,8 @@ const FILE_BACKED_KINDS = new Set([
 const FILE_EXT_RE =
   /\.(go|md|json|ya?ml|tsx?|jsx?|py|rs|toml|sql|sh|css|html|txt)$/i;
 const FILE_LINE_RE = /^(.+?):(\d+)$/;
+/** `path:line`, `path:N`, `path:<line>` — a placeholder the model copied, not a location. */
+const PLACEHOLDER_LINE_RE = /^(.+?):<?[A-Za-z_][\w-]*>?$/;
 const PR_OWNER_REPO_NUM_RE =
   /\b([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)\b/gi;
 const PR_NUMBER_RE = /\bPR\s*#(\d+)\b/gi;
@@ -272,7 +274,7 @@ function linkifyAttributionText(text: string, ctx: SummaryLinkContext): string {
 
   const wholeUrl = resolveRefURL(trimmed, ctx);
   if (wholeUrl) {
-    return formatPRSummaryLink(trimmed, wholeUrl);
+    return formatPRSummaryLink(displayRef(trimmed), wholeUrl);
   }
 
   const labelUrl = ctx.labelUrls?.[trimmed];
@@ -436,11 +438,32 @@ function uniqueFiles(ctx: SummaryLinkContext): string[] {
   return [...set];
 }
 
+/**
+ * The text to show for a reference. A `path:line` placeholder the model copied
+ * verbatim is shown as the bare path, so the label matches where the link goes.
+ */
+function displayRef(ref: string): string {
+  const trimmed = ref.trim();
+  if (FILE_LINE_RE.test(trimmed)) return trimmed;
+  const placeholder = PLACEHOLDER_LINE_RE.exec(trimmed);
+  return placeholder && looksLikeFilePath(placeholder[1]!)
+    ? placeholder[1]!
+    : trimmed;
+}
+
 export function parseFileLineRef(ref: string): { file: string; line: number } {
   const trimmed = ref.trim();
   if (!trimmed) return { file: "", line: 0 };
   const match = FILE_LINE_RE.exec(trimmed);
-  if (!match) return { file: trimmed, line: 0 };
+  if (!match) {
+    // The prompt writes `path:line` to describe the shape of a reference, and
+    // models sometimes copy that literally. A non-numeric suffix is not a line
+    // number, and leaving it attached produced links to `broker.ts:line` — a
+    // path that does not exist — on every summary. Drop the suffix instead.
+    const placeholder = PLACEHOLDER_LINE_RE.exec(trimmed);
+    if (placeholder) return { file: placeholder[1]!, line: 0 };
+    return { file: trimmed, line: 0 };
+  }
   const line = Number(match[2]);
   if (!Number.isFinite(line) || line <= 0) {
     return { file: match[1]!, line: 0 };

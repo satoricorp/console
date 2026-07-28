@@ -278,3 +278,35 @@ describe("enrichSummaryLinks", () => {
     expect(enriched).toContain(formatPRSummaryLink("server/src/github/pr-body.ts", want));
   });
 });
+
+describe("placeholder line refs", () => {
+  const ctx = {
+    prUrl: PR_URL,
+    headSha: "9b7b7743a006e651af6fb2897a191e208298bb1a",
+    repoFullName: "satoricorp/console",
+    changedFiles: ["server/src/context/broker.ts"],
+    hunks: [],
+  } as never;
+
+  function enrich(attribution: string): string {
+    return enrichSummaryLinks(
+      ["## Notable Changes", "", "- Did a thing.", `  Attribution: ${attribution}`].join("\n"),
+      ctx,
+    );
+  }
+
+  // The prompt describes references as `path:line`; models copied that literally
+  // and the enricher built links to a path named ".../broker.ts:line", which
+  // 404s. Every attribution on every summary carried one.
+  test("drops a copied `path:line` placeholder instead of linking to it", () => {
+    const enriched = enrich("codebase server/src/context/broker.ts:line");
+    expect(enriched).not.toContain("broker.ts:line");
+    expect(enriched).toContain("server/src/context/broker.ts");
+    expect(enriched).not.toContain("/blob/9b7b7743a006e651af6fb2897a191e208298bb1a/server/src/context/broker.ts:line");
+  });
+
+  test("keeps a real line number", () => {
+    const enriched = enrich("codebase server/src/context/broker.ts:42");
+    expect(enriched).toContain("server/src/context/broker.ts:42");
+  });
+});

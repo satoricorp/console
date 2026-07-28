@@ -274,4 +274,87 @@ describe("retrieveReviewContext broker", () => {
     await retrieveReviewContext({} as never, args);
     expect(embedCalls).toBe(afterFirst);
   });
+
+  test("every bucket keeps a share of the budget when all are full", async () => {
+    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf";
+
+    // Long rows in every bucket. Before the budget was spent in prompt-priority
+    // order with a per-bucket floor, one bucket took 8 x 1200 = 9600 of the
+    // 10000-char budget and the rest were zeroed after being retrieved.
+    const long = "x".repeat(4000);
+    setIndexingFetch((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/embeddings")) {
+        return new Response(
+          JSON.stringify({
+            data: [{ index: 0, embedding: Array.from({ length: 1536 }, () => 0.01) }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/query")) {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        const kinds: string[] = [];
+        const walk = (node: unknown) => {
+          if (!Array.isArray(node)) return;
+          if (node[0] === "source_kind" && node[1] === "Eq" && typeof node[2] === "string") {
+            kinds.push(node[2]);
+          }
+          for (const child of node) walk(child);
+        };
+        walk(body.filters);
+        const kind = kinds[0] ?? "code_file";
+        return new Response(
+          JSON.stringify({
+            rows: Array.from({ length: 8 }, (_, i) => ({
+              id: `${kind}-${i}`,
+              $dist: 0.1,
+              attributes: {
+                text: long,
+                source_kind: kind,
+                file: "a.ts",
+                org_id: "org-a",
+                repo_full_name: "acme/app",
+                // A genuinely earlier branch: same-branch rows are correctly
+                // dropped as the change's own work, which would mask the budget bug.
+                branch_name: "older-feature",
+                head_sha: "older-sha",
+              },
+            })),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch);
+
+    const result = await retrieveReviewContext({} as never, {
+      orgId: "org-a",
+      repoFullName: "acme/app",
+      queryTerms: {
+        intent: "auth changes",
+        changedFiles: ["a.ts"],
+        branch: "feature",
+        baseBranch: "main",
+      },
+      force: true,
+    });
+
+    // The load-bearing assertion: no bucket that retrieved rows is starved to zero.
+    expect(result.manifest.codebase.provided).toBeGreaterThan(0);
+    expect(result.manifest["previous-prs"].provided).toBeGreaterThan(0);
+
+    const total = Object.values(result.manifest).reduce((sum, m) => sum + m.chars, 0);
+    expect(total).toBeLessThanOrEqual(10_000);
+
+    // No snippet may be nothing but the truncation marker: it would carry a live
+    // citation id the prompt invites the model to cite, with no content behind it.
+    for (const snips of Object.values(result.buckets)) {
+      for (const snip of snips) {
+        expect(snip.text.replace("\n[truncated]\n", "").length).toBeGreaterThan(0);
+      }
+    }
+  });
 });

@@ -38,6 +38,8 @@ export type SelfReport = {
 
 export type ReviewRevisionContext = {
   changeId: string;
+  /** Commit this revision published as; scopes prior-PR rows to this change. */
+  commitId: string | null;
   branchName: string | null;
   baseBranchName: string | null;
   description: string | null;
@@ -94,9 +96,12 @@ export type ReviewPlanContext = {
 };
 
 type StackEntry = {
+  /** v2 revisions carry the commit directly; v1 kept it under `change`. */
+  commit_id?: string;
   change?: {
     id?: number | string;
     jj_change_id?: string;
+    current_commit_id?: string;
     description?: string;
     files?: string[];
     review_context?: {
@@ -367,6 +372,9 @@ export async function loadReviewPlanContext(
 
     return {
       changeId: changeIdFrom(entry, index),
+      // v2 revisions carry commit_id directly; v1 stack entries kept it on the change.
+      commitId:
+        asString(entry.commit_id) ?? asString(entry.change?.current_commit_id),
       branchName: asString(entry.branch_name),
       baseBranchName: asString(entry.base_branch_name),
       description: asString(entry.change?.description),
@@ -402,6 +410,8 @@ export async function loadReviewPlanContext(
           revisions = [
             {
               changeId: "github-pr",
+              // Reconstructed from GitHub's file list, so no publish commit exists.
+              commitId: null,
               branchName: bookmark.branch_name,
               baseBranchName: bookmark.app_base_branch,
               description: bookmark.title,
@@ -543,6 +553,17 @@ export async function loadReviewPlanContext(
       headCommitId: args.headCommitId || event.head_commit_id,
       allFiles,
       intentSummary: selfReport?.taskSummary,
+      // Deliberately NOT ctx.baseBranch: that expression defaults to "main", and
+      // claiming "main" for a repo whose trunk is "dev" makes the branch rule
+      // treat the trunk as a topic branch and drop every prior-PR row. Leave it
+      // undefined when genuinely unknown, matching the PR-summary path.
+      baseBranch:
+        bookmark.app_base_branch ||
+        revisions.find((r) => r.baseBranchName)?.baseBranchName ||
+        undefined,
+      changeCommits: revisions
+        .map((r) => r.commitId ?? "")
+        .filter((commit) => commit.trim().length > 0),
     })),
   };
 }
@@ -556,6 +577,8 @@ async function loadBrokerFields(
     headCommitId: string;
     allFiles: string[];
     intentSummary?: string;
+    baseBranch?: string;
+    changeCommits?: string[];
   },
 ): Promise<{
   contextBuckets?: Record<ContextBucket, ContextSnippet[]>;
@@ -569,6 +592,8 @@ async function loadBrokerFields(
       headSha: args.headCommitId,
       changedFiles: args.allFiles,
       intent: args.intentSummary,
+      baseBranch: args.baseBranch,
+      changeCommits: args.changeCommits,
     });
     return {
       contextBuckets: attached.contextBuckets,
