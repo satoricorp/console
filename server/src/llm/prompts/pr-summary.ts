@@ -59,8 +59,11 @@ Blast Radius numbers:
 Attribution:
 - Every Notable Changes bullet must include an Attribution line
 - Attribution must name a concrete source — never a bare kind alone:
-  - codebase / heuristic: \`path\` or \`path:line\` from the change or Codebase context
-  - agent-sessions: session id and/or \`path:line\` from hunk links
+  - codebase / heuristic: a real path, optionally with a real line number
+    (\`server/src/app.ts\` or \`server/src/app.ts:42\`), from the change or
+    Codebase context. Never write the word "line" — only a digit, or nothing.
+  - agent-sessions: session id and/or a real \`path\` with an optional real
+    line number, from hunk links
   - previous-prs: name the source exactly as it was handed to you — a prior-PR
     snippet's \`ref=\` value (a \`branch@sha\`), or a \`PR #N\` that literally
     appears in the material above. Prior-PR snippets carry no pull request
