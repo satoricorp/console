@@ -150,9 +150,12 @@ function memoKey(args: RetrieveReviewContextArgs, query: string): string {
   return hash;
 }
 
+const TRUNCATION_MARKER = "\n[truncated]\n";
+const TRUNCATION_MARKER_CHARS = TRUNCATION_MARKER.length;
+
 function clip(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
-  return `${text.slice(0, Math.max(0, maxChars - 14))}\n[truncated]\n`;
+  return `${text.slice(0, Math.max(0, maxChars - TRUNCATION_MARKER_CHARS))}${TRUNCATION_MARKER}`;
 }
 
 /**
@@ -595,23 +598,63 @@ export async function retrieveReviewContext(
   const hasCodeFile = result.buckets.codebase.some(
     (s) => s.sourceKind === "code_file",
   );
+  // Spend the budget in the order the prompt actually presents the buckets, and
+  // give each one a reserved floor first. Spending it in `Object.keys` order let
+  // whichever bucket happened to be declared first take all of it: with the
+  // shipped defaults one full bucket is 8 x 1200 = 9600 of a 10000 budget, so the
+  // trailing buckets were zeroed after their rows had been retrieved and scoped,
+  // and the prompt then told the model those buckets had supplied nothing.
+  const spendOrder: ContextBucket[] = [
+    "codebase",
+    "previous-prs",
+    "docs",
+    "agent-sessions",
+  ];
+  const reserve = Math.floor(totalChars / spendOrder.length);
+
+  const kept: Record<string, ContextSnippet[]> = {};
+  const spent: Record<string, number> = {};
+  const taken: Record<string, number> = {};
+  for (const bucket of spendOrder) {
+    kept[bucket] = [];
+    spent[bucket] = 0;
+    taken[bucket] = 0;
+  }
+
+  // Pass 1 funds every bucket up to its reserved floor; pass 2 hands the unspent
+  // remainder back out in the same priority order, so a bucket with more to say
+  // still gets it once everyone else has had their share.
   let remaining = totalChars;
-  for (const bucket of Object.keys(result.buckets) as ContextBucket[]) {
-    const kept: ContextSnippet[] = [];
-    let chars = 0;
-    for (const snip of result.buckets[bucket]) {
-      if (remaining <= 0) break;
-      const text = clip(snip.text, Math.min(snippetChars, remaining));
-      kept.push({ ...snip, text });
-      chars += text.length;
-      remaining -= text.length;
+  for (const pass of [0, 1]) {
+    for (const bucket of spendOrder) {
+      const cap = pass === 0 ? Math.min(reserve - spent[bucket], remaining) : remaining;
+      let allowance = cap;
+      if (allowance <= 0) continue;
+      const snips = result.buckets[bucket];
+      for (let i = taken[bucket]; i < snips.length; i += 1) {
+        if (allowance <= 0 || remaining <= 0) break;
+        const room = Math.min(snippetChars, allowance, remaining);
+        // Below the truncation marker's own length `clip` returns nothing but the
+        // marker, which would burn budget on a content-free snippet that still
+        // carries a citation id the prompt invites the model to cite.
+        if (room < TRUNCATION_MARKER_CHARS + 1) break;
+        const text = clip(snips[i].text, room);
+        kept[bucket].push({ ...snips[i], text });
+        spent[bucket] += text.length;
+        allowance -= text.length;
+        remaining -= text.length;
+        taken[bucket] = i + 1;
+      }
     }
-    result.buckets[bucket] = kept;
+  }
+
+  for (const bucket of spendOrder) {
+    result.buckets[bucket] = kept[bucket];
     result.manifest[bucket] = {
-      provided: kept.length,
-      chars,
+      provided: kept[bucket].length,
+      chars: spent[bucket],
       label:
-        bucket === "codebase" && kept.length > 0 && !hasCodeFile
+        bucket === "codebase" && kept[bucket].length > 0 && !hasCodeFile
           ? "codebase (history only)"
           : undefined,
     };
