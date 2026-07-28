@@ -137,6 +137,7 @@ githubWebhookRoutes.post("/github/webhook", async (c) => {
         break;
       case "push":
         await handlePush(db, body);
+        await forwardPushToConvex(payload, signature);
         break;
       default:
         return c.json({ ok: true, ignored: true, event, delivery });
@@ -635,6 +636,45 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
     reviewState: null as ClassifyInput["reviewState"],
     webhookAction: action,
   });
+}
+
+// forwardPushToConvex hands the delivery on to the Convex indexer.
+//
+// A GitHub App has exactly one webhook URL, and this server is it. The only
+// thing that indexes repository source lives in Convex, behind
+// /cx/github/webhook, so until this forward existed that indexer received
+// nothing: `handlePush` below writes push metadata and hunk links, never file
+// contents. The result was that no repository was ever re-indexed on merge.
+//
+// The delivery is forwarded verbatim — same bytes, same signature header — so
+// Convex verifies exactly what GitHub signed rather than trusting this server.
+// A failure here must not fail the delivery back to GitHub: the metadata work
+// has already succeeded, and GitHub's retry would repeat it.
+async function forwardPushToConvex(payload: string, signature: string | undefined) {
+  const base = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/, "");
+  if (!base || !signature) {
+    return;
+  }
+  try {
+    const response = await fetch(`${base}/cx/github/webhook`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-GitHub-Event": "push",
+        "X-Hub-Signature-256": signature,
+      },
+      body: payload,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      console.error("forward push to convex failed", {
+        status: response.status,
+        body: (await response.text().catch(() => "")).slice(0, 500),
+      });
+    }
+  } catch (error) {
+    console.error("forward push to convex threw", error);
+  }
 }
 
 async function handlePush(db: postgres.Sql, payload: WebhookPayload) {
