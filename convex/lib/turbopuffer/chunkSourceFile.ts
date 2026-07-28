@@ -19,6 +19,16 @@ export type SourceChunk = {
 };
 
 const CHUNK_LINES = 100;
+/**
+ * Byte ceiling on one chunk, independent of the line count.
+ *
+ * Lines are a poor proxy for size: a hundred lines of minified JavaScript or
+ * embedded JSON is megabytes, and the embedding model rejects the request that
+ * carries it. Kept below MAX_INPUT_CHARS in embedTextBatch so the text stored
+ * in TurboPuffer is the text the vector was computed from — clamping only at
+ * embed time would leave a row whose content the vector does not describe.
+ */
+const CHUNK_MAX_CHARS = 16000;
 const OVERLAP_LINES = 15;
 const MIN_SYMBOL_LINES = 6;
 
@@ -276,7 +286,12 @@ function buildChunk(args: {
   ]
     .filter(Boolean)
     .join("\n");
-  const content = `${header}\n---\n${body}`;
+  // Clamp the body, not the header: the header carries the file path, symbol
+  // and language a citation is built from, so truncating it would cost the
+  // chunk its identity to save characters the model barely reads.
+  const room = CHUNK_MAX_CHARS - header.length - 5;
+  const clampedBody = body.length > room ? body.slice(0, Math.max(room, 0)) : body;
+  const content = `${header}\n---\n${clampedBody}`;
 
   return {
     id: documentId(args.fullName, args.commitId, args.filePath, args.chunkIndex),

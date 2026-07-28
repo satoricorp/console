@@ -289,6 +289,14 @@ export async function runIndexRepo(
       indexLog: line,
       completedAt: Date.now(),
     });
+
+    // Drain on failure too. The queued commit is only started when a pass
+    // finishes, so a pass that dies stranded it: satoricorp/console failed on
+    // an oversized embedding input holding 6e38e32, and nothing would have
+    // started it. A newer commit is also the better thing to try next — it may
+    // not contain whatever the failed pass choked on — and draining clears the
+    // field either way, so this cannot loop.
+    await callbacks.drainQueuedCommit();
   }
 }
 
