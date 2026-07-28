@@ -238,8 +238,24 @@ export const updateJobStatus = internalMutation({
       throw new Error(`No index job found for ${fullName} in org ${orgId}`);
     }
 
+    // Adopt a pre-org row here as well as in ensureIndexJob. A merge schedules
+    // indexing directly and never goes through ensureIndexJob, so a repository
+    // connected before org identity would index correctly — the namespace is
+    // computed from the org passed in, not from the stored field — while its
+    // row kept no orgId and advertised the retired repo-{owner}-{repo} name
+    // forever. That is what the console reads back to show where an index
+    // lives, and it is what a second org indexing the same repository would
+    // collide with.
+    const adopt = job.orgId
+      ? {}
+      : {
+          orgId,
+          turbopufferNamespace: namespaceForOrgRepo(orgId, fullName),
+        };
+
     await ctx.db.patch(job._id, {
       status,
+      ...adopt,
       ...fields,
       ...(clearIndexFiles ? { indexFiles: undefined } : {}),
     });
