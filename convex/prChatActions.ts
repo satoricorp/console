@@ -7,7 +7,10 @@ import { authComponent } from "./auth";
 import { verifyGithubRepoAccess } from "./githubAccess";
 import { chatPinValidator } from "./lib/chatPin";
 import { generateChatResponse } from "./lib/prChat/generateChatResponse";
-import { queryReviewContext } from "./lib/turbopuffer/queryReviewContext";
+import {
+  queryReviewContext,
+  type QueryReviewContextResult,
+} from "./lib/turbopuffer/queryReviewContext";
 import { prChatContextValidator } from "./lib/bookmarkActionContext";
 
 const historyMessage = v.object({
@@ -83,7 +86,11 @@ export const sendMessage = action({
     const pins = args.pins ?? [];
     const prTitle = args.title?.trim() || args.branchName || "Untitled PR";
 
-    const search = await queryReviewContext({
+    // No org means no namespace to search; the chat still answers, just
+    // without indexed source behind it.
+    const search: QueryReviewContextResult = grant.orgId
+      ? await queryReviewContext({
+      orgId: grant.orgId,
       fullName: args.repoFullName,
       changedFiles: prContext.changedFiles,
       query: trimmedMessage,
@@ -97,7 +104,8 @@ export const sendMessage = action({
         text: pin.text,
       })),
       limit: 8,
-    });
+        })
+      : { results: [] };
 
     const retrievedChunks = search.results.map((result) => ({
       file_path: result.file_path,

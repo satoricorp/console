@@ -1,8 +1,21 @@
 "use node";
 
 import type { Query } from "@turbopuffer/turbopuffer/resources/namespaces";
+
+/** TurboPuffer does not export Filter; this is the same type. */
+type Filter = NonNullable<Query["filters"]>;
 import { embedQuery } from "./embedTextBatch";
-import { ensureNamespaceSchema, getNamespace } from "./turbopufferClient";
+import {
+  CODE_FILE_SOURCE_KIND,
+  ensureNamespaceSchema,
+  getNamespace,
+} from "./turbopufferClient";
+
+// Annotated rather than inferred: TurboPuffer's Filter is a deeply recursive
+// union, and letting TypeScript widen a literal tuple into it makes this
+// module's return type unresolvable, which in turn makes every action that
+// awaits it infer `any`.
+const CODE_FILE_FILTER: Filter = ["source_kind", "Eq", CODE_FILE_SOURCE_KIND];
 
 export type PinnedSelection = {
   filePath: string;
@@ -12,6 +25,8 @@ export type PinnedSelection = {
 };
 
 export type QueryReviewContextRequest = {
+  /** The org whose namespace holds this repository's index. */
+  orgId: string;
   fullName: string;
   changedFiles: string[];
   query?: string;
@@ -28,6 +43,8 @@ type RankedRow = {
   file_path?: string;
   doc_type?: string;
   symbol?: string;
+  /** Body column. `text` in the shared namespace; rows written before the move carry `content`. */
+  text?: string;
   content?: string;
   commit_id?: string;
   start_line?: number;
@@ -36,6 +53,10 @@ type RankedRow = {
 };
 
 const INCLUDE_ATTRIBUTES = [
+  "text",
+  // Rows written before the move to the shared namespace put the body in
+  // `content`. Asking for both keeps those readable until they age out through
+  // the next full index.
   "content",
   "file_path",
   "doc_type",
@@ -45,7 +66,30 @@ const INCLUDE_ATTRIBUTES = [
   "end_line",
 ] as const;
 
-export async function queryReviewContext(request: QueryReviewContextRequest) {
+/**
+ * Named so callers can annotate. A Convex action infers its return type through
+ * the generated `internal` API, so an action that returns this shape from one
+ * branch and a literal from another has to be told the type rather than left to
+ * work it out — the inference becomes self-referential and everything in the
+ * handler silently degrades to `any`.
+ */
+export type QueryReviewContextHit = {
+  id: string;
+  file_path: string;
+  doc_type: string;
+  symbol?: string;
+  content: string;
+  commit_id: string;
+  start_line?: number;
+  end_line?: number;
+  score: number;
+};
+
+export type QueryReviewContextResult = { results: QueryReviewContextHit[] };
+
+export async function queryReviewContext(
+  request: QueryReviewContextRequest,
+): Promise<QueryReviewContextResult> {
   const limit = request.limit ?? 8;
   const pinnedSelections = request.pinnedSelections ?? [];
   const pinnedFiles = [
@@ -76,8 +120,8 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     .filter(Boolean)
     .join("\n");
 
-  const ns = getNamespace(request.fullName);
-  await ensureNamespaceSchema(request.fullName);
+  const ns = getNamespace(request.orgId, request.fullName);
+  await ensureNamespaceSchema(request.orgId, request.fullName);
   const embedding = queryText ? await embedQuery(queryText) : null;
 
   const queries: Query[] = [];
@@ -86,16 +130,21 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
     queries.push({
       rank_by: ["vector", "ANN", embedding],
       top_k: 30,
+      // The namespace is shared with push deltas, session transcripts and
+      // review policy now, so every leg has to say it wants source.
+      filters: CODE_FILE_FILTER,
       include_attributes: [...INCLUDE_ATTRIBUTES],
     });
     queries.push({
-      rank_by: ["content", "BM25", queryText],
+      rank_by: ["text", "BM25", queryText],
       top_k: 30,
+      filters: CODE_FILE_FILTER,
       include_attributes: [...INCLUDE_ATTRIBUTES],
     });
     queries.push({
       rank_by: ["symbol", "BM25", queryText],
       top_k: 20,
+      filters: CODE_FILE_FILTER,
       include_attributes: [...INCLUDE_ATTRIBUTES],
     });
   }
@@ -106,7 +155,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
 
   if (pathFilters.length > 0) {
     queries.push({
-      filters: ["Or", pathFilters],
+      filters: ["And", [CODE_FILE_FILTER, ["Or", pathFilters]]] as Filter,
       top_k: 20,
       include_attributes: [...INCLUDE_ATTRIBUTES],
     });
@@ -154,7 +203,7 @@ export async function queryReviewContext(request: QueryReviewContextRequest) {
       file_path: row.file_path ?? "",
       doc_type: row.doc_type ?? "",
       symbol: row.symbol ?? undefined,
-      content: row.content ?? "",
+      content: row.text ?? row.content ?? "",
       commit_id: row.commit_id ?? "",
       start_line: row.start_line,
       end_line: row.end_line,

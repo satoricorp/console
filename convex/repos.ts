@@ -215,12 +215,32 @@ export const getConnectedRepo = internalQuery({
     userId: v.string(),
     fullName: v.string(),
   },
-  handler: async (ctx, { userId, fullName }) => {
-    return await ctx.db
+  handler: async (
+    ctx,
+    { userId, fullName },
+  ): Promise<(Doc<"connectedRepos"> & { orgId: string | null }) | null> => {
+    const repo = await ctx.db
       .query("connectedRepos")
       .withIndex("by_userId_fullName", (q) =>
         q.eq("userId", userId).eq("fullName", fullName),
       )
       .unique();
+    if (!repo) return null;
+
+    // The org is resolved here rather than by a second call from the action:
+    // Convex infers an action's return type through the generated `internal`
+    // API, so reaching for another module from inside one makes the inference
+    // self-referential. Callers need the grant and the org together anyway.
+    const installation =
+      typeof repo.installationId === "number"
+        ? await ctx.db
+            .query("orgInstallations")
+            .withIndex("by_installationId", (q) =>
+              q.eq("installationId", repo.installationId as number),
+            )
+            .unique()
+        : null;
+
+    return { ...repo, orgId: installation?.orgId ?? null };
   },
 });

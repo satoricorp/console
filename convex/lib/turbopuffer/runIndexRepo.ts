@@ -8,6 +8,7 @@ import { fetchGithubTree } from "./fetchGithubTree";
 import { getGithubAppInstallationToken } from "./getGithubAppToken";
 import type { IndexedDocument } from "./turbopufferClient";
 import { upsertDocuments } from "./upsertDocuments";
+import { CODE_FILE_SOURCE_KIND } from "./turbopufferClient";
 import { indexLogMessage } from "./indexLog";
 import {
   FILE_BATCH,
@@ -18,6 +19,8 @@ import {
 } from "./utils";
 
 export type IndexRepoRequest = {
+  /** The org whose namespace this index is written to. */
+  orgId: string;
   fullName: string;
   githubId: number;
   commitId?: string;
@@ -165,7 +168,7 @@ export async function runIndexRepo(
     const currentPlan = plan;
     const batch = currentPlan.indexFiles.slice(offset, offset + FILE_BATCH);
     if (batch.length === 0) {
-      await finalizeIndex(fullName, currentPlan, callbacks, trigger, log);
+      await finalizeIndex(request.orgId, fullName, currentPlan, callbacks, trigger, log);
       return;
     }
 
@@ -196,24 +199,33 @@ export async function runIndexRepo(
       if (chunks.length === 0) continue;
 
       const vectors = await embedTextBatch(chunks.map((chunk) => chunk.content));
+      // Field names are the shared namespace's, not this indexer's: the body
+      // column is `text`, the branch is `branch_name`, and `symbol` is written
+      // twice — once into the unstemmed full-text column and once into the
+      // filterable `symbol_name` — because that is the shape the server and
+      // the CLI already write and a reader cannot tell rows apart by origin.
       const documents: IndexedDocument[] = chunks.map((chunk, idx) => ({
         id: chunk.id,
         vector: vectors[idx],
-        content: chunk.content,
-        file_path: chunk.filePath,
+        text: chunk.content,
         symbol: chunk.symbol,
-        start_line: chunk.startLine,
-        end_line: chunk.endLine,
+        org_id: request.orgId,
+        repo_full_name: fullName,
+        source_kind: CODE_FILE_SOURCE_KIND,
+        file_path: chunk.filePath,
+        symbol_name: chunk.symbol,
+        branch_name: currentPlan.branch,
         chunk_hash: chunk.chunkHash,
-        repo_id: fullName,
         commit_id: currentPlan.commitId,
-        branch: currentPlan.branch,
         language: chunk.language,
         doc_type: chunk.docType,
+        indexed_reason: request.trigger,
+        start_line: chunk.startLine,
+        end_line: chunk.endLine,
         created_at: Date.now(),
       }));
 
-      await upsertDocuments(fullName, documents);
+      await upsertDocuments(request.orgId, fullName, documents);
       batchChunks += documents.length;
     }
 
@@ -248,7 +260,7 @@ export async function runIndexRepo(
       return;
     }
 
-    await finalizeIndex(fullName, plan, callbacks, trigger, log);
+    await finalizeIndex(request.orgId, fullName, plan, callbacks, trigger, log);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown indexing error";
@@ -279,6 +291,7 @@ export async function runIndexRepo(
 }
 
 async function finalizeIndex(
+  orgId: string,
   fullName: string,
   plan: IndexPlan,
   callbacks: IndexRepoCallbacks,
@@ -294,7 +307,7 @@ async function finalizeIndex(
     },
   ) => Promise<void>,
 ) {
-  await deleteStaleDocuments(fullName, plan.commitId);
+  await deleteStaleDocuments(orgId, fullName, plan.commitId);
 
   await log("Index complete", {
     commitId: plan.commitId,

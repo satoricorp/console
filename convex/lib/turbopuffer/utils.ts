@@ -1,5 +1,18 @@
-export function namespaceForRepo(fullName: string) {
-  return `repo-${fullName.replace("/", "-")}`;
+/**
+ * The namespace holding one org's index of one repository.
+ *
+ * Identical to `namespaceForOrgRepo` in server/src/indexing/config.ts and
+ * `NamespaceForRepo` in the gx CLI's internal/semantic/config.go. All three
+ * write here and every reader looks here. The previous name, repo-{owner}-{repo},
+ * had no org in it: two orgs sharing a repository shared one index and deleted
+ * each other's rows, and the server's PR summaries never read it at all.
+ */
+export function namespaceForOrgRepo(orgId: string, fullName: string) {
+  const slug = fullName
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .toLowerCase()
+    .replace(/^-+|-+$/g, "");
+  return `gx-${orgId}-${slug}-v2`;
 }
 
 export function parseFullName(fullName: string) {

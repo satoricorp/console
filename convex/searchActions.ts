@@ -5,7 +5,10 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth";
 import { verifyGithubRepoAccess } from "./githubAccess";
-import { queryReviewContext as searchTurboPuffer } from "./lib/turbopuffer/queryReviewContext";
+import {
+  queryReviewContext as searchTurboPuffer,
+  type QueryReviewContextResult,
+} from "./lib/turbopuffer/queryReviewContext";
 
 export const queryReviewContext = action({
   args: {
@@ -17,7 +20,7 @@ export const queryReviewContext = action({
     sessionSummary: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<QueryReviewContextResult> => {
     const user = await authComponent.getAuthUser(ctx);
 
     const grant = await ctx.runQuery(internal.repos.getConnectedRepo, {
@@ -49,7 +52,15 @@ export const queryReviewContext = action({
       defaultBranch: verification.defaultBranch,
     });
 
+    // The index lives in the org's namespace, reached through the
+    // installation the repository was connected under. Without an org there is
+    // no namespace to search, and returning nothing is the honest answer.
+    if (!grant.orgId) {
+      return { results: [] };
+    }
+
     return searchTurboPuffer({
+      orgId: grant.orgId,
       fullName: args.fullName,
       changedFiles: args.changedFiles,
       symbols: args.symbols,
