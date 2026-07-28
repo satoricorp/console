@@ -91,40 +91,6 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_userId", ["userId"]),
 
-  // TEMP-FOR-PAYWALL-DEPLOY: these two tables are dead (no readers/writers; the
-  // gxPr.ts / gxRevisions.ts modules are already deleted) and are removed from
-  // the dev deployment. They are restored here ONLY so a prod deploy does not
-  // attempt to drop them while prod rows still exist — Convex rejects that.
-  // Remove these definitions again after purging both tables in the prod
-  // dashboard. See the porcelain-pivot cleanup plan.
-  gxPrPushes: defineTable({
-    userId: v.string(),
-    sessionId: v.optional(v.string()),
-    repoFullName: v.optional(v.string()),
-    payload: v.any(),
-    createdAt: v.number(),
-  })
-    .index("by_userId", ["userId"])
-    .index("by_userId_createdAt", ["userId", "createdAt"])
-    .index("by_sessionId", ["sessionId"]),
-
-  gxRevisions: defineTable({
-    userId: v.string(),
-    pushId: v.id("gxPrPushes"),
-    changeId: v.string(),
-    commitId: v.optional(v.string()),
-    repoFullName: v.optional(v.string()),
-    message: v.string(),
-    branchName: v.optional(v.string()),
-    baseBranchName: v.optional(v.string()),
-    pullRequestUrl: v.optional(v.string()),
-    stackIndex: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_changeId", ["changeId"])
-    .index("by_repoFullName", ["repoFullName"])
-    .index("by_userId_createdAt", ["userId", "createdAt"]),
-
   gxReviewArtifacts: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),
