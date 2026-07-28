@@ -21,6 +21,7 @@ import {
   type SummaryLinkContext,
 } from "./enrich-links";
 import { enrichSeverityDots } from "./severity";
+import { computeDiffStats, type DiffStats } from "./diff-stats";
 import { assertValidSummary, validateSummary } from "./validate";
 
 export type HunkLinkRow = {
@@ -66,6 +67,8 @@ export type IndexSnippetRow = {
   bucket?: string;
   /** Repo-relative path when the snippet is file-backed. */
   file?: string;
+  /** Concrete citable identifier (prior-PR rows: `branch@sha`). */
+  ref?: string;
 };
 
 export type PublishedRevisionRow = {
@@ -104,6 +107,8 @@ export type ExtractContext = {
   indexSnippets?: IndexSnippetRow[];
   publishedRevisions?: PublishedRevisionRow[];
   publishedSessions?: PublishedSessionRow[];
+  /** Added/removed line totals counted from the full patch, not guessed. */
+  diffStats?: DiffStats;
 };
 
 export type GenerateSummaryInput = {
@@ -296,13 +301,35 @@ export async function loadExtractContext(
     );
   }
 
+  const publishedRevisions = publishedRevisionsFromPayload(payload);
+
+  // The changed-file list decides which prior PRs may be cited (see
+  // scopePreviousPrRows), so it must not depend on capture having produced hunk
+  // links. A gx.pr artifact regularly carries none, and on satoricorp/gx#112 it
+  // carried none, which left the broker with an empty file list. The revisions
+  // in the bundle always name their files, so union both.
+  const changedFiles = [
+    ...new Set([
+      ...hunkRows.map((row) => row.file),
+      ...publishedRevisions.flatMap((revision) => revision.files),
+    ]),
+  ].filter((file) => file.trim().length > 0);
+
+  // Every commit this change published, so the bucket can recognise the change
+  // under review by more than its current head: an amended re-push publishes a
+  // new head SHA for the same work, and the old one is still in the index.
+  const changeCommits = publishRevisions(payload)
+    .map((revision) => revision.commit_id ?? "")
+    .filter((commit) => commit.trim().length > 0);
+
   let indexSnippets: IndexSnippetRow[] | undefined;
   const [bookmarkMeta] = await db<{
     repo_full_name: string;
     branch_name: string;
+    app_base_branch: string | null;
     github_pr_url: string | null;
   }[]>`
-    SELECT repo_full_name, branch_name, github_pr_url
+    SELECT repo_full_name, branch_name, app_base_branch, github_pr_url
     FROM bookmarks
     WHERE id = ${target.bookmarkId} AND org_id = ${orgId}
   `;
@@ -311,9 +338,19 @@ export async function loadExtractContext(
       const attached = await attachBrokerContext(db, {
         orgId,
         repoFullName: bookmarkMeta.repo_full_name,
-        changedFiles: hunkRows.map((h) => h.file),
+        changedFiles,
         branch: bookmarkMeta.branch_name,
+        // Without this the branch rule cannot tell a pull request's own branch
+        // from a trunk, and a repository that pushes straight from its default
+        // branch loses all prior-PR history.
+        baseBranch:
+          bookmarkMeta.app_base_branch ??
+          publishRevisions(payload).find((revision) =>
+            revision.base_branch_name?.trim(),
+          )?.base_branch_name ??
+          undefined,
         headSha: event.head_commit_id ?? undefined,
+        changeCommits,
       });
       if (attached.indexSnippets.length > 0) {
         indexSnippets = attached.indexSnippets;
@@ -348,8 +385,9 @@ export async function loadExtractContext(
     })),
     sessionEvents,
     indexSnippets,
-    publishedRevisions: publishedRevisionsFromPayload(payload),
+    publishedRevisions,
     publishedSessions: publishedSessionsFromPayload(payload),
+    diffStats: computeDiffStats(publishedRevisions) ?? undefined,
   };
 }
 

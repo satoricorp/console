@@ -21,6 +21,13 @@ export type ContextSnippet = {
   text: string;
   score?: number;
   file?: string;
+  /**
+   * A concrete, real identifier for the snippet's source, shown in the prompt
+   * so an attribution can name something that exists. Prior-PR rows carry no
+   * GitHub PR number — only a branch and a head SHA — so this is what the model
+   * is given to cite instead of a number it would have to invent.
+   */
+  ref?: string;
 };
 
 export type ContextManifestEntry = {
@@ -35,7 +42,7 @@ export type ReviewContextBrokerResult = {
   reviewMdPresent: boolean;
 };
 
-const BUCKET_SOURCE_KINDS: Record<ContextBucket, string[]> = {
+export const BUCKET_SOURCE_KINDS: Record<ContextBucket, string[]> = {
   "agent-sessions": [
     "published_session_context",
     "session_transcript",
@@ -54,6 +61,9 @@ const DEFAULT_PER_BUCKET = 8;
 const DEFAULT_SNIPPET_CHARS = 1200;
 const DEFAULT_TOTAL_CHARS = 10_000;
 const REVIEW_MD_MAX_BYTES = 8_000;
+
+/** Over-fetch before relevance scoping, so filtering does not starve the bucket. */
+const PREVIOUS_PR_FETCH_MULTIPLIER = 4;
 
 const CITATION_PREFIX: Record<ContextBucket, string> = {
   "agent-sessions": "A",
@@ -78,7 +88,9 @@ export type RetrieveReviewContextArgs = {
     changedFiles?: string[];
     symbols?: string[];
     branch?: string;
+    baseBranch?: string;
     headSha?: string;
+    changeCommits?: string[];
   };
   limits?: {
     perBucket?: number;
@@ -124,6 +136,12 @@ function memoKey(args: RetrieveReviewContextArgs, query: string): string {
         args.repoFullName,
         query,
         args.queryTerms.headSha ?? "",
+        // Part of the key because they change which prior-PR rows are served
+        // without changing the query text: two callers that agree on the query
+        // but disagree on what counts as the change's own work must not share
+        // a cached answer.
+        args.queryTerms.baseBranch ?? "",
+        (args.queryTerms.changeCommits ?? []).join(","),
         String(args.limits?.perBucket ?? DEFAULT_PER_BUCKET),
       ].join("|"),
     )
@@ -137,21 +155,31 @@ function clip(text: string, maxChars: number): string {
   return `${text.slice(0, Math.max(0, maxChars - 14))}\n[truncated]\n`;
 }
 
+/**
+ * Turn rows into citable snippets, at most `limit` of them.
+ *
+ * The cap lives here rather than in searchIndex because a fused RRF query
+ * answers with one leg per rank_by and TurboPuffer applies `limit` per leg: a
+ * three-leg search returns up to three times what the caller asked for. On the
+ * live satoricorp/gx namespace a previous-prs query with limit 8 came back with
+ * 13 rows and every one was served. searchIndex has a second caller
+ * (searchCodeReviewHistory) that post-filters by source kind in JavaScript and
+ * structurally depends on that over-return, so capping there would starve
+ * GET /v1/review-history instead.
+ */
 function toSnippets(
   bucket: ContextBucket,
   rows: IndexSearchResult[],
   snippetChars: number,
+  limit: number,
 ): ContextSnippet[] {
   const prefix = CITATION_PREFIX[bucket];
-  return rows.map((row, index) => {
+  return rows.slice(0, limit).map((row, index) => {
     const sourceKind =
       typeof row.attributes.source_kind === "string"
         ? row.attributes.source_kind
         : "unknown";
-    const file =
-      typeof row.attributes.file === "string" && row.attributes.file
-        ? row.attributes.file
-        : undefined;
+    const file = rowFile(row) || undefined;
     return {
       id: row.id || `${bucket}-${index}`,
       citationId: `${prefix}${index + 1}`,
@@ -160,8 +188,224 @@ function toSnippets(
       text: clip(row.text, snippetChars),
       score: row.score,
       file,
+      ref: snippetRef(bucket, row),
     };
   });
+}
+
+/**
+ * The citable identifier for a snippet.
+ *
+ * Prior-PR rows are indexed with `branch_name` and `head_sha` and no PR number,
+ * so `branch@sha` is the most specific true reference available. Handing the
+ * model a real one matters: the citation labels are P1, P2, … and the prompt
+ * used to ask for `PR #N`, so the model rendered snippet P1 as "PR #1" and the
+ * link enricher resolved that to github.com/<repo>/pull/1 — a real, unrelated
+ * pull request that was never in the context.
+ */
+function snippetRef(bucket: ContextBucket, row: IndexSearchResult): string | undefined {
+  if (bucket !== "previous-prs") return undefined;
+  const branch = rowAttr(row, "branch_name");
+  const sha = rowAttr(row, "head_sha").slice(0, 8);
+  if (branch && sha) return `${branch}@${sha}`;
+  return branch || sha || undefined;
+}
+
+function normalizePath(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/^\.\//, "").replace(/^\/+/, "");
+}
+
+function rowFile(row: IndexSearchResult): string {
+  return (
+    normalizePath(row.attributes.file) || normalizePath(row.attributes.file_path)
+  );
+}
+
+function rowAttr(row: IndexSearchResult, key: string): string {
+  const value = row.attributes[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Branch names that name a shared trunk rather than one change's own branch.
+ *
+ * Used only as a fallback when the base branch is genuinely unknown — see
+ * isTopicBranch. Everywhere the base branch is recorded (bookmarks carry
+ * `app_base_branch`, publish bundles carry `base_branch_name`) it is used
+ * instead, and this list is never consulted.
+ */
+const TRUNK_BRANCH_NAMES = new Set([
+  "main",
+  "master",
+  "trunk",
+  "develop",
+  "development",
+  "default",
+]);
+
+/**
+ * Whether consecutive publishes on `branch` are the same change or different
+ * ones.
+ *
+ * On a topic branch they are the same change: push, amend, push again, and
+ * every publish is another revision of one pull request. On a trunk they are
+ * not: each publish is its own change, and the earlier ones are exactly the
+ * prior history this bucket exists to serve.
+ *
+ * Getting this wrong in the "everything is a topic branch" direction is what
+ * made the first cut of this rule wrong. Comparing branch strings alone
+ * excluded every row whose `branch_name` equalled the branch under review, and
+ * in the live satoricorp/gx namespace 23 of the 25 prior-PR rows carry
+ * `branch_name = "main"` — so a repository whose changes are pushed straight
+ * from its default branch (which is this project's own workflow) lost 100% of
+ * its prior-PR history no matter how well the files overlapped.
+ *
+ * When the base branch is unknown an unrecognised name is treated as a topic
+ * branch, because the cost of the two mistakes is not symmetric: mistaking a
+ * trunk for a topic branch loses history, while mistaking a topic branch for a
+ * trunk serves the change its own earlier diff back as a "previous PR" — the
+ * fabricated citation this whole path exists to prevent.
+ */
+function isTopicBranch(branch: string, baseBranch: string): boolean {
+  if (!branch) return false;
+  if (baseBranch) return branch !== baseBranch;
+  return !TRUNK_BRANCH_NAMES.has(branch.toLowerCase());
+}
+
+/**
+ * Path-ish tokens in free text. The class deliberately keeps `/`, `.`, `-` and
+ * `_` so a repo-relative path survives tokenization whole, and excludes
+ * everything else so a path can only match at a real boundary — `vendor/a/b.ts`
+ * never matches the changed file `a/b.ts`.
+ */
+const PATH_TOKEN_SPLIT = /[^A-Za-z0-9_./\\+-]+/;
+
+/**
+ * Whether a row with no `file` attribute nonetheless names a changed file in
+ * its own text.
+ *
+ * `code_review_summary` chunks are written with `file: ""` unconditionally
+ * (see buildCodeReviewHistoryChunks), and so are `code_review_history` findings
+ * that carry no path. A file-overlap rule applied to the `file` attribute alone
+ * would drop every one of them, for every PR, forever — silently deleting a
+ * declared source kind rather than filtering it.
+ *
+ * An exact repo-relative path appearing verbatim in a prior review's text is a
+ * structural anchor, not a tuned threshold: there is no cutoff to calibrate, a
+ * path either occurs or it does not, and the answer does not move with how the
+ * query happened to be composed.
+ */
+function textNamesChangedFile(
+  row: IndexSearchResult,
+  changed: Set<string>,
+): boolean {
+  const text =
+    (typeof row.attributes.text === "string" ? row.attributes.text : "") ||
+    row.text;
+  if (!text) return false;
+  for (const token of text.split(PATH_TOKEN_SPLIT)) {
+    if (!token) continue;
+    const path = normalizePath(token).replace(/[.,;:]+$/, "");
+    if (path && changed.has(path)) return true;
+  }
+  return false;
+}
+
+/**
+ * Decide which prior-PR rows may be served for the change under review.
+ *
+ * Two rules, both hard:
+ *
+ * 1. The change under review is not one of its own previous PRs. Its published
+ *    diff is indexed under its own head SHA and branch, and being the nearest
+ *    neighbour of its own query it otherwise takes the top slots of this
+ *    bucket. Identity is tested against the change's commits (its head plus
+ *    every revision in the bundle) and, on a topic branch only, against the
+ *    branch — an amended re-push publishes a different head SHA for the same
+ *    pull request, and only the branch ties the two together.
+ * 2. A prior-PR row must concern a file the change under review also touches:
+ *    its `file` attribute is one of them, or — for the source kinds indexed
+ *    without a file — its text names one verbatim.
+ *
+ * Rule 2 is file overlap rather than a similarity threshold because the scores
+ * do not separate the two populations. Measured against the live satoricorp/gx
+ * namespace for PR #112 (`internal/cli/doctor.go`,
+ * `internal/cli/doctor_code_index_test.go`), the identical indexed row scored
+ * cosine distance 0.2895 when the query carried the changed-file list and
+ * 0.4782 when it did not — while the nearest genuinely unrelated row (a
+ * codereview-judge diff) scored 0.4726. Relevant and irrelevant bands overlap
+ * depending only on how the query happened to be composed, so no fixed cutoff
+ * separates them. File overlap does not move with the query.
+ *
+ * When the changed-file list is unknown, relevance cannot be established and
+ * the bucket serves nothing. That is the intended outcome: a summary that omits
+ * a bullet costs the reader nothing, and one that cites an unrelated PR costs
+ * them trust in every other bullet.
+ */
+export function scopePreviousPrRows(
+  rows: IndexSearchResult[],
+  args: {
+    changedFiles?: string[];
+    headSha?: string;
+    branch?: string;
+    /** Branch the change merges into; decides whether `branch` is a trunk. */
+    baseBranch?: string;
+    /** Commit ids that belong to the change under review, beyond its head. */
+    changeCommits?: string[];
+  },
+): IndexSearchResult[] {
+  const changed = new Set(
+    (args.changedFiles ?? []).map(normalizePath).filter(Boolean),
+  );
+  if (changed.size === 0) return [];
+
+  const ownCommits = [args.headSha, ...(args.changeCommits ?? [])]
+    .map((commit) => (commit ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  const branch = (args.branch ?? "").trim();
+  const baseBranch = (args.baseBranch ?? "").trim();
+  const ownBranch = isTopicBranch(branch, baseBranch) ? branch : "";
+
+  const seen = new Set<string>();
+  const kept: IndexSearchResult[] = [];
+
+  for (const row of rows) {
+    const rowSha = rowAttr(row, "head_sha").toLowerCase();
+    if (rowSha && ownCommits.some((commit) => sameCommit(rowSha, commit))) {
+      continue;
+    }
+    if (ownBranch && rowAttr(row, "branch_name") === ownBranch) continue;
+
+    const file = rowFile(row);
+    if (file) {
+      if (!changed.has(file)) continue;
+    } else if (!textNamesChangedFile(row, changed)) {
+      continue;
+    }
+
+    // A revision's diff is indexed one chunk per file part, and an oversized
+    // file is windowed into several parts, so one file from one change can
+    // match repeatedly; keep the best-ranked. Review rows are one chunk per
+    // finding, where two rows naming the same file are two different findings,
+    // so they deduplicate on their own id — collapsing those on file would
+    // drop a whole source kind whenever a revision diff matched the same path.
+    const kind = rowAttr(row, "source_kind");
+    const key =
+      kind === "published_revision_diff" ? `${kind}:${rowSha}:${file}` : row.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(row);
+  }
+
+  return kept;
+}
+
+/** Commit ids may be stored full-length or abbreviated; compare on the shorter. */
+function sameCommit(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const length = Math.min(a.length, b.length);
+  return length >= 7 && a.slice(0, length) === b.slice(0, length);
 }
 
 async function safeBucketSearch(
@@ -260,7 +504,7 @@ export async function retrieveReviewContext(
           orgId: args.orgId,
           repoFullName: args.repoFullName,
           query,
-          limit: perBucket,
+          limit: perBucket * PREVIOUS_PR_FETCH_MULTIPLIER,
           sourceKinds: BUCKET_SOURCE_KINDS["previous-prs"],
           vector: vector ?? undefined,
         }),
@@ -299,12 +543,25 @@ export async function retrieveReviewContext(
     "agent-sessions",
     agentRows,
     snippetChars,
+    perBucket,
   );
-  result.buckets.codebase = toSnippets("codebase", codeRows, snippetChars);
+  result.buckets.codebase = toSnippets(
+    "codebase",
+    codeRows,
+    snippetChars,
+    perBucket,
+  );
   result.buckets["previous-prs"] = toSnippets(
     "previous-prs",
-    prRows,
+    scopePreviousPrRows(prRows, {
+      changedFiles: args.queryTerms.changedFiles,
+      headSha: args.queryTerms.headSha,
+      branch: args.queryTerms.branch,
+      baseBranch: args.queryTerms.baseBranch,
+      changeCommits: args.queryTerms.changeCommits,
+    }),
     snippetChars,
+    perBucket,
   );
 
   const docs: ContextSnippet[] = [];
@@ -319,13 +576,13 @@ export async function retrieveReviewContext(
     });
     result.reviewMdPresent = true;
   } else if (policyRows.length > 0) {
-    const policySnips = toSnippets("docs", policyRows, snippetChars);
+    const policySnips = toSnippets("docs", policyRows, snippetChars, perBucket);
     docs.push(...policySnips);
     result.reviewMdPresent = true;
   }
 
   const corpusStart = docs.length;
-  const corpusSnips = toSnippets("docs", corpusRows, snippetChars).map(
+  const corpusSnips = toSnippets("docs", corpusRows, snippetChars, perBucket).map(
     (snip, i) => ({
       ...snip,
       citationId: `D${corpusStart + i + 1}`,
@@ -390,7 +647,8 @@ export function formatBucketPromptSections(
     sections.push(`## ${title}`);
     for (const snip of snips) {
       const file = snip.file ? ` ${snip.file}` : "";
-      sections.push(`[${snip.citationId}] (${snip.sourceKind}${file})`);
+      const ref = snip.ref ? ` ref=${snip.ref}` : "";
+      sections.push(`[${snip.citationId}] (${snip.sourceKind}${file}${ref})`);
       sections.push(snip.text);
       sections.push("");
     }
@@ -408,6 +666,7 @@ export function flattenBrokerSnippets(
   sourceKind?: string;
   bucket?: ContextBucket;
   file?: string;
+  ref?: string;
 }> {
   const out: Array<{
     id: string;
@@ -416,6 +675,7 @@ export function flattenBrokerSnippets(
     sourceKind?: string;
     bucket?: ContextBucket;
     file?: string;
+    ref?: string;
   }> = [];
   for (const bucket of Object.keys(result.buckets) as ContextBucket[]) {
     for (const snip of result.buckets[bucket]) {
@@ -426,6 +686,7 @@ export function flattenBrokerSnippets(
         sourceKind: snip.sourceKind,
         bucket,
         file: snip.file,
+        ref: snip.ref,
       });
     }
   }

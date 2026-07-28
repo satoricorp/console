@@ -8,6 +8,7 @@ import {
   type IssueComment,
   type PullFile,
 } from "../watch/github";
+import { formatDiffStatsFact } from "./diff-stats";
 import { enrichSeverityDots } from "./severity";
 import { validateSummary } from "./validate";
 
@@ -118,7 +119,21 @@ function buildExternalUserPrompt(d: ExternalDossier): string {
     `Repository: ${d.repoFullName} (public repo; external PR — no GX capture)`,
     `Pull request: #${d.number} — ${d.title}`,
     `State: ${d.state}; base ${d.baseRef} <- head ${d.headRef}`,
-    `File stats: ${JSON.stringify({ changedFiles: d.changedFiles, additions: d.additions, deletions: d.deletions })}`,
+    // The shared system prompt takes its Blast Radius numbers from a "Diff
+    // stats" line and omits the +X/-Y figure when there is none. GitHub already
+    // reports exact totals for an external PR, so state them in that form
+    // rather than leave the rail's accurate counts on the floor.
+    formatDiffStatsFact({
+      files: d.changedFiles,
+      added: d.additions,
+      removed: d.deletions,
+      revisions: 1,
+      perFile: d.files.map((f) => ({
+        file: f.path,
+        added: f.additions,
+        removed: f.deletions,
+      })),
+    }),
     "", "Changed files:", files,
   ];
   if (d.referencedPrs.length) {

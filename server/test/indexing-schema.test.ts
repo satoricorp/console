@@ -10,6 +10,7 @@ import {
   identifierTerms,
   indexPublishedArtifact,
   resetIndexingFetch,
+  searchCodeReviewHistory,
   searchIndex,
   setIndexingFetch,
   splitPatchIntoParts,
@@ -304,6 +305,84 @@ describe("hybrid query construction", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.text).toBe("chunk body");
     expect(rows[0]!.attributes.file_path).toBe("internal/semantic/codeindex.go");
+
+    resetIndexingFetch();
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.TURBOPUFFER_API_KEY;
+  });
+
+  /**
+   * TurboPuffer applies `limit` per rank_by leg, so an RRF search over three
+   * legs answers with up to three times what the caller asked for — a live
+   * previous-prs query with limit 8 came back with 13 rows. That over-return is
+   * passed through rather than capped here, because searchCodeReviewHistory
+   * searches unfiltered and narrows to its own source kinds afterwards: a cap
+   * inside searchIndex would starve GET /v1/review-history, not the bucket that
+   * over-served. Callers that need a hard cap apply it after their own
+   * filtering.
+   */
+  function mockFusedOverReturn(historyFrom: number, total: number) {
+    setIndexingFetch(
+      mock(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.includes("/embeddings")) {
+          return Response.json({
+            data: [
+              {
+                index: 0,
+                embedding: Array.from({ length: embeddingDimensions }, () => 0.01),
+              },
+            ],
+          });
+        }
+        return Response.json({
+          rows: Array.from({ length: total }, (_, i) => ({
+            id: `row-${i}`,
+            $dist: 0.03,
+            text: `body ${i}`,
+            source_kind: i >= historyFrom ? "code_review_history" : "code_file",
+          })),
+        });
+      }) as unknown as typeof fetch,
+    );
+  }
+
+  test("passes a fused over-return through to the caller", async () => {
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf";
+    mockFusedOverReturn(8, 13);
+
+    const rows = await searchIndex({
+      orgId: "org-1",
+      repoFullName: "acme/app",
+      query: "doctor code index freshness",
+      limit: 8,
+    });
+    expect(rows).toHaveLength(13);
+
+    resetIndexingFetch();
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.TURBOPUFFER_API_KEY;
+  });
+
+  test("code-review history survives below the requested limit", async () => {
+    // The history rows sit at fused ranks 9–13. searchCodeReviewHistory has no
+    // source_kind filter and post-filters in JavaScript, so truncating to the
+    // limit first would return nothing at all here.
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.TURBOPUFFER_API_KEY = "test-tpuf";
+    mockFusedOverReturn(8, 13);
+
+    const rows = await searchCodeReviewHistory({
+      orgId: "org-1",
+      repoFullName: "acme/app",
+      query: "retry backoff",
+      limit: 8,
+    });
+    expect(rows).toHaveLength(5);
+    for (const row of rows) {
+      expect(row.attributes.source_kind).toBe("code_review_history");
+    }
 
     resetIndexingFetch();
     delete process.env.OPENAI_API_KEY;
