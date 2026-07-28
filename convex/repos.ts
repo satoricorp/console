@@ -67,13 +67,33 @@ export const getMyConnectedRepos = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
+    // first(), not unique(): fullName stopped being unique when jobs became
+    // per-org, so unique() throws the moment two orgs index one repository —
+    // taking the whole page down rather than one row. The org filter below is
+    // what actually scopes it.
     const jobsByFullName = new Map<string, Doc<"repoIndexJobs">>();
-    for (const fullName of repos.map((r) => r.fullName)) {
-      const job = await ctx.db
-        .query("repoIndexJobs")
-        .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-        .unique();
-      if (job) jobsByFullName.set(fullName, job);
+    for (const repo of repos) {
+      const installation =
+        typeof repo.installationId === "number"
+          ? await ctx.db
+              .query("orgInstallations")
+              .withIndex("by_installationId", (q) =>
+                q.eq("installationId", repo.installationId as number),
+              )
+              .unique()
+          : null;
+      const job = installation
+        ? await ctx.db
+            .query("repoIndexJobs")
+            .withIndex("by_org_fullName", (q) =>
+              q.eq("orgId", installation.orgId).eq("fullName", repo.fullName),
+            )
+            .unique()
+        : await ctx.db
+            .query("repoIndexJobs")
+            .withIndex("by_fullName", (q) => q.eq("fullName", repo.fullName))
+            .first();
+      if (job) jobsByFullName.set(repo.fullName, job);
     }
 
     return repos
@@ -90,6 +110,13 @@ export const getMyConnectedRepos = query({
           connectedAt: repo.connectedAt,
           accessVerifiedAt: repo.accessVerifiedAt ?? repo.connectedAt,
           indexStatus: job?.status ?? null,
+          // What the index actually holds, so the page can answer "is this
+          // current?" rather than only "did something run once".
+          indexedCommitId: job?.commitId ?? null,
+          indexedAt: job?.completedAt ?? null,
+          indexedFiles: job?.filesIndexed ?? null,
+          indexedChunks: job?.chunksIndexed ?? null,
+          indexError: job?.error ?? null,
         };
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
