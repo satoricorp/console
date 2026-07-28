@@ -27,6 +27,34 @@ function canLinkPullNumber(ctx: SummaryLinkContext, number: number): boolean {
   return current !== null && current === number;
 }
 
+/**
+ * Whether an `owner/repo#N` reference points at the pull request being
+ * summarised.
+ *
+ * Comparing the number alone was enough to resolve `otherorg/otherrepo#57` to
+ * *this* repository's pull request 57 — a real, unrelated page. Pull request
+ * numbers are per-repository, so the repository has to match too.
+ */
+function canLinkOwnerRepoPull(
+  ctx: SummaryLinkContext,
+  ownerRepo: string,
+  number: number,
+): boolean {
+  if (!canLinkPullNumber(ctx, number)) return false;
+  const target = ownerRepo.trim().toLowerCase();
+  if (!target) return false;
+  const own = ownRepoFullName(ctx);
+  return own !== null && own === target;
+}
+
+/** The `owner/repo` this summary belongs to, from the PR URL or the context. */
+function ownRepoFullName(ctx: SummaryLinkContext): string | null {
+  const fromCtx = ctx.repoFullName?.trim().toLowerCase();
+  if (fromCtx) return fromCtx;
+  const match = /github\.com\/([^/]+\/[^/]+)\/pull\/\d+/i.exec(ctx.prUrl ?? "");
+  return match ? match[1]!.toLowerCase() : null;
+}
+
 export type SummaryLinkHunk = {
   file: string;
   lineStart: number;
@@ -36,6 +64,11 @@ export type SummaryLinkHunk = {
 export type SummaryLinkContext = {
   prUrl: string | null;
   headSha: string | null;
+  /**
+   * The `owner/repo` this summary belongs to. Optional because it is derivable
+   * from prUrl; supplied it removes the guesswork when a caller already knows.
+   */
+  repoFullName?: string | null;
   hunks: SummaryLinkHunk[];
   /** Extra changed files (e.g. from published revisions) not in hunks. */
   changedFiles?: string[];
@@ -284,7 +317,7 @@ function linkifyAttributionText(text: string, ctx: SummaryLinkContext): string {
 
   let result = trimmed;
   result = replaceAllMatches(result, PR_OWNER_REPO_NUM_RE, (match, g1, g2) => {
-    if (!canLinkPullNumber(ctx, Number(g2))) return match;
+    if (!canLinkOwnerRepoPull(ctx, g1 ?? "", Number(g2))) return match;
     const [owner, repo] = (g1 ?? "").split("/");
     const url = pullRequestNumberUrl(ctx.prUrl, Number(g2), owner, repo);
     return url ? formatPRSummaryLink(match, url) : match;
@@ -335,7 +368,8 @@ function resolveRefURL(ref: string, ctx: SummaryLinkContext): string {
 function resolvePRRefURL(ref: string, ctx: SummaryLinkContext): string {
   const ownerRepo = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/.exec(ref);
   if (ownerRepo) {
-    if (!canLinkPullNumber(ctx, Number(ownerRepo[3]))) return "";
+    const target = `${ownerRepo[1]}/${ownerRepo[2]}`;
+    if (!canLinkOwnerRepoPull(ctx, target, Number(ownerRepo[3]))) return "";
     return (
       pullRequestNumberUrl(
         ctx.prUrl,
@@ -476,6 +510,12 @@ export function looksLikeFilePath(value: string): boolean {
   if (!v) return false;
   // Free-text notes may contain a path token; the whole string is not a path.
   if (/\s/.test(v)) return false;
+  // `owner/repo#12` has a slash but is a pull request reference, not a path.
+  // Without this, a cross-repository reference that the PR linker correctly
+  // refused fell through to here and became a blob URL under this repository —
+  // github.com/<us>/blob/<sha>/otherorg/otherrepo#57 — which is a worse lie
+  // than the wrong pull request, because it looks like a file we own.
+  if (/#\d+$/.test(v)) return false;
   if (v.includes("/")) return true;
   return FILE_EXT_RE.test(v);
 }

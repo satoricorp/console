@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  collectReferencedPrs,
   generateExternalSummary,
   type ExternalDossier,
 } from "../src/summary/external";
@@ -126,5 +127,28 @@ describe("external OSS summaries", () => {
     );
     expect(summary.content).toContain("Attribution: previous-prs PR #91");
     expect(summary.content).not.toContain("/pull/91");
+  });
+});
+
+describe("collectReferencedPrs", () => {
+  // The scan used to run over the raw unified diff, where #(\d{2,6}) matches
+  // anything: a stylesheet's hex colours arrived as "PRs referenced" and were
+  // then licensed for prior-PR citation in the summary.
+  test("does not treat CSS hex colours as pull requests", () => {
+    const body = "Tweaks the palette.";
+    const diffLikeNoise = "+  color: #1a2b3c;\n+  background: #abc123;";
+    expect(collectReferencedPrs(`${body}\n${diffLikeNoise}`, 99)).toEqual([]);
+  });
+
+  test("keeps a reference a person wrote in prose", () => {
+    expect(collectReferencedPrs("Follows on from #412, reverts #98.", 99)).toEqual([412, 98]);
+  });
+
+  test("ignores a number glued to other text", () => {
+    expect(collectReferencedPrs("see issue#412 and abc#98", 99)).toEqual([]);
+  });
+
+  test("never cites the pull request being summarised", () => {
+    expect(collectReferencedPrs("supersedes #57", 57)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import type postgres from "postgres";
 import { attachBrokerContext } from "../context/attach";
+import { emptyBrokerResult } from "../context/broker";
 import type {
   ContextBucket,
   ContextManifestEntry,
@@ -599,8 +600,18 @@ async function loadBrokerFields(
       contextBuckets: attached.contextBuckets,
       contextManifest: attached.contextManifest,
     };
-  } catch {
-    return {};
+  } catch (error) {
+    console.warn("review plan broker context failed", {
+      repo: args.repoFullName,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // Deliberately a manifest of zeros rather than `{}`. clampAttributionToManifest
+    // reads a missing manifest as "the broker is off" and keeps the model's
+    // self-reported attribution, so returning nothing here published attribution
+    // percentages for buckets that supplied nothing — a retrieval outage
+    // fabricating provenance, where a genuinely empty index clamps to zero.
+    const empty = emptyBrokerResult();
+    return { contextBuckets: empty.buckets, contextManifest: empty.manifest };
   }
 }
 
