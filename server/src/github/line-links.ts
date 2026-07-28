@@ -94,6 +94,18 @@ export function normalizePullUrl(
   return /\/pull\/\d+(?:$|[/?#])/.test(trimmed) ? trimmed : null;
 }
 
+/** The pull request number a PR URL points at, or null when it is not a PR URL. */
+export function parsePullNumberFromUrl(
+  value: string | null | undefined,
+): number | null {
+  const prUrl = normalizePullUrl(value);
+  if (!prUrl) return null;
+  const match = /\/pull\/(\d+)/.exec(prUrl);
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
 function escapeHtmlAttr(value: string): string {
   return value
     .replace(/&/g, "&amp;")

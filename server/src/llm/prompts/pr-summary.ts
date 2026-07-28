@@ -1,4 +1,5 @@
 import type { ExtractContext } from "../../summary/generate";
+import { formatDiffStatsFact } from "../../summary/diff-stats";
 import {
   formatBucketPromptSections,
   formatContextManifestLine,
@@ -36,16 +37,43 @@ Rules:
   - 🟢 = LOW (safe to skim / contained)
   - 🟡 = MEDIUM (needs a careful pass)
   - 🔴 = HIGH (risky; prioritize review)
+- Judge severity by blast radius, not by how tidy the code looks. Reserve 🟢 LOW
+  for genuinely contained changes with no cross-cutting or runtime risk.
+
+Describe only this pull request:
+- Every bullet must describe a change visible in this PR's own diff — the
+  patch excerpts, changed files, and hunks below. If the diff does not show it,
+  do not write it.
+- Context sections are background for explaining THIS diff. They are not a list
+  of things to report. Never turn a context snippet into a bullet of its own.
+- Write fewer bullets rather than padding. A two-file PR usually warrants two
+  or three bullets. Never invent a change to reach a bullet count.
+
+Blast Radius numbers:
+- Use the "Diff stats" line verbatim for file count and +X/-Y lines. It is
+  counted from the full patch and is authoritative.
+- Never count lines yourself from a patch excerpt — excerpts are truncated.
+- If no Diff stats line is given, write the file count you can verify and omit
+  the +X/-Y figure entirely rather than estimating one.
+
+Attribution:
 - Every Notable Changes bullet must include an Attribution line
 - Attribution must name a concrete source — never a bare kind alone:
   - codebase / heuristic: \`path\` or \`path:line\` from the change or Codebase context
   - agent-sessions: session id and/or \`path:line\` from hunk links
-  - previous-prs: \`PR #N\` (or owner/repo#N)
+  - previous-prs: name the source exactly as it was handed to you — a prior-PR
+    snippet's \`ref=\` value (a \`branch@sha\`), or a \`PR #N\` that literally
+    appears in the material above. Prior-PR snippets carry no pull request
+    number, so never turn one into a \`PR #N\` yourself; the bracket labels
+    [P1], [P2] are prompt labels, not PR numbers.
   - docs: doc path or title from Independent resources
+- Only cite a bucket listed with a non-zero count in "Context provided".
+  A bucket with provided=0 supplied nothing; citing it is a fabrication.
+- Buckets are frequently empty, and that is normal. Citing nothing from a
+  bucket is always an acceptable outcome — say nothing rather than reach.
 - Never use the word "brief"
-- Only cite indexed buckets that appear in "Context provided"; never name a bucket with provided=0
 - Prefer concrete files and behaviors over vague claims
-- Do not invent GitHub deep links; plain path / path:line / PR #N text is fine`;
+- Do not invent GitHub deep links; plain path / path:line text is fine`;
 
 const maxPatchCharsPerRevision = 3000;
 const maxPatchCharsTotal = 12000;
@@ -57,8 +85,17 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
     `Ref range: ${ctx.refRange ?? "unknown"}`,
   ];
 
+  if (ctx.diffStats) {
+    lines.push(formatDiffStatsFact(ctx.diffStats));
+  }
+
+  // `fileStats` is a capture-side count of files excluded from capture
+  // ({excludedFiles: N}); it says nothing about how many lines changed. Label
+  // it so it cannot be mistaken for the diff totals above.
   if (ctx.fileStats) {
-    lines.push(`File stats: ${JSON.stringify(ctx.fileStats)}`);
+    lines.push(
+      `Capture file stats (excluded-file bookkeeping, not diff totals): ${JSON.stringify(ctx.fileStats)}`,
+    );
   }
 
   if (ctx.intentCandidates.length > 0) {
@@ -124,41 +161,52 @@ export function buildPRSummaryUserPrompt(ctx: ExtractContext): string {
     }
   }
 
-  if (ctx.indexSnippets && ctx.indexSnippets.length > 0) {
-    const byBucket = new Map<ContextBucket, ContextSnippet[]>();
-    const manifest = {
-      "agent-sessions": { provided: 0, chars: 0 },
-      codebase: { provided: 0, chars: 0 },
-      "previous-prs": { provided: 0, chars: 0 },
-      docs: { provided: 0, chars: 0 },
-    } as Record<ContextBucket, ContextManifestEntry>;
-    for (const snip of ctx.indexSnippets) {
-      const bucket = (snip.bucket as ContextBucket | undefined) ?? "codebase";
-      const list = byBucket.get(bucket) ?? [];
-      list.push({
-        id: snip.id,
-        citationId: snip.id,
-        bucket,
-        sourceKind: snip.sourceKind ?? "unknown",
-        text: snip.text,
-        score: snip.score,
-        file: snip.file,
-      });
-      byBucket.set(bucket, list);
-      manifest[bucket] = {
-        provided: list.length,
-        chars: list.reduce((s, x) => s + x.text.length, 0),
-      };
-    }
-    const buckets = {
-      "agent-sessions": byBucket.get("agent-sessions") ?? [],
-      codebase: byBucket.get("codebase") ?? [],
-      "previous-prs": byBucket.get("previous-prs") ?? [],
-      docs: byBucket.get("docs") ?? [],
+  // The manifest is stated even when every bucket is empty. It is what the
+  // "only cite a non-zero bucket" rule binds to, and an all-zero manifest is
+  // the signal that no bucket may be cited at all — previously the whole block
+  // was skipped when there were no snippets, leaving that rule unanchored.
+  const byBucket = new Map<ContextBucket, ContextSnippet[]>();
+  const manifest = {
+    "agent-sessions": { provided: 0, chars: 0 },
+    codebase: { provided: 0, chars: 0 },
+    "previous-prs": { provided: 0, chars: 0 },
+    docs: { provided: 0, chars: 0 },
+  } as Record<ContextBucket, ContextManifestEntry>;
+  for (const snip of ctx.indexSnippets ?? []) {
+    const bucket = (snip.bucket as ContextBucket | undefined) ?? "codebase";
+    const list = byBucket.get(bucket) ?? [];
+    list.push({
+      id: snip.id,
+      citationId: snip.id,
+      bucket,
+      sourceKind: snip.sourceKind ?? "unknown",
+      text: snip.text,
+      score: snip.score,
+      file: snip.file,
+      ref: snip.ref,
+    });
+    byBucket.set(bucket, list);
+    manifest[bucket] = {
+      provided: list.length,
+      chars: list.reduce((s, x) => s + x.text.length, 0),
     };
-    lines.push(formatContextManifestLine(manifest));
-    lines.push(...formatBucketPromptSections(buckets));
   }
+  const buckets = {
+    "agent-sessions": byBucket.get("agent-sessions") ?? [],
+    codebase: byBucket.get("codebase") ?? [],
+    "previous-prs": byBucket.get("previous-prs") ?? [],
+    docs: byBucket.get("docs") ?? [],
+  };
+  lines.push(formatContextManifestLine(manifest));
+  const empty = (Object.keys(manifest) as ContextBucket[]).filter(
+    (bucket) => manifest[bucket].provided === 0,
+  );
+  if (empty.length > 0) {
+    lines.push(
+      `Empty buckets (supplied nothing — cite none of these, and do not write a bullet for them): ${empty.join(", ")}`,
+    );
+  }
+  lines.push(...formatBucketPromptSections(buckets));
 
   lines.push("", "Write the PR Summary now.");
   return lines.join("\n");

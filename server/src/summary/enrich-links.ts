@@ -4,8 +4,28 @@ import {
   githubPullFileDiffUrl,
   githubPullFileLineUrl,
   normalizePullUrl,
+  parsePullNumberFromUrl,
   pullRequestNumberUrl,
 } from "../github/line-links";
+
+/**
+ * Whether a `PR #N` reference may be turned into a link.
+ *
+ * Only the PR being summarized has a number this server can vouch for. Prior-PR
+ * context rows are indexed with a branch and a head SHA and no PR number at
+ * all, so any other N in a summary came from the model, not from a source.
+ *
+ * Linking one anyway is how satoricorp/gx#112 came to cite "PR #1" and "PR #2":
+ * the context snippets are labelled [P1] and [P2], the prompt asked for
+ * attributions of the form `PR #N`, and this enricher resolved the result to
+ * github.com/satoricorp/gx/pull/1 and /pull/2 — two real, unrelated pull
+ * requests that were never in the context. Leaving an unvouched reference as
+ * plain text keeps a bad citation from masquerading as a verified one.
+ */
+function canLinkPullNumber(ctx: SummaryLinkContext, number: number): boolean {
+  const current = parsePullNumberFromUrl(ctx.prUrl);
+  return current !== null && current === number;
+}
 
 export type SummaryLinkHunk = {
   file: string;
@@ -262,16 +282,18 @@ function linkifyAttributionText(text: string, ctx: SummaryLinkContext): string {
 
   let result = trimmed;
   result = replaceAllMatches(result, PR_OWNER_REPO_NUM_RE, (match, g1, g2) => {
+    if (!canLinkPullNumber(ctx, Number(g2))) return match;
     const [owner, repo] = (g1 ?? "").split("/");
     const url = pullRequestNumberUrl(ctx.prUrl, Number(g2), owner, repo);
     return url ? formatPRSummaryLink(match, url) : match;
   });
   result = replaceAllMatches(result, PR_NUMBER_RE, (match, g1) => {
+    if (!canLinkPullNumber(ctx, Number(g1))) return match;
     const url = pullRequestNumberUrl(ctx.prUrl, Number(g1));
     return url ? formatPRSummaryLink(match, url) : match;
   });
   // Only link bare #N when the whole remaining text is that ref (avoid issue noise).
-  if (/^#\d+$/.test(result)) {
+  if (/^#\d+$/.test(result) && canLinkPullNumber(ctx, Number(result.slice(1)))) {
     const url = pullRequestNumberUrl(ctx.prUrl, Number(result.slice(1)));
     if (url) return formatPRSummaryLink(result, url);
   }
@@ -311,6 +333,7 @@ function resolveRefURL(ref: string, ctx: SummaryLinkContext): string {
 function resolvePRRefURL(ref: string, ctx: SummaryLinkContext): string {
   const ownerRepo = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/.exec(ref);
   if (ownerRepo) {
+    if (!canLinkPullNumber(ctx, Number(ownerRepo[3]))) return "";
     return (
       pullRequestNumberUrl(
         ctx.prUrl,
@@ -322,6 +345,7 @@ function resolvePRRefURL(ref: string, ctx: SummaryLinkContext): string {
   }
   const prNum = /^(?:PR\s*)?#(\d+)$/i.exec(ref);
   if (prNum) {
+    if (!canLinkPullNumber(ctx, Number(prNum[1]))) return "";
     return pullRequestNumberUrl(ctx.prUrl, Number(prNum[1])) ?? "";
   }
   return "";

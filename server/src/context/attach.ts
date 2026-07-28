@@ -17,6 +17,8 @@ export type AttachedBrokerContext = {
     sourceKind?: string;
     bucket?: ContextBucket;
     file?: string;
+    /** Concrete citable identifier (prior-PR rows: `branch@sha`). */
+    ref?: string;
   }>;
   contextBuckets: Record<ContextBucket, ContextSnippet[]>;
   contextManifest: Record<ContextBucket, ContextManifestEntry>;
@@ -31,7 +33,11 @@ export async function attachBrokerContext(
     changedFiles?: string[];
     symbols?: string[];
     branch?: string;
+    /** Branch the change merges into; tells a topic branch from a trunk. */
+    baseBranch?: string;
     headSha?: string;
+    /** Other commit ids belonging to this change, so it cannot cite itself. */
+    changeCommits?: string[];
   },
 ): Promise<AttachedBrokerContext> {
   const broker = await retrieveReviewContext(db, {
@@ -42,7 +48,9 @@ export async function attachBrokerContext(
       changedFiles: args.changedFiles,
       symbols: args.symbols,
       branch: args.branch,
+      baseBranch: args.baseBranch,
       headSha: args.headSha,
+      changeCommits: args.changeCommits,
     },
   });
   return {

@@ -299,6 +299,14 @@ export async function searchIndex(args: {
     rows?: unknown[];
     results?: Array<{ rows?: unknown[] }>;
   };
+  // A fused query answers with one leg per rank_by and TurboPuffer applies
+  // `limit` per leg, so an RRF search over three legs can return up to three
+  // times what the caller asked for. That over-return is deliberately passed
+  // through: searchCodeReviewHistory searches unfiltered and narrows to its two
+  // source kinds in JavaScript, so capping here would starve it (and with it
+  // GET /v1/review-history) rather than the bucket that actually over-served.
+  // Callers that need a hard cap apply it after their own filtering — see
+  // toSnippets in the context broker.
   const rows = decoded.rows ?? decoded.results?.[0]?.rows ?? [];
   return rows.flatMap((row) => {
     if (!isRecord(row)) return [];

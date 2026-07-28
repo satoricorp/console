@@ -2,6 +2,14 @@ import type postgres from "postgres";
 import { attachBrokerContext } from "../context/attach";
 import { contextBrokerEnabled } from "../indexing/config";
 import { searchIndex } from "../indexing/turbopuffer";
+import { publishRevisions } from "../publish/revisions";
+import type { PushBundle } from "../types";
+
+type PrEventRow = {
+  id: string;
+  branch_name: string | null;
+  payload: PushBundle | null;
+};
 
 export type ReviewRule = {
   id: string;
@@ -74,8 +82,11 @@ export async function loadReviewContext(
     LIMIT 100
   `;
 
-  const [event] = await db<{ id: string }[]>`
-    SELECT id
+  // The branch and the bundle's revisions come along for the ride: without them
+  // the prior-PR bucket cannot tell this change apart from its own earlier
+  // publishes, and would serve the change its own diff back as a "previous PR".
+  const [event] = await db<PrEventRow[]>`
+    SELECT id, branch_name, payload
     FROM pr_events
     WHERE org_id = ${orgId}
       AND repo_root_path = ${input.repoRoot}
@@ -86,8 +97,8 @@ export async function loadReviewContext(
 
   const [fallbackEvent] = event
     ? [event]
-    : await db<{ id: string }[]>`
-        SELECT id
+    : await db<PrEventRow[]>`
+        SELECT id, branch_name, payload
         FROM pr_events
         WHERE org_id = ${orgId}
           AND repo_root_path = ${input.repoRoot}
@@ -130,6 +141,19 @@ export async function loadReviewContext(
 
   const collisions = collisionHints(hunkLinks);
 
+  // Capture regularly produces no hunk links at all, and the prior-PR bucket
+  // needs the changed-file list to establish relevance. The bundle's revisions
+  // always name their files, so union both rather than depend on capture.
+  const revisions = resolvedEvent?.payload
+    ? publishRevisions(resolvedEvent.payload)
+    : [];
+  const changedFiles = [
+    ...new Set([
+      ...hunkLinks.map((h) => h.file),
+      ...revisions.flatMap((revision) => revision.files ?? []),
+    ]),
+  ].filter((file) => file.trim().length > 0);
+
   let indexSnippets: IndexSnippet[] = [];
   let indexAvailable = false;
   const repoFullName = await resolveRepoFullName(db, orgId, input.repoRoot);
@@ -139,8 +163,17 @@ export async function loadReviewContext(
         const attached = await attachBrokerContext(db, {
           orgId,
           repoFullName,
-          changedFiles: hunkLinks.map((h) => h.file),
+          changedFiles,
+          branch: resolvedEvent?.branch_name ?? undefined,
+          baseBranch:
+            revisions.find((revision) => revision.base_branch_name?.trim())
+              ?.base_branch_name ??
+            resolvedEvent?.payload?.repo?.default_branch ??
+            undefined,
           headSha: input.head,
+          changeCommits: revisions
+            .map((revision) => revision.commit_id ?? "")
+            .filter((commit) => commit.trim().length > 0),
         });
         indexSnippets = attached.indexSnippets.map((s) => ({
           id: s.id,
