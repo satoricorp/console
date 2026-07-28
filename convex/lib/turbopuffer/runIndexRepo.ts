@@ -64,6 +64,8 @@ export type IndexRepoCallbacks = {
   scheduleStallWatchdog: (checkpoint: number) => Promise<void>;
   getPlan: () => Promise<IndexPlan | null>;
   savePlan: (plan: IndexPlan) => Promise<void>;
+  /** Starts the commit that landed mid-run, if one did. */
+  drainQueuedCommit: () => Promise<void>;
 };
 
 export async function runIndexRepo(
@@ -330,6 +332,11 @@ async function finalizeIndex(
     completedAt: Date.now(),
     clearIndexFiles: true,
   });
+
+  // Last, and only once the pass is finalized: a merge that arrived mid-run is
+  // started now, so a busy repository does not fall behind HEAD waiting for
+  // someone to merge again.
+  await callbacks.drainQueuedCommit();
 
   console.log(
     `[index] ${fullName}@${plan.commitId.slice(0, 7)} done · ${plan.indexFiles.length} files · ${plan.chunksIndexed} chunks · trigger=${trigger}`,

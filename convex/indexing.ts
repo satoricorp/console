@@ -320,3 +320,76 @@ export const resumeIfStalled = internalMutation({
     });
   },
 });
+
+/**
+ * Records a merge that arrived while this repository was already indexing.
+ *
+ * Not a queue: three merges during one pass leave the newest, because indexing
+ * commit C supersedes A and B. Two runs at once would be worse than a delayed
+ * one — they address the same rows and each one's stale sweep would delete the
+ * other's work.
+ *
+ * Skipping outright is the tempting alternative and is wrong: the running pass
+ * finishes at its own commit, the newer one is never indexed, and the index
+ * sits behind HEAD until someone merges again.
+ */
+export const queueCommitWhileIndexing = internalMutation({
+  args: {
+    orgId: v.string(),
+    fullName: v.string(),
+    commitId: v.string(),
+    githubAppInstallationId: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const job = await findJob(ctx, args.orgId, args.fullName);
+    if (!job) return;
+    if (job.commitId === args.commitId) return;
+
+    await ctx.db.patch(job._id, {
+      queuedCommitId: args.commitId,
+      queuedInstallationId: args.githubAppInstallationId,
+    });
+  },
+});
+
+/**
+ * Starts the commit that landed mid-run, if one did. Called once a pass has
+ * finalized, so there is never more than one indexing pass per repository.
+ */
+export const drainQueuedCommit = internalMutation({
+  args: { orgId: v.string(), fullName: v.string() },
+  handler: async (ctx, args) => {
+    const job = await findJob(ctx, args.orgId, args.fullName);
+    const queued = job?.queuedCommitId;
+    if (!job || !queued || queued === job.commitId) {
+      // Clear a queued commit that the finished pass happened to cover.
+      if (job?.queuedCommitId) {
+        await ctx.db.patch(job._id, {
+          queuedCommitId: undefined,
+          queuedInstallationId: undefined,
+        });
+      }
+      return;
+    }
+
+    await ctx.db.patch(job._id, {
+      queuedCommitId: undefined,
+      queuedInstallationId: undefined,
+      status: "pending",
+      indexFiles: undefined,
+      filesIndexed: undefined,
+      filesTotal: undefined,
+      chunksIndexed: undefined,
+      error: undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.indexingActions.indexRepo, {
+      orgId: args.orgId,
+      fullName: args.fullName,
+      githubId: job.githubId,
+      trigger: "merge" as const,
+      commitId: queued,
+      githubAppInstallationId: job.queuedInstallationId,
+    });
+  },
+});

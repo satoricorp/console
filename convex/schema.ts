@@ -174,6 +174,11 @@ export default defineSchema({
     filesSkipped: v.optional(v.number()),
     treeTruncated: v.optional(v.boolean()),
     indexLog: v.optional(v.string()),
+    // A merge that arrives while this job is already indexing. One field, not
+    // a queue: indexing commit C supersedes A and B, so only the newest is
+    // worth keeping. Drained when the running pass finalizes.
+    queuedCommitId: v.optional(v.string()),
+    queuedInstallationId: v.optional(v.number()),
     indexFiles: v.optional(
       v.array(v.object({ path: v.string(), sha: v.string() })),
     ),

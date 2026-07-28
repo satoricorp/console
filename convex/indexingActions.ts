@@ -74,6 +74,12 @@ export const indexRepo = internalAction({
           orgId: args.orgId,
           fullName: args.fullName,
         }),
+      drainQueuedCommit: async () => {
+        await ctx.runMutation(internal.indexing.drainQueuedCommit, {
+          orgId: args.orgId,
+          fullName: args.fullName,
+        });
+      },
       savePlan: async (plan) => {
         await ctx.runMutation(internal.indexing.saveIndexPlan, {
           orgId: args.orgId,
@@ -174,6 +180,19 @@ export const handleGithubWebhook = internalAction({
       fullName,
     });
     if (!job) return;
+
+    // A pass is already running. Record the newer commit rather than starting
+    // a second one against the same rows, and let the running pass pick it up
+    // when it finalizes.
+    if (job.status === "indexing") {
+      await ctx.runMutation(internal.indexing.queueCommitWhileIndexing, {
+        orgId: resolvedOrgId,
+        fullName,
+        commitId: body.after,
+        githubAppInstallationId: installationId,
+      });
+      return;
+    }
 
     await ctx.runMutation(internal.indexing.scheduleIndexRepo, {
       orgId: resolvedOrgId,
