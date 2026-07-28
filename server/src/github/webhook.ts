@@ -264,6 +264,33 @@ async function handleInstallationRepositories(
   });
 }
 
+// withUnindexedNotice says when a summary was written without the repository's
+// source, and where to fix that.
+//
+// A summary with no indexed code reads exactly like one with it — same shape,
+// same confidence, just thinner and blind to anything the diff does not show.
+// That is the failure worth surfacing: the reader cannot tell, and neither can
+// we, unless it is stated.
+//
+// It points at the website rather than at `gx index`, which is a hidden
+// maintenance command that fills one developer's namespace from one
+// developer's checkout. The index a summary reads is the one GX Cloud
+// maintains from the GitHub App on merge, and that is connected on the site.
+export function withUnindexedNotice(content: string, sawIndexedCode: boolean): string {
+  if (sawIndexedCode) {
+    return content;
+  }
+  return (
+    content.trimEnd() +
+    "\n\n> This summary was written without " +
+    UNINDEXED_NOTICE
+  );
+}
+
+const UNINDEXED_NOTICE =
+  "this repository's source indexed, so it could only see the diff. " +
+  "Connect the repository at https://gx.run/repositories to have GX Cloud index it.";
+
 async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const action = payload.action ?? "";
   if (action === "closed") {
@@ -343,7 +370,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
 
   let bodyUpdated = false;
   let postedOk = false;
-  let postedBody = result.content;
+  let postedBody = withUnindexedNotice(result.content, result.sawIndexedCode);
   try {
     const token = await getInstallationAccessToken(installationId);
     const posted = await updatePullRequestWithSummary(
