@@ -33,7 +33,7 @@ import type * as lib_trialDays from "../lib/trialDays.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
-import type * as lib_turbopuffer_fetchGithubBlobs from "../lib/turbopuffer/fetchGithubBlobs.js";
+import type * as lib_turbopuffer_fetchGithubTarball from "../lib/turbopuffer/fetchGithubTarball.js";
 import type * as lib_turbopuffer_fetchGithubTree from "../lib/turbopuffer/fetchGithubTree.js";
 import type * as lib_turbopuffer_getGithubAppToken from "../lib/turbopuffer/getGithubAppToken.js";
 import type * as lib_turbopuffer_indexLog from "../lib/turbopuffer/indexLog.js";
@@ -88,7 +88,7 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;
-  "lib/turbopuffer/fetchGithubBlobs": typeof lib_turbopuffer_fetchGithubBlobs;
+  "lib/turbopuffer/fetchGithubTarball": typeof lib_turbopuffer_fetchGithubTarball;
   "lib/turbopuffer/fetchGithubTree": typeof lib_turbopuffer_fetchGithubTree;
   "lib/turbopuffer/getGithubAppToken": typeof lib_turbopuffer_getGithubAppToken;
   "lib/turbopuffer/indexLog": typeof lib_turbopuffer_indexLog;
