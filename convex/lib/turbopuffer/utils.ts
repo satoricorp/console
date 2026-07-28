@@ -85,7 +85,19 @@ export const SKIP_EXTENSIONS = new Set([
 export const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_FILES = 5000;
 export const MAX_CHUNKS_PER_FILE = 20;
-export const FILE_BATCH = 50;
+/**
+ * Files per action invocation.
+ *
+ * 50 was sized for the blob endpoint, where each file cost its own request and
+ * a bigger batch meant more of them before the action's ten-minute ceiling.
+ * With one tarball request per batch, fetching no longer scales with the batch
+ * and the limit is embedding time, so a larger batch is strictly fewer GitHub
+ * requests: 422 files went from 9 batches to 3.
+ *
+ * Not larger than this, because the batch is also the checkpoint interval — a
+ * pass that dies redoes at most one batch.
+ */
+export const FILE_BATCH = 150;
 
 const PRIORITY_PREFIXES = [
   "src/",
