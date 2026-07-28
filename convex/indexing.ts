@@ -364,6 +364,7 @@ export const queueCommitWhileIndexing = internalMutation({
     await ctx.db.patch(job._id, {
       queuedCommitId: args.commitId,
       queuedInstallationId: args.githubAppInstallationId,
+      queuedAt: Date.now(),
     });
   },
 });
@@ -377,12 +378,22 @@ export const drainQueuedCommit = internalMutation({
   handler: async (ctx, args) => {
     const job = await findJob(ctx, args.orgId, args.fullName);
     const queued = job?.queuedCommitId;
-    if (!job || !queued || queued === job.commitId) {
-      // Clear a queued commit that the finished pass happened to cover.
+
+    // Stale unless it arrived while the run that just ended was going. A
+    // queued commit left behind by an earlier failed pass is an ancestor of
+    // what was just indexed, and starting it would walk the index backwards to
+    // a commit the repository has already moved past.
+    const arrivedDuringThisRun =
+      typeof job?.queuedAt === "number" &&
+      typeof job?.startedAt === "number" &&
+      job.queuedAt >= job.startedAt;
+
+    if (!job || !queued || queued === job.commitId || !arrivedDuringThisRun) {
       if (job?.queuedCommitId) {
         await ctx.db.patch(job._id, {
           queuedCommitId: undefined,
           queuedInstallationId: undefined,
+          queuedAt: undefined,
         });
       }
       return;
@@ -391,6 +402,7 @@ export const drainQueuedCommit = internalMutation({
     await ctx.db.patch(job._id, {
       queuedCommitId: undefined,
       queuedInstallationId: undefined,
+      queuedAt: undefined,
       status: "pending",
       indexFiles: undefined,
       filesIndexed: undefined,
