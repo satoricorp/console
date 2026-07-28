@@ -120,12 +120,16 @@ http.route({
     }
 
     const payload = await request.text();
+    // Set by the GX Cloud server when it forwards a delivery: Postgres owns
+    // installation -> org, and re-deriving it here would let the two disagree.
+    const orgId = request.headers.get("x-gx-org-id")?.trim() || undefined;
 
     try {
       await ctx.runAction(internal.indexingActions.handleGithubWebhook, {
         payload,
         signature,
         event,
+        orgId,
       });
     } catch (error) {
       console.error("GitHub webhook failed", error);

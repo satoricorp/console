@@ -101,8 +101,11 @@ export const insertConnectedRepo = internalMutation({
     userId: v.string(),
     repo: repoInput,
     accessVerifiedAt: v.number(),
+    // Which installation this was connected through, so the org that owns the
+    // index namespace can be resolved the same way the webhook path does.
+    installationId: v.optional(v.number()),
   },
-  handler: async (ctx, { userId, repo, accessVerifiedAt }) => {
+  handler: async (ctx, { userId, repo, accessVerifiedAt, installationId }) => {
     const existing = await ctx.db
       .query("connectedRepos")
       .withIndex("by_userId_fullName", (q) =>
@@ -111,7 +114,10 @@ export const insertConnectedRepo = internalMutation({
       .unique();
 
     if (existing) {
-      await ctx.db.patch(existing._id, { accessVerifiedAt });
+      await ctx.db.patch(existing._id, {
+        accessVerifiedAt,
+        ...(installationId === undefined ? {} : { installationId }),
+      });
       await markOnboardingCompleted(ctx, userId, accessVerifiedAt);
       return { inserted: false, id: existing._id };
     }
@@ -126,6 +132,7 @@ export const insertConnectedRepo = internalMutation({
       defaultBranch: repo.defaultBranch,
       connectedAt: accessVerifiedAt,
       accessVerifiedAt,
+      installationId,
     });
 
     await markOnboardingCompleted(ctx, userId, accessVerifiedAt);

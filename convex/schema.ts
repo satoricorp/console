@@ -61,6 +61,10 @@ export default defineSchema({
     defaultBranch: v.optional(v.string()),
     connectedAt: v.number(),
     accessVerifiedAt: v.optional(v.number()),
+    // Which installation this repository was connected through, so the connect
+    // path can resolve an org the same way the webhook path does. Optional
+    // because rows predating org identity have no way to know.
+    installationId: v.optional(v.number()),
   })
     .index("by_userId", ["userId"])
     .index("by_userId_fullName", ["userId", "fullName"])
@@ -129,7 +133,32 @@ export default defineSchema({
     .index("by_repoFullName", ["repoFullName"])
     .index("by_userId_createdAt", ["userId", "createdAt"]),
 
+  // orgInstallations maps a GitHub App installation to the GX org that owns it.
+  //
+  // Postgres is the source of truth: the server resolves this from
+  // github_app_installations when a delivery arrives and stamps it on the
+  // forward. This table is the projection Convex needs, because the namespace
+  // an index writes is gx-{orgId}-{repo} and Convex had no notion of an org at
+  // all — every repository was indexed into one global namespace named only
+  // after owner/repo, which two orgs with access to the same repository would
+  // share and overwrite.
+  //
+  // It is also what lets the console answer "what has my org already indexed"
+  // rather than only "what have I personally connected".
+  orgInstallations: defineTable({
+    installationId: v.number(),
+    orgId: v.string(),
+    accountLogin: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_installationId", ["installationId"])
+    .index("by_orgId", ["orgId"]),
+
   repoIndexJobs: defineTable({
+    // orgId is optional only so the existing rows validate; every write sets
+    // it. Lookups go through by_org_fullName, because fullName stopped being
+    // unique the moment two orgs could each index the same repository.
+    orgId: v.optional(v.string()),
     fullName: v.string(),
     githubId: v.number(),
     owner: v.string(),
@@ -153,6 +182,8 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_fullName", ["fullName"])
+    .index("by_org_fullName", ["orgId", "fullName"])
+    .index("by_orgId", ["orgId"])
     .index("by_status", ["status"]),
 
   // OSS "watch" rail: operator-curated public repos that GX summarizes for free,

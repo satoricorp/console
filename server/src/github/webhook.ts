@@ -20,6 +20,16 @@ import { updatePullRequestWithSummary } from "./pr-body";
 
 export const githubWebhookRoutes = new Hono();
 
+// Deliveries the Convex indexer needs. push is what re-indexes a repository on
+// merge; the installation pair is how Convex learns which org owns an
+// installation, since it has no org table of its own and the namespace it
+// writes is gx-{orgId}-{repo}.
+const CONVEX_FORWARDED_EVENTS = new Set([
+  "push",
+  "installation",
+  "installation_repositories",
+]);
+
 type GitHubAccount = {
   id?: number;
   login?: string;
@@ -137,10 +147,18 @@ githubWebhookRoutes.post("/github/webhook", async (c) => {
         break;
       case "push":
         await handlePush(db, body);
-        await forwardPushToConvex(payload, signature);
         break;
       default:
         return c.json({ ok: true, ignored: true, event, delivery });
+    }
+
+    if (CONVEX_FORWARDED_EVENTS.has(event)) {
+      const installationId = body.installation?.id;
+      const orgId =
+        typeof installationId === "number"
+          ? await resolveOrgIdForInstallation(db, installationId)
+          : null;
+      await forwardToConvex(event, payload, signature, orgId);
     }
 
     capture(
@@ -638,7 +656,7 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
   });
 }
 
-// forwardPushToConvex hands the delivery on to the Convex indexer.
+// forwardToConvex hands the delivery on to the Convex indexer.
 //
 // A GitHub App has exactly one webhook URL, and this server is it. The only
 // thing that indexes repository source lives in Convex, behind
@@ -646,11 +664,20 @@ async function handleIssueComment(db: postgres.Sql, payload: WebhookPayload) {
 // nothing: `handlePush` below writes push metadata and hunk links, never file
 // contents. The result was that no repository was ever re-indexed on merge.
 //
+// installation and installation_repositories go with it because Convex has no
+// org table of its own: it learns which org owns an installation from these
+// deliveries, and a push repairs the mapping if one was ever missed.
+//
 // The delivery is forwarded verbatim — same bytes, same signature header — so
 // Convex verifies exactly what GitHub signed rather than trusting this server.
 // A failure here must not fail the delivery back to GitHub: the metadata work
 // has already succeeded, and GitHub's retry would repeat it.
-async function forwardPushToConvex(payload: string, signature: string | undefined) {
+async function forwardToConvex(
+  event: string,
+  payload: string,
+  signature: string | undefined,
+  orgId: string | null,
+) {
   const base = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/, "");
   if (!base || !signature) {
     return;
@@ -660,20 +687,24 @@ async function forwardPushToConvex(payload: string, signature: string | undefine
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-GitHub-Event": "push",
+        "X-GitHub-Event": event,
         "X-Hub-Signature-256": signature,
+        // Postgres owns installation -> org. Convex indexes into
+        // gx-{orgId}-{repo}, and deriving the org there independently is how
+        // the two would come to disagree about who owns an installation.
+        ...(orgId ? { "X-GX-Org-Id": orgId } : {}),
       },
       body: payload,
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) {
-      console.error("forward push to convex failed", {
+      console.error("forward to convex failed", { event,
         status: response.status,
         body: (await response.text().catch(() => "")).slice(0, 500),
       });
     }
   } catch (error) {
-    console.error("forward push to convex threw", error);
+    console.error("forward to convex threw", { event, error });
   }
 }
 

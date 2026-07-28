@@ -41,6 +41,42 @@ async function fetchUserInstallations(accessToken: string) {
   return response;
 }
 
+/**
+ * The GX App installation covering a repository owner, as seen by this user.
+ *
+ * The connect path knows a user and a repository but never sees a webhook, so
+ * this is how it reaches the same installation id the webhook path carries —
+ * and through it, the org that owns the index namespace. Matching on the
+ * account login matters: a user commonly has both a personal installation and
+ * one on their company org, and picking the wrong one would file the
+ * repository under the wrong org.
+ */
+export async function installationIdForOwner(
+  accessToken: string,
+  owner: string,
+): Promise<number | null> {
+  const appId = githubAppId();
+  if (appId === null) return null;
+
+  const response = await fetchUserInstallations(accessToken);
+  if (!response.ok) return null;
+
+  const body = (await response.json()) as GithubInstallationsResponse;
+  const ours = (body.installations ?? []).filter(
+    (installation) => installation.app_id === appId,
+  );
+  const wanted = owner.trim().toLowerCase();
+  const match = ours.find(
+    (installation) =>
+      (installation as { account?: { login?: string } }).account?.login
+        ?.trim()
+        .toLowerCase() === wanted,
+  );
+  const chosen = match ?? (ours.length === 1 ? ours[0] : undefined);
+  const id = (chosen as { id?: number } | undefined)?.id;
+  return typeof id === "number" ? id : null;
+}
+
 export const getGithubAppInstallStatus = action({
   args: {},
   handler: async (ctx) => {

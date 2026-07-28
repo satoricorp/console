@@ -43,6 +43,7 @@ import type * as lib_turbopuffer_runIndexRepo from "../lib/turbopuffer/runIndexR
 import type * as lib_turbopuffer_turbopufferClient from "../lib/turbopuffer/turbopufferClient.js";
 import type * as lib_turbopuffer_upsertDocuments from "../lib/turbopuffer/upsertDocuments.js";
 import type * as lib_turbopuffer_utils from "../lib/turbopuffer/utils.js";
+import type * as orgs from "../orgs.js";
 import type * as prChatActions from "../prChatActions.js";
 import type * as profile from "../profile.js";
 import type * as repoActions from "../repoActions.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/turbopufferClient": typeof lib_turbopuffer_turbopufferClient;
   "lib/turbopuffer/upsertDocuments": typeof lib_turbopuffer_upsertDocuments;
   "lib/turbopuffer/utils": typeof lib_turbopuffer_utils;
+  orgs: typeof orgs;
   prChatActions: typeof prChatActions;
   profile: typeof profile;
   repoActions: typeof repoActions;
