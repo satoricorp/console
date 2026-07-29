@@ -14,7 +14,15 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { signOutToHome } from "@/lib/auth-client";
-import { DISCORD_URL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
+import {
+  DISCORD_URL,
+  SUPPORT_EMAIL_URL,
+  withOnboardingParam,
+} from "@/lib/site-links";
+
+// Force param: /download is an onboarding funnel path, and the gate
+// bounces completed users off it unless the replay param is present.
+const DOWNLOAD_PATH = withOnboardingParam("/download", true);
 
 const commandItemClass =
   "justify-between gap-4 text-zinc-100 data-[selected=true]:bg-zinc-900 data-[selected=true]:text-white";
@@ -102,7 +110,7 @@ export function AppCommandPalette() {
       const key = event.key.toLowerCase();
       if (key === "d") {
         event.preventDefault();
-        runCommand("/download");
+        runCommand(DOWNLOAD_PATH);
       }
       if (key === "r") {
         event.preventDefault();
@@ -187,7 +195,7 @@ export function AppCommandPalette() {
               <CommandGroup heading="Setup" className="text-zinc-50">
                 <CommandItem
                   value="download gx"
-                  onSelect={() => runCommand("/download")}
+                  onSelect={() => runCommand(DOWNLOAD_PATH)}
                   className={commandItemClass}
                 >
                   <span>Download</span>
