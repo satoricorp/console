@@ -64,6 +64,13 @@ export type PublishArtifactIndexInput = {
   branchName: string;
   headSha: string;
   payload: PushBundle;
+  /**
+   * Transcript text per session id, loaded from sessions_raw by the publish
+   * route. The bundle itself carries only session metadata — the transcript
+   * travels through POST /v1/sessions — so without this map the session
+   * chunks have no content to embed.
+   */
+  sessionTexts?: Record<string, { tool?: string; content: string }>;
 };
 
 export type CodeReviewHistoryIndexInput = {
@@ -717,7 +724,14 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
     if (!sessionId && !command && requests.length === 0) {
       return;
     }
-    const text = limitBytes(
+    // The bundle's session entries are metadata; the transcript itself arrives
+    // through POST /v1/sessions into sessions_raw (the proxy-era requests[]
+    // stopped being written when capture went transcript-based). These chunks
+    // used to embed only the metadata card below, so the agent-sessions bucket
+    // could never answer "why was this written this way" — retrieval returned
+    // a header with a request COUNT and nothing a model could reason about.
+    const raw = sessionId ? input.sessionTexts?.[sessionId] : undefined;
+    const header = limitBytes(
       [
         "GX published session context.",
         `Repo: ${input.repoFullName}`,
@@ -725,30 +739,106 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
         `Head: ${input.headSha}`,
         sessionId ? `Session: ${sessionId}` : "",
         command ? `Command: ${command}` : "",
+        raw?.tool ? `Tool: ${raw.tool}` : "",
         cwd ? `Cwd: ${cwd}` : "",
-        `Requests: ${requests.length}`,
       ]
         .filter(Boolean)
         .join("\n"),
-      maxChunkBytes,
+      maxHeaderBytes,
     );
-    chunks.push(
-      chunk("published-session", [input.orgId, input.eventId, sessionId, String(index)], text, {
-        org_id: input.orgId,
-        repo_full_name: input.repoFullName,
-        branch_name: input.branchName,
-        source_kind: "published_session_context",
-        file: "",
-        session_id: sessionId,
-        head_sha: input.headSha,
-        indexed_reason: "gx_pr_artifact",
-        event_id: input.eventId,
-        text,
-      }),
-    );
+
+    const pushSessionChunk = (text: string, part: number) => {
+      chunks.push(
+        chunk(
+          "published-session",
+          [input.orgId, input.eventId, sessionId, String(index), String(part)],
+          text,
+          {
+            org_id: input.orgId,
+            repo_full_name: input.repoFullName,
+            branch_name: input.branchName,
+            source_kind: "published_session_context",
+            file: "",
+            session_id: sessionId,
+            head_sha: input.headSha,
+            indexed_reason: "gx_pr_artifact",
+            event_id: input.eventId,
+            text,
+          },
+        ),
+      );
+    };
+
+    if (!raw?.content.trim()) {
+      pushSessionChunk(header, 0);
+      return;
+    }
+
+    const budget = maxChunkBytes - Buffer.byteLength(header, "utf8") - 64;
+    const windows = splitTextIntoWindows(raw.content, budget);
+    const kept = windows.slice(0, maxSessionPartsPerSession);
+    kept.forEach((window, part) => {
+      const partLabel =
+        windows.length > kept.length && part === kept.length - 1
+          ? `Transcript part ${part + 1}/${windows.length} (indexing capped at ${maxSessionPartsPerSession} parts)`
+          : `Transcript part ${part + 1}/${windows.length}`;
+      pushSessionChunk(
+        limitBytes([header, partLabel, "", window].join("\n"), maxChunkBytes),
+        part,
+      );
+    });
   });
 
   return chunks;
+}
+
+/**
+ * Ceiling on transcript chunks per session. A 1 MB transcript at the ~5 KB
+ * chunk budget would otherwise emit ~200 chunks per session; the head of a
+ * session (the ask, the plan, the first decisions) carries most of the
+ * retrievable signal, so the cap keeps cost bounded and the last kept chunk
+ * says the transcript continued.
+ */
+const maxSessionPartsPerSession = 12;
+
+/**
+ * Split plain text into byte-bounded windows on line boundaries. A line longer
+ * than the budget is hard-split rather than dropped.
+ */
+export function splitTextIntoWindows(text: string, maxBytes: number): string[] {
+  const budget = Math.max(maxBytes, 512);
+  const windows: string[] = [];
+  let current = "";
+  let currentBytes = 0;
+  const push = () => {
+    const trimmed = current.trim();
+    if (trimmed) windows.push(trimmed);
+    current = "";
+    currentBytes = 0;
+  };
+  for (const line of text.split("\n")) {
+    let piece = line;
+    let pieceBytes = Buffer.byteLength(piece, "utf8");
+    while (pieceBytes > budget) {
+      push();
+      // Hard-split an oversized line: back the character count off until the
+      // encoded head fits, so a multi-byte code point is never cut.
+      let take = piece.length;
+      while (take > 1 && Buffer.byteLength(piece.slice(0, take), "utf8") > budget) {
+        take = Math.max(1, Math.floor(take * 0.9));
+      }
+      windows.push(piece.slice(0, take).trim());
+      piece = piece.slice(take);
+      pieceBytes = Buffer.byteLength(piece, "utf8");
+    }
+    if (currentBytes + pieceBytes + 1 > budget) {
+      push();
+    }
+    current += (current ? "\n" : "") + piece;
+    currentBytes += pieceBytes + 1;
+  }
+  push();
+  return windows;
 }
 
 /**

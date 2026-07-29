@@ -418,7 +418,7 @@ function publishedRevisionsFromPayload(
   }));
 }
 
-function publishedSessionsFromPayload(
+export function publishedSessionsFromPayload(
   payload: PrEventPayload,
 ): PublishedSessionRow[] {
   const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
@@ -432,12 +432,21 @@ function publishedSessionsFromPayload(
       (typeof session.cwd === "string" && session.cwd) ||
       (typeof session.repo_root === "string" && session.repo_root) ||
       null;
+    const requests = Array.isArray(session.requests) ? session.requests : [];
     return [{
       sessionId: typeof session.id === "string" ? session.id : "",
       command,
       cwd,
-      requestCount: Array.isArray(session.requests) ? session.requests.length : 0,
-      responseCount: 0,
+      requestCount: requests.length,
+      // Counted, not hardcoded: a session shown to the model with N requests
+      // and 0 responses reads as a session where the agent never answered.
+      responseCount: requests.reduce((total: number, request) => {
+        const responses =
+          request && typeof request === "object" && Array.isArray((request as { responses?: unknown }).responses)
+            ? (request as { responses: unknown[] }).responses.length
+            : 0;
+        return total + responses;
+      }, 0),
     }];
   });
 }

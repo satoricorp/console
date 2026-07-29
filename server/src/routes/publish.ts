@@ -25,6 +25,46 @@ import type { PublishRegistration, PushBundle } from "../types";
 
 type SqlExecutor = postgres.Sql | postgres.TransactionSql;
 
+/**
+ * Latest transcript text per session named in the bundle, from sessions_raw.
+ *
+ * The pre-push hook uploads transcripts through POST /v1/sessions before the
+ * publish call, so by the time the artifact is indexed the content is already
+ * here; the bundle itself only names the sessions. Latest row per session:
+ * a session can be re-captured on a re-push and the newest capture is the one
+ * that matches the published head.
+ */
+export async function loadPublishedSessionTexts(
+  db: SqlExecutor,
+  orgId: string,
+  payload: PushBundle,
+): Promise<Record<string, { tool?: string; content: string }>> {
+  const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+  const ids = [
+    ...new Set(
+      sessions.flatMap((session) =>
+        session && typeof session === "object" && typeof (session as { id?: unknown }).id === "string"
+          ? [(session as { id: string }).id]
+          : [],
+      ),
+    ),
+  ];
+  if (ids.length === 0) {
+    return {};
+  }
+  const rows = await db<Array<{ session_id: string; tool: string | null; content: string }>>`
+    SELECT DISTINCT ON (session_id) session_id, tool, content
+    FROM sessions_raw
+    WHERE org_id = ${orgId} AND session_id = ANY(${ids})
+    ORDER BY session_id, captured_at_ms DESC
+  `;
+  const out: Record<string, { tool?: string; content: string }> = {};
+  for (const row of rows) {
+    out[row.session_id] = { tool: row.tool ?? undefined, content: row.content };
+  }
+  return out;
+}
+
 type BookmarkRow = {
   id: string;
   user_id: string;
@@ -151,6 +191,10 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       branchName: result.bookmark.branch_name,
       headSha: payload.push.head_commit_id,
       payload,
+      // The bundle carries session metadata only; the transcripts arrived
+      // separately through POST /v1/sessions. Loading them here is what makes
+      // the indexed session chunks carry content instead of a header card.
+      sessionTexts: await loadPublishedSessionTexts(db, orgId, payload),
     });
     if (indexResult.status === "failed") {
       console.info("GX artifact indexing failed", {
