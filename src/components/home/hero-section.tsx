@@ -66,8 +66,8 @@ export function HeroSection() {
               </h1>
               <p className="mt-4 text-pretty text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
                 Join data from your coding sessions with your code to improve
-                code review and capture your teams knowledge with a single
-                command: gx commit.
+                code review and capture your teams knowledge. Set up once with
+                a single command — gx init — then keep using plain Git.
               </p>
             </div>
 
