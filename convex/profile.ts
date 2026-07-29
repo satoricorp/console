@@ -50,13 +50,34 @@ export const getMyProfile = query({
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
+    // Resolve jobs via the repo's installation → by_org_fullName when we can.
+    // fullName stopped being unique when jobs became per-org, so a bare
+    // by_fullName unique() throws the moment two orgs index one repository —
+    // taking the whole profile down rather than one row (same fix as
+    // repos.getMyConnectedRepos).
     const jobsByFullName = new Map<string, Doc<"repoIndexJobs">>();
-    for (const fullName of repos.map((repo) => repo.fullName)) {
-      const job = await ctx.db
-        .query("repoIndexJobs")
-        .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-        .unique();
-      if (job) jobsByFullName.set(fullName, job);
+    for (const repo of repos) {
+      const installation =
+        typeof repo.installationId === "number"
+          ? await ctx.db
+              .query("orgInstallations")
+              .withIndex("by_installationId", (q) =>
+                q.eq("installationId", repo.installationId as number),
+              )
+              .unique()
+          : null;
+      const job = installation
+        ? await ctx.db
+            .query("repoIndexJobs")
+            .withIndex("by_org_fullName", (q) =>
+              q.eq("orgId", installation.orgId).eq("fullName", repo.fullName),
+            )
+            .unique()
+        : await ctx.db
+            .query("repoIndexJobs")
+            .withIndex("by_fullName", (q) => q.eq("fullName", repo.fullName))
+            .first();
+      if (job) jobsByFullName.set(repo.fullName, job);
     }
 
     return {
