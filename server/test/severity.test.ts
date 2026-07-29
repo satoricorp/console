@@ -3,12 +3,17 @@ import {
   detectBlastRadiusLevel,
   enrichSeverityDots,
   SEVERITY_DOT,
+  SEVERITY_VERDICT,
 } from "../src/summary/severity";
 
-function sample(level: "LOW" | "MEDIUM" | "HIGH", withDots = false): string {
+function sample(
+  level: "LOW" | "MEDIUM" | "HIGH",
+  withDots = false,
+  label: string = SEVERITY_VERDICT[level],
+): string {
   const dot = withDots ? `${SEVERITY_DOT[level]} ` : "";
   return [
-    `> ${withDots ? `${SEVERITY_DOT[level]} ` : ""}👀 **Quick scan** — triage note`,
+    `> ${withDots ? `${SEVERITY_DOT[level]} ` : ""}👀 **${label}** — triage note`,
     "",
     "## Blast Radius",
     "",
@@ -40,13 +45,13 @@ describe("enrichSeverityDots", () => {
 
   test("adds yellow dots for MEDIUM", () => {
     const out = enrichSeverityDots(sample("MEDIUM"));
-    expect(out).toContain(`> ${SEVERITY_DOT.MEDIUM} 👀 **Quick scan**`);
+    expect(out).toContain(`> ${SEVERITY_DOT.MEDIUM} 👀 **Careful pass**`);
     expect(out).toContain(`${SEVERITY_DOT.MEDIUM} MEDIUM (2 file(s)`);
   });
 
   test("adds red dots for HIGH", () => {
     const out = enrichSeverityDots(sample("HIGH"));
-    expect(out).toContain(`> ${SEVERITY_DOT.HIGH} 👀 **Quick scan**`);
+    expect(out).toContain(`> ${SEVERITY_DOT.HIGH} 👀 **Deep review**`);
     expect(out).toContain(`${SEVERITY_DOT.HIGH} HIGH (2 file(s)`);
   });
 
@@ -61,9 +66,21 @@ describe("enrichSeverityDots", () => {
       `${SEVERITY_DOT.LOW} HIGH (2 file(s)`,
     );
     const out = enrichSeverityDots(withWrongLevelDot);
-    expect(out).toContain(`> ${SEVERITY_DOT.HIGH} 👀 **Quick scan**`);
+    expect(out).toContain(`> ${SEVERITY_DOT.HIGH} 👀 **Deep review**`);
     expect(out).toContain(`${SEVERITY_DOT.HIGH} HIGH (2 file(s)`);
     expect(out).not.toContain(SEVERITY_DOT.LOW);
+  });
+
+  test("corrects a verdict label that disagrees with the level", () => {
+    // "Quick scan" next to a red dot reads as permission to skim — the label
+    // must carry the verdict, not just the color.
+    const out = enrichSeverityDots(sample("HIGH", false, "Quick scan"));
+    expect(out).toContain(`> ${SEVERITY_DOT.HIGH} 👀 **Deep review**`);
+    expect(out).not.toMatch(/quick\s+scan/i);
+
+    const down = enrichSeverityDots(sample("LOW", false, "Deep review"));
+    expect(down).toContain(`> ${SEVERITY_DOT.LOW} 👀 **Quick scan**`);
+    expect(down).not.toMatch(/deep\s+review/i);
   });
 
   test("is idempotent", () => {

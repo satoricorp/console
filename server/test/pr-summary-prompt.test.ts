@@ -125,8 +125,13 @@ describe("PR summary prompt: severity", () => {
     expect(PR_SUMMARY_SYSTEM_PROMPT).toContain("🟡 = MEDIUM");
     expect(PR_SUMMARY_SYSTEM_PROMPT).toContain("🔴 = HIGH");
     expect(PR_SUMMARY_SYSTEM_PROMPT).toMatch(
-      /same color on Quick scan and Blast Radius level/i,
+      /same color on the verdict line and Blast Radius level/i,
     );
+    // Each level carries its own verdict label; "Quick scan" on a 🔴 summary
+    // would read as permission to skim.
+    expect(PR_SUMMARY_SYSTEM_PROMPT).toContain("label **Quick scan**");
+    expect(PR_SUMMARY_SYSTEM_PROMPT).toContain("label **Careful pass**");
+    expect(PR_SUMMARY_SYSTEM_PROMPT).toContain("label **Deep review**");
   });
 
   test("system prompt tells the model not to default to LOW", () => {
