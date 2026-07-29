@@ -6,8 +6,7 @@ import {
   getInstallationAccessToken,
   resolveOrgIdForInstallation,
 } from "../github/app";
-import { updatePullRequestWithSummary } from "../github/pr-body";
-import { withUnindexedNotice } from "../github/webhook";
+import { updatePullRequestWithSummary, withUnindexedNotice } from "../github/pr-body";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";

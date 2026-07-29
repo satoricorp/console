@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { withUnindexedNotice } from "../src/github/webhook";
+import { withUnindexedNotice } from "../src/github/pr-body";
 
 /**
  * A summary written without the repository's source reads exactly like one
