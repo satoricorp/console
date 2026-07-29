@@ -7,7 +7,7 @@ import {
   namespaceForOrgRepo,
   reviewKnowledgeNamespace,
 } from "../indexing/config";
-import { fetchNamespaceMetadata, searchIndex } from "../indexing/turbopuffer";
+import { fetchNamespaceMetadata, searchIndex } from "../indexing/search";
 
 /**
  * POST /v1/review/search — retrieval for `gx review`, gated through GX auth.
