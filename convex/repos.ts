@@ -194,25 +194,6 @@ async function markOnboardingCompleted(
   });
 }
 
-export const revokeRepoAccess = internalMutation({
-  args: {
-    userId: v.string(),
-    fullName: v.string(),
-  },
-  handler: async (ctx, { userId, fullName }) => {
-    const existing = await ctx.db
-      .query("connectedRepos")
-      .withIndex("by_userId_fullName", (q) =>
-        q.eq("userId", userId).eq("fullName", fullName),
-      )
-      .unique();
-
-    if (existing) {
-      await ctx.db.delete(existing._id);
-    }
-  },
-});
-
 export const touchRepoAccessVerified = internalMutation({
   args: {
     userId: v.string(),

@@ -48,25 +48,3 @@ export const getOrgForInstallation = internalQuery({
   },
 });
 
-/**
- * The org a connected repository belongs to, resolved through the installation
- * it was connected under. Used by the console path, which knows a user and a
- * repository but never sees a webhook.
- */
-export const getOrgForConnectedRepo = internalQuery({
-  args: { fullName: v.string() },
-  handler: async (ctx, { fullName }) => {
-    const repo = await ctx.db
-      .query("connectedRepos")
-      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
-      .first();
-    if (typeof repo?.installationId !== "number") {
-      return null;
-    }
-    const row = await ctx.db
-      .query("orgInstallations")
-      .withIndex("by_installationId", (q) => q.eq("installationId", repo.installationId as number))
-      .unique();
-    return row?.orgId ?? null;
-  },
-});
