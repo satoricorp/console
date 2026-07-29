@@ -1,16 +1,5 @@
 import { v } from "convex/values";
-import {
-  internalMutation,
-  internalQuery,
-  query,
-} from "./_generated/server";
-import { authComponent } from "./auth";
-import {
-  stripeCustomerDashboardUrl,
-  stripeSubscriptionDashboardUrl,
-} from "./stripeUrls";
-
-const ACTIVE_STATUSES = new Set(["active", "trialing"]);
+import { internalMutation, internalQuery } from "./_generated/server";
 
 export const getCustomerByUserId = internalQuery({
   args: { userId: v.string() },
@@ -141,17 +130,6 @@ export const upsertSubscription = internalMutation({
   },
 });
 
-export const getSubscriptionByUserId = internalQuery({
-  args: { userId: v.string() },
-  handler: async (ctx, { userId }) => {
-    return await ctx.db
-      .query("subscriptions")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .order("desc")
-      .first();
-  },
-});
-
 export const deleteSubscription = internalMutation({
   args: { stripeSubscriptionId: v.string() },
   handler: async (ctx, { stripeSubscriptionId }) => {
@@ -165,96 +143,5 @@ export const deleteSubscription = internalMutation({
     if (existing) {
       await ctx.db.delete(existing._id);
     }
-  },
-});
-
-export const getMyStripeBilling = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) return null;
-
-    const customer = await ctx.db
-      .query("billingCustomers")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .unique();
-
-    const subscription = await ctx.db
-      .query("subscriptions")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .first();
-
-    const paymentMethod =
-      customer?.paymentMethodBrand && customer.paymentMethodLast4
-        ? {
-            brand: customer.paymentMethodBrand,
-            last4: customer.paymentMethodLast4,
-            expMonth: customer.paymentMethodExpMonth,
-            expYear: customer.paymentMethodExpYear,
-          }
-        : null;
-
-    return {
-      authUserId: user._id,
-      customer: customer
-        ? {
-            stripeCustomerId: customer.stripeCustomerId,
-            email: customer.email,
-            paymentMethod,
-            stripeDashboardUrl: stripeCustomerDashboardUrl(
-              customer.stripeCustomerId,
-            ),
-            updatedAt: customer.updatedAt,
-          }
-        : null,
-      subscription: subscription
-        ? {
-            stripeSubscriptionId: subscription.stripeSubscriptionId,
-            stripeCustomerId: subscription.stripeCustomerId,
-            status: subscription.status,
-            isActive: ACTIVE_STATUSES.has(subscription.status),
-            priceId: subscription.priceId,
-            currentPeriodEnd: subscription.currentPeriodEnd,
-            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ?? false,
-            stripeDashboardUrl: stripeSubscriptionDashboardUrl(
-              subscription.stripeSubscriptionId,
-            ),
-          }
-        : null,
-    };
-  },
-});
-
-/** @deprecated Use getMyStripeBilling */
-export const getSubscriptionStatus = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) {
-      return { isActive: false, status: "none" as const, cancelAtPeriodEnd: false };
-    }
-
-    const subscription = await ctx.db
-      .query("subscriptions")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .first();
-
-    if (!subscription) {
-      return {
-        isActive: false,
-        status: "none" as const,
-        cancelAtPeriodEnd: false,
-      };
-    }
-
-    return {
-      isActive: ACTIVE_STATUSES.has(subscription.status),
-      status: subscription.status,
-      currentPeriodEnd: subscription.currentPeriodEnd,
-      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd ?? false,
-      stripeSubscriptionId: subscription.stripeSubscriptionId,
-    };
   },
 });
