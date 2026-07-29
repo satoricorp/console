@@ -7,7 +7,7 @@ import {
   setIndexingFetch,
   splitTextIntoWindows,
 } from "../src/indexing/turbopuffer";
-import { loadPublishedSessionTexts } from "../src/routes/publish";
+import { loadPublishedSessionTexts } from "../src/publish/bookmark";
 import { publishedSessionsFromPayload } from "../src/summary/generate";
 import { describeDb } from "./db-gate";
 
