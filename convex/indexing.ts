@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { indexLogMessage, isIndexJobIncomplete, STALL_WATCHDOG_MS } from "./lib/turbopuffer/indexLog";
+import { namespaceForOrgRepo } from "./lib/turbopuffer/utils";
 
 const indexJobStatus = v.union(
   v.literal("pending"),
@@ -13,22 +14,6 @@ const indexJobStatus = v.union(
 const indexTrigger = v.union(v.literal("connect"), v.literal("merge"));
 
 const indexFile = v.object({ path: v.string(), sha: v.string() });
-
-/**
- * The TurboPuffer namespace for one org's copy of a repository.
- *
- * This is the same name the GX Cloud server builds in
- * `server/src/indexing/config.ts` and the gx CLI builds in
- * `internal/semantic/config.go`, so all three writers and every reader address
- * one namespace. It used to be `repo-{owner}-{repo}`, which had no org in it:
- * two orgs with access to the same repository shared one index and the
- * commit-id sweep had them deleting each other's rows, and the server's PR
- * summaries never read it at all because they look up `gx-{orgId}-…`.
- */
-export function namespaceForOrgRepo(orgId: string, fullName: string) {
-  const slug = fullName.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase().replace(/^-|-$/g, "");
-  return `gx-${orgId}-${slug}-v2`;
-}
 
 /**
  * Finds a repository's index job within an org, adopting a pre-org row if it
