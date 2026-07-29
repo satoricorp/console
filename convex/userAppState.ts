@@ -231,6 +231,7 @@ export const requestWindowsCli = mutation({
   },
 });
 
+// Operator tool: invoked by hand from the Convex dashboard.
 /** Admin: everyone who requested a native Windows CLI build, with contact emails. */
 export const listWindowsCliRequests = internalQuery({
   args: {},

@@ -22,6 +22,7 @@ function normalizeFullName(input: string): string {
   return raw.replace(/\.git$/i, "").replace(/^\/+|\/+$/g, "");
 }
 
+// Operator tool: invoked by hand from the Convex dashboard (see file header).
 export const addWatchedRepo = internalMutation({
   args: {
     fullName: v.string(),
@@ -62,6 +63,7 @@ export const addWatchedRepo = internalMutation({
   },
 });
 
+// Operator tool: invoked by hand from the Convex dashboard (see file header).
 export const setWatchedRepoEnabled = internalMutation({
   args: { fullName: v.string(), enabled: v.boolean() },
   handler: async (ctx, args) => {

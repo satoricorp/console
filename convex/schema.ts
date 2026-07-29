@@ -95,6 +95,7 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_userId", ["userId"]),
 
+  // dead: no readers/writers as of 2026-07-28
   gxReviewArtifacts: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),
@@ -107,6 +108,7 @@ export default defineSchema({
     .index("by_sessionId", ["sessionId"])
     .index("by_repoFullName", ["repoFullName"]),
 
+  // dead: no readers/writers as of 2026-07-28
   gxReviewComments: defineTable({
     userId: v.string(),
     reviewId: v.optional(v.string()),
