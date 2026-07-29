@@ -143,66 +143,6 @@ reviewsRoutes.post("/v1/reviews/:bookmarkId/plan", async (c) => {
   });
 });
 
-reviewsRoutes.post("/v1/reviews/:bookmarkId/decision", async (c) => {
-  const auth = c.get("auth");
-  const bookmarkId = c.req.param("bookmarkId");
-  const bookmark = await loadAccessibleBookmark(bookmarkId, auth);
-  if (!bookmark) {
-    return c.json({ error: "Review not found" }, 404);
-  }
-
-  const body = (await c.req.json().catch(() => ({}))) as {
-    action?: string;
-    merged?: boolean;
-    mergeSha?: string;
-    prNumber?: number;
-    reason?: string;
-  };
-
-  if (body.action !== "approve") {
-    return c.json({ error: "Only action=approve is supported" }, 400);
-  }
-
-  const db = getSql();
-  const now = Date.now();
-  const reasonParts = [
-    body.reason?.trim() || null,
-    body.prNumber != null ? `PR #${body.prNumber}` : null,
-    body.mergeSha ? `sha=${body.mergeSha}` : null,
-    body.merged ? "merged" : "approve-only",
-  ].filter(Boolean);
-
-  const [decision] = await db<{ id: string }[]>`
-    INSERT INTO decisions (
-      org_id, bookmark_id, reviewer, action, extracted_reason, created_at_ms
-    ) VALUES (
-      ${bookmark.org_id}::uuid,
-      ${bookmark.id}::uuid,
-      ${auth.userId},
-      'approve',
-      ${reasonParts.join(" · ") || null},
-      ${now}
-    )
-    RETURNING id
-  `;
-
-  if (body.merged) {
-    await db`
-      UPDATE bookmarks SET
-        merge_status = 'merged',
-        merged_at_ms = ${now},
-        updated_at_ms = ${now}
-      WHERE id = ${bookmark.id}::uuid
-    `;
-  }
-
-  return c.json({
-    id: decision?.id,
-    merged: Boolean(body.merged),
-    recordedAtMs: now,
-  });
-});
-
 async function buildReviewResponse(
   db: ReturnType<typeof getSql>,
   bookmark: BookmarkAccessRow,

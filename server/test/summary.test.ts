@@ -253,38 +253,32 @@ describeDb("generateSummary integration", () => {
     expect(events.some((e) => e.kind === "view")).toBe(true);
   });
 
-  test("POST /v1/summaries/generate returns summary metadata", async () => {
-    const res = await app.request("http://localhost/v1/summaries/generate", {
-      method: "POST",
-      headers: {
-        ...authHeaders(summaryUserId, orgId),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ bookmarkId }),
+  // The standalone POST /v1/summaries/generate route was removed (production
+  // summaries flow through the webhook and publish paths); these pin the same
+  // contract at the function boundary those paths call.
+  test("generateSummary returns summary metadata", async () => {
+    const db = getSql();
+    const result = await generateSummary(db, {
+      orgId,
+      userId: summaryUserId,
+      bookmarkId,
+      provider: createMockProvider(),
     });
 
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as {
-      summaryId: string;
-      bookmarkId: string;
-      eventId: string;
-      lineCount: number;
-    };
-    expect(json.bookmarkId).toBe(bookmarkId);
-    expect(json.eventId).toBe(eventId);
-    expect(json.lineCount).toBeLessThanOrEqual(40);
-    expect(json.summaryId).toBeTruthy();
+    expect(result.bookmarkId).toBe(bookmarkId);
+    expect(result.eventId).toBe(eventId);
+    expect(result.lineCount).toBeLessThanOrEqual(40);
+    expect(result.summaryId).toBeTruthy();
   });
 
-  test("returns 404 when bookmark missing", async () => {
-    const res = await app.request("http://localhost/v1/summaries/generate", {
-      method: "POST",
-      headers: {
-        ...authHeaders(summaryUserId, orgId),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ bookmarkId: "00000000-0000-0000-0000-000000000099" }),
-    });
-    expect(res.status).toBe(404);
+  test("rejects when the bookmark is missing", async () => {
+    const db = getSql();
+    await expect(
+      generateSummary(db, {
+        orgId,
+        userId: summaryUserId,
+        bookmarkId: "00000000-0000-0000-0000-000000000099",
+      }),
+    ).rejects.toThrow(/bookmark not found/);
   });
 });
