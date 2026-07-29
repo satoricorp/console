@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import type postgres from "postgres";
+import { searchCodeReviewHistory, type IndexSearchResult } from "../indexing/search";
 import {
   indexCodeReviewHistory,
-  searchCodeReviewHistory,
   type CodeReviewHistoryIndexInput,
   type IndexJobResult,
-  type IndexSearchResult,
 } from "../indexing/turbopuffer";
 
 export type CodeReviewHistoryFindingInput = {

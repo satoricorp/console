@@ -8,10 +8,12 @@ import {
 import {
   buildSearchBody,
   identifierTerms,
-  indexPublishedArtifact,
-  resetIndexingFetch,
   searchCodeReviewHistory,
   searchIndex,
+} from "../src/indexing/search";
+import {
+  indexPublishedArtifact,
+  resetIndexingFetch,
   setIndexingFetch,
   splitPatchIntoParts,
 } from "../src/indexing/turbopuffer";

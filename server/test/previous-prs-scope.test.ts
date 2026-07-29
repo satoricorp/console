@@ -3,12 +3,12 @@ import { BUCKET_SOURCE_KINDS, scopePreviousPrRows } from "../src/context/broker"
 import {
   embeddingDimensions,
 } from "../src/indexing/config";
+import { type IndexSearchResult } from "../src/indexing/search";
 import {
   indexCodeReviewHistory,
   indexPublishedArtifact,
   resetIndexingFetch,
   setIndexingFetch,
-  type IndexSearchResult,
 } from "../src/indexing/turbopuffer";
 
 /**

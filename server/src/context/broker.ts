@@ -4,7 +4,7 @@ import {
   contextBrokerEnabled,
   reviewKnowledgeNamespace,
 } from "../indexing/config";
-import { searchIndex, embedQueryText, type IndexSearchResult } from "../indexing/turbopuffer";
+import { searchIndex, embedQueryText, type IndexSearchResult } from "../indexing/search";
 import { getInstallationTokenForRepo } from "../github/app";
 
 export type ContextBucket =
