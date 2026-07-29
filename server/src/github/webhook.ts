@@ -370,6 +370,10 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
 
   let bodyUpdated = false;
   let postedOk = false;
+  // The notice must be part of what is actually posted: this used to compute
+  // the noticed body and then send result.content, so a summary written blind
+  // to the repository read exactly like an informed one on GitHub — the one
+  // place the distinction matters.
   let postedBody = withUnindexedNotice(result.content, result.sawIndexedCode);
   try {
     const token = await getInstallationAccessToken(installationId);
@@ -377,7 +381,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       token,
       repo.full_name,
       pr.number,
-      result.content,
+      postedBody,
     );
     bodyUpdated = posted.updated;
     postedBody = posted.body;
