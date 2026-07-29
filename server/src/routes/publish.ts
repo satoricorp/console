@@ -7,6 +7,7 @@ import {
   resolveOrgIdForInstallation,
 } from "../github/app";
 import { updatePullRequestWithSummary } from "../github/pr-body";
+import { withUnindexedNotice } from "../github/webhook";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
@@ -488,6 +489,10 @@ async function postMissingPrSummaryAfterPublish(
           content: existingSummary.content,
           githubPrUrl: input.bookmark.github_pr_url,
         }),
+        // Stored summaries do not record whether retrieval saw the repository,
+        // so a re-post cannot honestly add or drop the notice; only freshly
+        // generated summaries carry the flag.
+        sawIndexedCode: true,
       }
     : await generateMissingSummary(db, {
         orgId: input.orgId,
@@ -498,13 +503,13 @@ async function postMissingPrSummaryAfterPublish(
   if (!summary) return;
 
   let bodyUpdated = false;
-  let postedBody = summary.content;
+  let postedBody = withUnindexedNotice(summary.content, summary.sawIndexedCode);
   try {
     const result = await updatePullRequestWithSummary(
       token,
       input.bookmark.repo_full_name,
       input.bookmark.github_pr_number,
-      summary.content,
+      postedBody,
     );
     bodyUpdated = result.updated;
     postedBody = result.body;
@@ -570,7 +575,9 @@ async function generateMissingSummary(
     bookmarkId: string;
     githubPrUrl?: string | null;
   },
-): Promise<{ summaryId: string; eventId: string; content: string } | null> {
+): Promise<
+  { summaryId: string; eventId: string; content: string; sawIndexedCode: boolean } | null
+> {
   try {
     const result = await generateSummary(db, {
       orgId: input.orgId,
@@ -583,6 +590,7 @@ async function generateMissingSummary(
       summaryId: result.summaryId,
       eventId: result.eventId,
       content: result.content,
+      sawIndexedCode: result.sawIndexedCode,
     };
   } catch (error) {
     if (error instanceof QuotaExceededError) {

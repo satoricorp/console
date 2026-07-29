@@ -422,6 +422,12 @@ describeDb("GitHub webhook", () => {
     expect(
       patchBody.body!.indexOf("Please review the webhook path."),
     ).toBeLessThan(patchBody.body!.indexOf("<!-- gx:pr-summary:v1 -->"));
+    // Retrieval saw no indexed code in this fixture, so the posted body — not
+    // just a computed-and-dropped local — must carry the unindexed notice.
+    // Regression: the notice used to be computed and then result.content was
+    // posted instead, so GitHub never showed it.
+    expect(patchBody.body).toContain("This summary was written without");
+    expect(patchBody.body).toContain("https://gx.run/repositories");
 
     const db = getSql();
     const summaries = await db<{ content: string }[]>`
