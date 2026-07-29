@@ -15,7 +15,7 @@ import type { LLMProvider } from "../src/llm/provider";
  */
 
 const VALID_SUMMARY = [
-  "> 🟡 👀 **Quick scan** — touches the shared DNS resolver guard",
+  "> 🟡 👀 **Careful pass** — touches the shared DNS resolver guard",
   "",
   "Tightens the SSRF guard so redirects are re-validated.",
   "",
@@ -112,6 +112,7 @@ describe("external OSS summaries", () => {
     );
 
     expect(summary.content).toContain("🟡 MEDIUM");
+    expect(summary.content).toContain("🟡 👀 **Careful pass**");
     expect(prompts[0]!.system).toContain("🟡 = MEDIUM");
     expect(prompts[0]!.user).toMatch(/do not default to LOW/i);
   });
