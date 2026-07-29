@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import {
+  GitBranch,
   LogOut,
   UserRound,
 } from "lucide-react";
@@ -129,6 +130,13 @@ export function UserMenu({ user }: { user: UserMenuUser }) {
           <Link href="/profile">
             <UserRound className="h-4 w-4" />
             Profile
+          </Link>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem asChild className="cursor-pointer gap-2 text-[13px]">
+          <Link href="/repositories">
+            <GitBranch className="h-4 w-4" />
+            Repositories
           </Link>
         </DropdownMenuItem>
 
