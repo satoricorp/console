@@ -49,8 +49,6 @@ import type * as profile from "../profile.js";
 import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
 import type * as searchActions from "../searchActions.js";
-import type * as stripeActions from "../stripeActions.js";
-import type * as stripeUrls from "../stripeUrls.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
 import type * as userAppState from "../userAppState.js";
 import type * as watchlist from "../watchlist.js";
@@ -104,8 +102,6 @@ declare const fullApi: ApiFromModules<{
   repoActions: typeof repoActions;
   repos: typeof repos;
   searchActions: typeof searchActions;
-  stripeActions: typeof stripeActions;
-  stripeUrls: typeof stripeUrls;
   stripeWebhookActions: typeof stripeWebhookActions;
   userAppState: typeof userAppState;
   watchlist: typeof watchlist;

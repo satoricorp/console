@@ -21,7 +21,6 @@ const ONBOARDING_FUNNEL_PATHS = [
 
 /** Routes reachable before repo connect. */
 const ONBOARDING_BYPASS_PATHS = [
-  "/billing",
   "/community",
   "/design",
   "/docs",
