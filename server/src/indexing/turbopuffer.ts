@@ -210,6 +210,50 @@ export async function embedQueryText(query: string): Promise<number[] | null> {
   return vector ?? null;
 }
 
+export type NamespaceMetadata = {
+  exists: boolean;
+  approxRowCount?: number;
+  lastWriteAt?: string;
+};
+
+/**
+ * Probe one namespace: does it exist, how big is it, when was it last written.
+ *
+ * The CLI's review evidence lines depend on the distinction this makes: a
+ * namespace that does not exist means "this repository has never been indexed"
+ * (actionable — connect it), while an existing-but-stale one means "results may
+ * describe deleted code". A 404 is therefore a normal answer, not an error.
+ */
+export async function fetchNamespaceMetadata(
+  namespace: string,
+): Promise<NamespaceMetadata | null> {
+  const cfg = indexingConfig();
+  if (!cfg) return null;
+  const response = await fetchImpl(namespaceURL(cfg, namespace, "metadata"), {
+    headers: turboPufferHeaders(cfg),
+  });
+  if (response.status === 404) {
+    return { exists: false };
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `namespace metadata: status ${response.status}${text ? ` ${text.slice(0, 300)}` : ""}`,
+    );
+  }
+  const decoded = (await response.json()) as {
+    approx_row_count?: number;
+    last_write_at?: string;
+  };
+  return {
+    exists: true,
+    approxRowCount:
+      typeof decoded.approx_row_count === "number" ? decoded.approx_row_count : undefined,
+    lastWriteAt:
+      typeof decoded.last_write_at === "string" ? decoded.last_write_at : undefined,
+  };
+}
+
 export async function searchIndex(args: {
   orgId: string;
   repoFullName: string;
@@ -228,6 +272,13 @@ export async function searchIndex(args: {
    * pure ANN search regularly misses them.
    */
   lexical?: boolean;
+  /**
+   * Explicit terms for the symbol BM25 leg. The CLI extracts identifiers from
+   * the diff under review — a strictly better signal than re-deriving them
+   * from the prose query — so when a caller supplies them they are used
+   * verbatim instead of identifierTerms(query).
+   */
+  symbolQuery?: string;
 }): Promise<IndexSearchResult[]> {
   const cfg = indexingConfig();
   if (!cfg) {
@@ -272,7 +323,10 @@ export async function searchIndex(args: {
     filterClauses.push(extra);
   }
 
-  const limit = Math.min(Math.max(args.limit ?? 8, 1), 50);
+  // 100, not 50: the review-search route serves the CLI's deep mode, which
+  // asks for up to 96 rows and truncates after its own fusion. Existing
+  // broker/history callers stay well under the old ceiling.
+  const limit = Math.min(Math.max(args.limit ?? 8, 1), 100);
   let filters: unknown;
   if (filterClauses.length === 1) {
     filters = filterClauses[0];
@@ -290,6 +344,7 @@ export async function searchIndex(args: {
     // review-knowledge namespace has no `symbol` field), so it stays
     // vector-only unless the caller asks otherwise.
     lexical: args.lexical ?? !args.namespace,
+    symbolQuery: args.symbolQuery,
   });
 
   const response = await fetchImpl(namespaceURL(cfg, namespace, "query"), {
@@ -346,6 +401,8 @@ export function buildSearchBody(args: {
   limit: number;
   filters?: unknown;
   lexical: boolean;
+  /** Explicit symbol-leg terms; when absent they are derived from the query. */
+  symbolQuery?: string;
 }): Record<string, unknown> {
   const withFilters = (leg: Record<string, unknown>): Record<string, unknown> => {
     if (args.filters !== undefined) leg.filters = args.filters;
@@ -367,7 +424,7 @@ export function buildSearchBody(args: {
     limit: args.limit,
     include_attributes: true,
   })];
-  const identifiers = identifierTerms(text);
+  const identifiers = args.symbolQuery?.trim() || identifierTerms(text);
   if (identifiers) {
     legs.push(
       withFilters({
