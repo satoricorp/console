@@ -9,8 +9,11 @@
 # through the server's own runMigrations(), and hands the URL to the suite.
 #
 #   bun run test:db              # reset the scratch DB, run the whole suite
-#   bun run test:db -- test/publish.test.ts
+#   bun run test:db -- bun test ./test/publish.test.ts
 #   bun run test:db:keep         # reuse the existing scratch DB (faster)
+#
+# Arguments after -- are exec'd verbatim (so any command can run against the
+# scratch DB); a bare file path is not runnable — prefix it with `bun test`.
 #
 # The database is created fresh on every run so migrations 001..028 are
 # exercised end to end, exactly as they would be against an empty production
