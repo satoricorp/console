@@ -270,7 +270,32 @@ describeDb("GitHub webhook", () => {
         startedAt: null,
       },
     };
+    // The indexing tests arm these for one test each and used to delete them
+    // inline at the end of the test body — which never runs when an assertion
+    // fails, so one failure armed the real-OpenAI LLM provider for every later
+    // summary test in the process and cascaded into unrelated 404s/500s.
+    // Cleanup must be unconditional.
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.TURBOPUFFER_API_KEY;
   });
+
+  /**
+   * Wait for an async fire-and-forget effect (index jobs run detached from the
+   * webhook response) instead of sleeping a fixed 50ms: on a loaded machine
+   * 50ms regularly loses the race — the job completes a moment after the
+   * assertion — which is exactly the local-red/CI-green split this suite had.
+   */
+  async function waitForFetchCall(
+    predicate: (call: { url: string }) => boolean,
+    timeoutMs = 5_000,
+  ): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (fetchCalls.some(predicate)) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return fetchCalls.some(predicate);
+  }
 
   afterAll(async () => {
     globalThis.fetch = originalFetch;
@@ -348,15 +373,11 @@ describeDb("GitHub webhook", () => {
     });
     expect(res.status).toBe(200);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(
-      fetchCalls.some(
+      await waitForFetchCall(
         (c) => c.url.includes("turbopuffer.com") || c.url.includes("/embeddings"),
       ),
     ).toBe(true);
-
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.TURBOPUFFER_API_KEY;
   });
 
   test("pull_request opened generates summary and updates PR body", async () => {
@@ -846,15 +867,11 @@ describeDb("GitHub webhook", () => {
     expect(json.ok).toBe(true);
     expect(json.event).toBe("push");
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(
-      fetchCalls.some(
+      await waitForFetchCall(
         (c) => c.url.includes("turbopuffer.com") || c.url.includes("/embeddings"),
       ),
     ).toBe(true);
-
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.TURBOPUFFER_API_KEY;
   });
 
   // A GitHub App has one webhook URL and this server is it, but the only thing

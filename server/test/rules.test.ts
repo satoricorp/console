@@ -150,5 +150,9 @@ describeDb("handleGxMention integration", () => {
       SELECT kind FROM summary_events WHERE summary_id = ${summary.id}
     `;
     expect(events.some((e) => e.kind === "override")).toBe(true);
-  });
+    // 20s, not bun's 5s default: this integration test runs migrations plus a
+    // dozen sequential DB round-trips and takes ~2s alone — under full-suite
+    // load it crossed 5s and died at "exactly 5001ms", which read like a
+    // hardcoded app timeout and cost a debugging session (see LATER-FIXES.md).
+  }, 20_000);
 });
