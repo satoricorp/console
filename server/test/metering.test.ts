@@ -167,31 +167,8 @@ describeDb("PR Summary metering", () => {
     }
   });
 
-  test("POST /v1/summaries/generate returns 402 after trial ends", async () => {
-    const db = getSql();
-    const now = Date.now();
-    const bookmarkId = await seedBookmark(db, expiredOrgId, "expired-api", now + 100);
-
-    const res = await app.request("http://localhost/v1/summaries/generate", {
-      method: "POST",
-      headers: {
-        ...authHeaders(meteringUserId, expiredOrgId),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ bookmarkId }),
-    });
-
-    expect(res.status).toBe(402);
-    const json = (await res.json()) as {
-      error: string;
-      upgradeUrl: string;
-    };
-    expect(json.error).toContain("free trial has ended");
-    // The checkout URL is a placeholder until pricing ships, so pin the part
-    // that is actually a contract: the 402 hands back an absolute URL scoped to
-    // the caller's org. (This used to assert the path contained "upgrade",
-    // which stopped being true when the fallback moved to the gx.run root.)
-    expect(json.upgradeUrl).toStartWith("https://");
-    expect(json.upgradeUrl).toContain(`org=${expiredOrgId}`);
-  });
+  // The standalone POST /v1/summaries/generate route was removed; the trial
+  // gate is pinned by "blocks PR Summary after the free trial week" above at
+  // the function boundary the webhook/publish paths call, and the 402 +
+  // upgradeUrl HTTP contract stays covered by the OpenAI proxy quota tests.
 });

@@ -475,64 +475,6 @@ export function identifierTerms(query: string): string {
   return terms.join(" ");
 }
 
-/** Upsert pre-chunked client content into the org/repo namespace (stamps org_id). */
-export async function upsertClientChunks(args: {
-  orgId: string;
-  repoFullName: string;
-  chunks: Array<{
-    text: string;
-    sourceKind: string;
-    chunkHash?: string;
-    file?: string;
-    attributes?: Record<string, unknown>;
-  }>;
-}): Promise<IndexJobResult> {
-  const cfg = indexingConfig();
-  if (!cfg) {
-    return { status: "disabled", chunks: 0 };
-  }
-  if (args.chunks.length === 0) {
-    return { status: "empty", chunks: 0 };
-  }
-
-  const namespace = namespaceForOrgRepo(args.orgId, args.repoFullName);
-  const prepared: IndexChunk[] = args.chunks.map((item, index) => {
-    const hash =
-      item.chunkHash?.trim() ||
-      createHash("sha256").update(`${item.sourceKind}:${item.file ?? ""}:${item.text}`).digest("hex");
-    const text = limitBytes(item.text, maxChunkBytes);
-    return chunk(
-      item.sourceKind,
-      [args.orgId, args.repoFullName, hash, String(index)],
-      text,
-      {
-        org_id: args.orgId,
-        repo_full_name: args.repoFullName,
-        source_kind: item.sourceKind,
-        file: item.file ?? "",
-        chunk_hash: hash,
-        indexed_reason: "client_chunks",
-        ...(item.attributes ?? {}),
-      },
-    );
-  });
-
-  try {
-    for (let start = 0; start < prepared.length; start += 64) {
-      const batch = prepared.slice(start, start + 64);
-      const embeddings = await embedTexts(cfg, batch.map((c) => c.text));
-      await upsertTurboPufferRows(cfg, namespace, batch, embeddings);
-    }
-    return { status: "indexed", chunks: prepared.length };
-  } catch (error) {
-    return {
-      status: "failed",
-      chunks: 0,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 export async function searchCodeReviewHistory(args: {
   orgId: string;
   repoFullName: string;
