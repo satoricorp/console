@@ -76,25 +76,6 @@ export const ensureGithubUser = internalMutation({
   },
 });
 
-export const createDesktopOAuthTicket = internalMutation({
-  args: {
-    ticket: v.string(),
-    state: v.string(),
-    githubAccessToken: v.string(),
-    expiresAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const ticketHash = await hashToken(args.ticket);
-    await ctx.db.insert("gxDesktopOAuthTickets", {
-      ticketHash,
-      state: args.state,
-      githubAccessToken: args.githubAccessToken,
-      createdAt: Date.now(),
-      expiresAt: args.expiresAt,
-    });
-  },
-});
-
 export const createCliSession = internalMutation({
   args: {
     token: v.string(),
@@ -166,35 +147,6 @@ export const verifyCliSession = internalMutation({
       machineId: session.machineId,
       machineName: session.machineName,
       expiresAt: session.expiresAt,
-    };
-  },
-});
-
-export const consumeDesktopOAuthTicket = internalMutation({
-  args: {
-    ticket: v.string(),
-    state: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const ticketHash = await hashToken(args.ticket);
-    const ticket = await ctx.db
-      .query("gxDesktopOAuthTickets")
-      .withIndex("by_ticketHash", (q) => q.eq("ticketHash", ticketHash))
-      .first();
-
-    if (!ticket || ticket.state !== args.state || ticket.usedAt) {
-      return null;
-    }
-
-    const now = Date.now();
-    if (ticket.expiresAt < now) {
-      await ctx.db.patch(ticket._id, { usedAt: now });
-      return null;
-    }
-
-    await ctx.db.patch(ticket._id, { usedAt: now });
-    return {
-      githubAccessToken: ticket.githubAccessToken,
     };
   },
 });

@@ -70,6 +70,7 @@ export default defineSchema({
     .index("by_userId_fullName", ["userId", "fullName"])
     .index("by_fullName", ["fullName"]),
 
+  // dead: no readers/writers as of 2026-07-28
   gxDesktopOAuthTickets: defineTable({
     ticketHash: v.string(),
     state: v.string(),

@@ -11,7 +11,6 @@ import {
 } from "./githubProfile";
 
 type CompleteCliAuthResult = {
-  github_access_token?: string;
   cli_session_token: string;
   cli_session_expires_at: number;
   user_id: string;
@@ -29,12 +28,6 @@ type VerifyCliSessionResult = {
   machineName: string;
   expiresAt: number;
 } | null;
-
-type GitHubOAuthTokenResponse = {
-  access_token?: string;
-  error?: string;
-  error_description?: string;
-};
 
 async function resolveGithubEmail(
   accessToken: string,
@@ -107,7 +100,7 @@ async function completeAuthWithGitHubToken(
     machineId: string;
     machineName: string;
     gxVersion?: string;
-    source: "cli" | "desktop_oauth";
+    source: "cli";
   },
 ): Promise<CompleteCliAuthResult> {
   const githubUser = await githubFetch<GitHubProfile>(
@@ -186,106 +179,6 @@ export const completeCliAuth = action({
   args: completeCliAuthArgs,
   handler: async (ctx, args): Promise<CompleteCliAuthResult> => {
     return completeAuthWithGitHubToken(ctx, { ...args, source: "cli" });
-  },
-});
-
-async function exchangeGitHubOAuthCode(
-  code: string,
-  redirectUri: string,
-): Promise<string> {
-  const clientId = process.env.GITHUB_CLIENT_ID?.trim();
-  const clientSecret = process.env.GITHUB_CLIENT_SECRET?.trim();
-
-  if (!clientId || !clientSecret) {
-    throw new Error("Desktop OAuth is not configured");
-  }
-
-  const response = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "User-Agent": "gx-desktop",
-    },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`GitHub OAuth exchange failed: ${response.status}`);
-  }
-
-  const body = (await response.json()) as GitHubOAuthTokenResponse;
-  if (body.error) {
-    throw new Error(body.error_description || body.error);
-  }
-  if (!body.access_token) {
-    throw new Error("GitHub OAuth response missing access token");
-  }
-  return body.access_token;
-}
-
-export const createDesktopOAuthTicketFromCode = action({
-  args: {
-    code: v.string(),
-    state: v.string(),
-    redirectUri: v.string(),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ ticket: string; expires_at: number }> => {
-    const githubAccessToken = await exchangeGitHubOAuthCode(
-      args.code,
-      args.redirectUri,
-    );
-    const ticket = crypto.randomUUID();
-    const expiresAt = Date.now() + 5 * 60 * 1000;
-    await ctx.runMutation(internal.gxAuth.createDesktopOAuthTicket, {
-      ticket,
-      state: args.state,
-      githubAccessToken,
-      expiresAt,
-    });
-    return { ticket, expires_at: expiresAt };
-  },
-});
-
-export const completeDesktopOAuth = action({
-  args: {
-    ticket: v.string(),
-    state: v.string(),
-    machineId: v.string(),
-    machineName: v.string(),
-    gxVersion: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<CompleteCliAuthResult> => {
-    const ticket = await ctx.runMutation(
-      internal.gxAuth.consumeDesktopOAuthTicket,
-      {
-        ticket: args.ticket,
-        state: args.state,
-      },
-    );
-    if (!ticket?.githubAccessToken) {
-      throw new Error("Desktop OAuth ticket is invalid or expired");
-    }
-
-    const result = await completeAuthWithGitHubToken(ctx, {
-      githubAccessToken: ticket.githubAccessToken,
-      machineId: args.machineId,
-      machineName: args.machineName,
-      gxVersion: args.gxVersion,
-      source: "desktop_oauth",
-    });
-    return {
-      ...result,
-      github_access_token: ticket.githubAccessToken,
-    };
   },
 });
 
