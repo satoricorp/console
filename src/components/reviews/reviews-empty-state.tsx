@@ -12,29 +12,33 @@ export function ReviewsEmptyState() {
         </h2>
 
         <p>
-          You continue creating PRs as you normally would in GitHub. However,
-          instead of using the command{" "}
+          You keep using plain Git exactly as you do today. Just run{" "}
           <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
-            git commit -m &quot;your message&quot;
-          </code>
-          , you would now want to use the command{" "}
-          <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
-            gx commit -m &quot;your message&quot;
-          </code>
-          .
+            gx init
+          </code>{" "}
+          once in your repository — it installs Git hooks that capture your
+          session data automatically.
         </p>
 
         <p>
-          GX Commit captures your session data and other information about your
-          work to improve the review process.
+          From then on,{" "}
+          <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
+            git commit
+          </code>{" "}
+          and{" "}
+          <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
+            git push
+          </code>{" "}
+          work as usual: each commit is recorded as a GX revision, and your
+          next push publishes the session — the review appears here.
         </p>
 
-        <CopyCommand command={`gx commit -m "your message"`} />
+        <CopyCommand command="gx init" />
 
         <p>
-          Once you begin using GX commit instead of Git commit, you will notice
-          you&apos;ll start to receive PR summaries in your GitHub PRs and be
-          able to chat directly with GX inside of GitHub.
+          Once a repository is set up, you will notice you&apos;ll start to
+          receive PR summaries in your GitHub PRs and be able to chat directly
+          with GX inside of GitHub.
         </p>
 
         <p>

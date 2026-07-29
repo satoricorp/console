@@ -6,11 +6,11 @@ import { cn } from "@/lib/utils";
 /** Xer0 "gx" rendered smaller than the surrounding phrase. */
 const GX_SCALE = 0.76;
 /**
- * Bottom-align visible gx ink with commit's letter bottoms.
- * Positive = down. Viewport max-ink sample vs commit: 0.04em → delta 0.
+ * Bottom-align visible gx ink with the suffix word's letter bottoms.
+ * Positive = down. Viewport max-ink sample vs suffix: 0.04em → delta 0.
  */
 const GX_BOTTOM_NUDGE = "0.04em";
-/** Extra gap so Xer0 sidebearings don't crowd "commit". */
+/** Extra gap so Xer0 sidebearings don't crowd "init". */
 const GX_GAP_COMPENSATION = "0.04em";
 
 function clamp(value: number, min: number, max: number) {
@@ -44,9 +44,9 @@ type Phase = {
 
 /**
  * Scroll story:
- * 1. Fade in "git commit"
+ * 1. Fade in "git init"
  * 2. Fade in description A (git)
- * 3. Crossfade morph → "gx commit" + description B
+ * 3. Crossfade morph → "gx init" + description B
  * 4. Rise + hold
  */
 function progressToPhase(progress: number): Phase {
@@ -164,7 +164,7 @@ export function GitToGxSection() {
     <section
       ref={trackRef}
       id="git-to-gx"
-      aria-label="From git commit to gx commit"
+      aria-label="From git init to gx init"
       className={cn(
         "relative",
         reducedMotion ? "min-h-[70vh]" : "h-[640vh]",
@@ -245,7 +245,7 @@ export function GitToGxSection() {
                           reducedMotion || phase.morph === 0
                             ? undefined
                             : `blur(${phase.morph * 6}px)`,
-                        // Bottom-aligned with commit; keep morph lift on fade-out
+                        // Bottom-aligned with the suffix; keep morph lift on fade-out
                         transform: reducedMotion
                           ? "translateX(-50%)"
                           : `translateX(-50%) translateY(${phase.morph * -8}px)`,
@@ -264,7 +264,7 @@ export function GitToGxSection() {
                           reducedMotion || phase.morph === 1
                             ? undefined
                             : `blur(${(1 - phase.morph) * 6}px)`,
-                        // Bottom edge locked to commit's line box bottom.
+                        // Bottom edge locked to the suffix's line box bottom.
                         transform: reducedMotion
                           ? `translateY(${GX_BOTTOM_NUDGE})`
                           : `translateY(calc(${GX_BOTTOM_NUDGE} + ${(1 - phase.morph) * 8}px))`,
@@ -275,14 +275,14 @@ export function GitToGxSection() {
                   </span>
                 </span>
                 <span
-                  data-align="commit"
+                  data-align="suffix"
                   aria-hidden
                   className="ml-[0.28em] leading-none"
                 >
-                  commit
+                  init
                 </span>
                 <span className="sr-only">
-                  {phase.morph > 0.5 ? "gx commit" : "git commit"}
+                  {phase.morph > 0.5 ? "gx init" : "git init"}
                 </span>
               </span>
             </p>
@@ -313,11 +313,12 @@ export function GitToGxSection() {
               aria-hidden={descGxOpacity < 0.5}
             >
               <span className="font-medium text-[var(--footer-link-hover)]">
-                gx commit
+                gx init
               </span>{" "}
-              fixes this, joining your session and model data with your code. In
-              one command, you can simplify code review and save your sessions.
-              Start building your company wide knowledge base.
+              fixes this. Run it once per repository and Git hooks join your
+              session and model data with every plain git commit and git push.
+              One-time setup — then start building your company wide knowledge
+              base.
             </p>
           </div>
         </div>

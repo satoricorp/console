@@ -11,6 +11,7 @@ import { CLI_INSTALL_COMMAND } from "@/lib/gx-download";
 import { githubSignInUrl, withOnboardingParam } from "@/lib/site-links";
 
 const AUTH_LOGIN_COMMAND = "gx auth login";
+const INIT_COMMAND = "gx init";
 
 function WindowsIcon({ className }: { className?: string }) {
   return (
@@ -94,6 +95,16 @@ export function DownloadCliInstall() {
           Then log in:
         </p>
         <CopyCommand command={AUTH_LOGIN_COMMAND} />
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+          Then run once inside each repository:
+        </p>
+        <CopyCommand command={INIT_COMMAND} />
+        <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
+          Installs the Git hooks — keep using plain git commit and git push.
+        </p>
       </div>
 
       <div className="border-t border-zinc-200 pt-3 dark:border-zinc-800">
