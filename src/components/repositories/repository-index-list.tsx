@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { SignInLink } from "@/components/sign-in-link";
+import { withOnboardingParam } from "@/lib/site-links";
 import { cn } from "@/lib/utils";
 
 type IndexedRepo = {
@@ -229,7 +230,9 @@ export function RepositoryIndexList() {
 
       <div className="flex justify-end">
         <Link
-          href="/onboarding"
+          // Force param: the onboarding gate bounces completed users off
+          // funnel paths, and this link must work for them too.
+          href={withOnboardingParam("/onboarding", true)}
           className="inline-flex items-center justify-center gap-2 border border-zinc-300 px-4 py-2 text-[13px] font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
         >
           <GitBranch className="h-4 w-4" />
