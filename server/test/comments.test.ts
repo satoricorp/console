@@ -21,7 +21,7 @@ describe("GitHub comment helpers", () => {
         JSON.stringify([
           {
             id: 42,
-            body: "@gx explain this hunk",
+            body: "@tx explain this hunk",
             path: "server/src/github/webhook.ts",
             line: 12,
             user: { login: "alice" },
@@ -33,17 +33,17 @@ describe("GitHub comment helpers", () => {
 
     const comments = await listPullRequestReviewComments(
       "token",
-      "acme/gx",
+      "acme/tx",
       17,
     );
 
     expect(fetchCalls[0]?.url).toBe(
-      "https://api.github.com/repos/acme/gx/pulls/17/comments?per_page=100",
+      "https://api.github.com/repos/acme/tx/pulls/17/comments?per_page=100",
     );
     expect(comments).toEqual([
       {
         id: 42,
-        body: "@gx explain this hunk",
+        body: "@tx explain this hunk",
         path: "server/src/github/webhook.ts",
         line: 12,
         inReplyToId: null,
@@ -59,7 +59,7 @@ describe("GitHub comment helpers", () => {
       return new Response(
         JSON.stringify({
           id: 9002,
-          html_url: "https://github.com/acme/gx/pull/17#discussion_r9002",
+          html_url: "https://github.com/acme/tx/pull/17#discussion_r9002",
         }),
         { status: 201, headers: { "Content-Type": "application/json" } },
       );
@@ -67,17 +67,17 @@ describe("GitHub comment helpers", () => {
 
     const posted = await postPullRequestReviewReply(
       "token",
-      "acme/gx",
+      "acme/tx",
       17,
-      "GX: threaded reply",
+      "TX: threaded reply",
       55501,
     );
 
     expect(fetchCalls[0]?.url).toBe(
-      "https://api.github.com/repos/acme/gx/pulls/17/comments/55501/replies",
+      "https://api.github.com/repos/acme/tx/pulls/17/comments/55501/replies",
     );
     expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({
-      body: "GX: threaded reply",
+      body: "TX: threaded reply",
     });
     expect(posted.id).toBe(9002);
   });

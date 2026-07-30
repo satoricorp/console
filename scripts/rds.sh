@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open a local psql session to the gx-server RDS instance.
+# Open a local psql session to the tx-server RDS instance.
 #
 # Tunnels through a running ECS task with SSM port forwarding, so it needs
 # no bastion and no public DB access. Requirements:
@@ -17,7 +17,7 @@ env_name="${1:-production}"
 sql="${2:-}"
 region="${AWS_REGION:-us-east-1}"
 cluster="gx-server-$env_name"
-local_port="${GX_DB_LOCAL_PORT:-5433}"
+local_port="${TX_DB_LOCAL_PORT:-5433}"
 
 command -v session-manager-plugin >/dev/null || {
   echo "session-manager-plugin not found; install it first" >&2

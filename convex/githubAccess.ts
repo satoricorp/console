@@ -10,7 +10,7 @@ const GITHUB_REAUTH_INSTRUCTION =
 const GITHUB_REAUTH_MESSAGE =
   `GitHub session expired. ${GITHUB_REAUTH_INSTRUCTION}`;
 
-// GitHub App permissions required by GX merge/status flows:
+// GitHub App permissions required by TX merge/status flows:
 // - contents: read/write
 // - pull_requests: read
 // - checks: read

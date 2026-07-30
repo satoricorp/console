@@ -287,7 +287,7 @@ async function buildReviewResponse(
           : "missing";
 
   // Drop model-invented self-report quotes when the artifact has no verified
-  // gx_commit self-report or first user prompt (common mislabel of the revision description).
+  // tx_commit self-report or first user prompt (common mislabel of the revision description).
   let planOut = effective?.plan ?? null;
   if (
     planOut?.narrative.selfReportQuote &&
@@ -374,7 +374,7 @@ async function loadReviewActivity(
     kind: "push",
     id: `push-${bookmark.id}`,
     atMs: Number(bookmark.published_at_ms),
-    title: "Published to GX",
+    title: "Published to TX",
     detail: bookmark.head_commit_id?.slice(0, 12) ?? undefined,
   });
 

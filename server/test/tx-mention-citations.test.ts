@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import type postgres from "postgres";
 import {
-  buildGxCitationContext,
-  formatGxCitedReply,
+  buildTxCitationContext,
+  formatTxCitedReply,
   inlineCitationIds,
-  parseGxChatModelReply,
+  parseTxChatModelReply,
   validCitationIds,
-} from "../src/gx-mention/citations";
-import { handleGxMention, shouldLoadGitHubPrFiles } from "../src/gx-mention/handler";
-import { buildGxChatUserPrompt } from "../src/llm/prompts/gx-chat";
+} from "../src/tx-mention/citations";
+import { handleTxMention, shouldLoadGitHubPrFiles } from "../src/tx-mention/handler";
+import { buildTxChatUserPrompt } from "../src/llm/prompts/tx-chat";
 import type { ExtractContext } from "../src/summary/generate";
 
-describe("gx mention citations", () => {
-  test("builds stable citations from GX published, hunk, session, and index evidence", () => {
+describe("tx mention citations", () => {
+  test("builds stable citations from TX published, hunk, session, and index evidence", () => {
     const context = makeContext({
       publishedRevisions: [
         {
@@ -20,7 +20,7 @@ describe("gx mention citations", () => {
           baseBranchName: "main",
           description: "documentation",
           files: ["README.md"],
-          patch: "@@ -1 +1,2 @@\n # Music\n+GX smoke test",
+          patch: "@@ -1 +1,2 @@\n # Music\n+TX smoke test",
           githubPrUrl: "https://github.com/acme/music/pull/1",
         },
       ],
@@ -57,7 +57,7 @@ describe("gx mention citations", () => {
       ],
     });
 
-    const result = buildGxCitationContext({
+    const result = buildTxCitationContext({
       latestSummary: null,
       context,
       gitBlameContext: null,
@@ -81,11 +81,11 @@ describe("gx mention citations", () => {
     expect(result.promptText).toContain("[S2] hunk_link: README.md:1-2 agent hunk");
     expect(result.promptText).toContain("[S3] session_event: response in README.md");
     expect(result.promptText).toContain("[S4] index_snippet: file README.md#intro score=0.910");
-    expect(result.promptText).toContain("+GX smoke test");
+    expect(result.promptText).toContain("+TX smoke test");
   });
 
-  test("builds PR diff citations when no GX context is linked", () => {
-    const result = buildGxCitationContext({
+  test("builds PR diff citations when no TX context is linked", () => {
+    const result = buildTxCitationContext({
       latestSummary: null,
       context: null,
       gitBlameContext: null,
@@ -95,7 +95,7 @@ describe("gx mention citations", () => {
           status: "modified",
           additions: 1,
           deletions: 0,
-          patch: "@@ -1 +1,2 @@\n # Music\n+GX smoke test",
+          patch: "@@ -1 +1,2 @@\n # Music\n+TX smoke test",
           lineStart: 1,
           lineEnd: 2,
           url: "https://github.com/acme/music/pull/1/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1",
@@ -118,11 +118,11 @@ describe("gx mention citations", () => {
     expect(result.promptText).toContain(
       "url: https://github.com/acme/music/pull/1/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5R1",
     );
-    expect(result.promptText).toContain("+GX smoke test");
+    expect(result.promptText).toContain("+TX smoke test");
   });
 
   test("prefers exact PR line citations over broad published revision citations", () => {
-    const citationContext = buildGxCitationContext({
+    const citationContext = buildTxCitationContext({
       latestSummary: null,
       context: makeContext({
         publishedRevisions: [
@@ -157,7 +157,7 @@ describe("gx mention citations", () => {
       "published_revision",
     ]);
 
-    const reply = formatGxCitedReply(
+    const reply = formatTxCitedReply(
       "The risky change is the PR body rewrite path. [S1]",
       ["S1"],
       citationContext.citations,
@@ -169,7 +169,7 @@ describe("gx mention citations", () => {
     expect(reply).not.toContain("published revision");
   });
 
-  test("loads GitHub PR files when linked GX context has no line-linked hunks", () => {
+  test("loads GitHub PR files when linked TX context has no line-linked hunks", () => {
     expect(shouldLoadGitHubPrFiles(null)).toBe(true);
     expect(
       shouldLoadGitHubPrFiles(
@@ -220,7 +220,7 @@ describe("gx mention citations", () => {
   });
 
   test("formats validated JSON replies and strips invented inline citation IDs", () => {
-    const context = buildGxCitationContext({
+    const context = buildTxCitationContext({
       latestSummary: null,
       context: makeContext({
         publishedRevisions: [
@@ -229,7 +229,7 @@ describe("gx mention citations", () => {
             baseBranchName: "main",
             description: "documentation",
             files: ["README.md"],
-            patch: "+GX smoke test",
+            patch: "+TX smoke test",
             githubPrUrl: null,
           },
         ],
@@ -238,7 +238,7 @@ describe("gx mention citations", () => {
       githubPrFiles: [],
       recentComments: [],
     });
-    const parsed = parseGxChatModelReply(
+    const parsed = parseTxChatModelReply(
       JSON.stringify({
         answer: "The README line was added in the latest revision. [S1] [S99]",
         citations: ["S1", "S99"],
@@ -251,36 +251,36 @@ describe("gx mention citations", () => {
       ...inlineCitationIds(parsed?.answer ?? ""),
     ];
     const validIds = validCitationIds(requestedIds, context.citations);
-    const reply = formatGxCitedReply(parsed?.answer ?? "", validIds, context.citations);
+    const reply = formatTxCitedReply(parsed?.answer ?? "", validIds, context.citations);
 
     expect(validIds).toEqual(["S1"]);
-    expect(reply).toContain("GX: The README line was added in the latest revision. [S1]");
+    expect(reply).toContain("TX: The README line was added in the latest revision. [S1]");
     expect(reply).toContain("Sources: [S1] published revision `README.md`.");
     expect(reply).not.toContain("S99");
   });
 
   test("handles missing citation context without adding a fake Sources line", () => {
-    const context = buildGxCitationContext({
+    const context = buildTxCitationContext({
       latestSummary: null,
       context: null,
       gitBlameContext: null,
       githubPrFiles: [],
       recentComments: [],
     });
-    const reply = formatGxCitedReply(
-      "I need a linked GX review event or PR diff to answer.",
+    const reply = formatTxCitedReply(
+      "I need a linked TX review event or PR diff to answer.",
       [],
       context.citations,
     );
 
     expect(context.citations).toEqual([]);
     expect(context.promptText).toBe("Available sources:\n(none)");
-    expect(reply).toBe("GX: I need a linked GX review event or PR diff to answer.");
+    expect(reply).toBe("TX: I need a linked TX review event or PR diff to answer.");
     expect(reply).not.toContain("Sources:");
   });
 
-  test("places server-built sources in the gx chat prompt", () => {
-    const citationContext = buildGxCitationContext({
+  test("places server-built sources in the tx chat prompt", () => {
+    const citationContext = buildTxCitationContext({
       latestSummary: "Intent\nDocs update",
       context: makeContext({
         publishedRevisions: [
@@ -289,7 +289,7 @@ describe("gx mention citations", () => {
             baseBranchName: "main",
             description: "documentation",
             files: ["README.md"],
-            patch: "+GX smoke test",
+            patch: "+TX smoke test",
             githubPrUrl: null,
           },
         ],
@@ -299,7 +299,7 @@ describe("gx mention citations", () => {
       recentComments: [],
     });
 
-    const prompt = buildGxChatUserPrompt({
+    const prompt = buildTxChatUserPrompt({
       author: "alice",
       question: "what changed?",
       latestSummary: "Intent\nDocs update",
@@ -340,12 +340,12 @@ describe("gx mention citations", () => {
     }) as typeof fetch;
 
     try {
-      const result = await handleGxMention(db, {
+      const result = await handleTxMention(db, {
         orgId: "org",
         bookmarkId: "bookmark",
         commentId: "comment",
         author: "driveby",
-        body: "@gx please skip rule never use var",
+        body: "@tx please skip rule never use var",
         github: {
           installationId: 123,
           repoFullName: "acme/repo",
@@ -354,7 +354,7 @@ describe("gx mention citations", () => {
       });
 
       expect(result.reply).toBe(
-        "GX: only collaborators with write access can retire rules.",
+        "TX: only collaborators with write access can retire rules.",
       );
       expect(result.retiredRuleIds).toEqual([]);
       expect(sqlCalls.some((sql) => sql.includes("UPDATE rules"))).toBe(false);
@@ -378,15 +378,15 @@ describe("gx mention citations", () => {
     console.info = () => {};
 
     try {
-      const result = await handleGxMention(db, {
+      const result = await handleTxMention(db, {
         orgId: "org",
         bookmarkId: "bookmark",
         commentId: "comment",
         author: "alice",
-        body: "@gx please skip rule never use var",
+        body: "@tx please skip rule never use var",
       });
 
-      expect(result.reply).toBe('GX: retired 1 rule(s) matching "never use var".');
+      expect(result.reply).toBe('TX: retired 1 rule(s) matching "never use var".');
       expect(result.retiredRuleIds).toEqual(["rule-1"]);
       expect(result.vetoedRuleText).toBe("never use var");
       expect(sqlCalls.some((sql) => sql.includes("SELECT id, content"))).toBe(false);
@@ -397,7 +397,7 @@ describe("gx mention citations", () => {
   });
 
   test("handles uncited no-context chat replies without a Sources line", async () => {
-    const originalReviewModels = process.env.GX_REVIEW_MODELS;
+    const originalReviewModels = process.env.TX_REVIEW_MODELS;
     const originalConsoleInfo = console.info;
     const sqlCalls: string[] = [];
     const db = (async (strings: TemplateStringsArray) => {
@@ -406,20 +406,20 @@ describe("gx mention citations", () => {
       return [];
     }) as unknown as postgres.Sql;
 
-    process.env.GX_REVIEW_MODELS = "mock";
+    process.env.TX_REVIEW_MODELS = "mock";
     console.info = () => {};
 
     try {
-      const result = await handleGxMention(db, {
+      const result = await handleTxMention(db, {
         orgId: "org",
         bookmarkId: "bookmark",
         commentId: "comment",
         author: "alice",
-        body: "@gx what changed?",
+        body: "@tx what changed?",
       });
 
       expect(result.reply).toBe(
-        "GX: I couldn't answer from the available review context because no citeable sources were provided.",
+        "TX: I couldn't answer from the available review context because no citeable sources were provided.",
       );
       expect(result.reply).not.toContain("Sources:");
       expect(result.retiredRuleIds).toEqual([]);
@@ -428,9 +428,9 @@ describe("gx mention citations", () => {
       expect(sqlCalls.some((sql) => sql.includes("FROM pr_comments"))).toBe(true);
     } finally {
       if (originalReviewModels === undefined) {
-        delete process.env.GX_REVIEW_MODELS;
+        delete process.env.TX_REVIEW_MODELS;
       } else {
-        process.env.GX_REVIEW_MODELS = originalReviewModels;
+        process.env.TX_REVIEW_MODELS = originalReviewModels;
       }
       console.info = originalConsoleInfo;
     }

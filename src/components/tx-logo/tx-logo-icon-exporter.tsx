@@ -13,7 +13,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import type { WebGLRenderer } from "three";
 import { Vector2 } from "three";
 
-import { GxLogo } from "./gx-logo";
+import { TxLogo } from "./tx-logo";
 import { ICON_ENVIRONMENT_RESOLUTION, type LogoVariant } from "./constants";
 
 const CAPTURE_SIZE = 1024;
@@ -144,7 +144,7 @@ function EphemeralIconCapture({
       className="pointer-events-none fixed top-0 -left-[10000px] size-px overflow-hidden opacity-0"
       aria-hidden
     >
-      <GxLogo
+      <TxLogo
         key={job.variant}
         variant={job.variant}
         pixelSize={160}
@@ -154,7 +154,7 @@ function EphemeralIconCapture({
         environmentResolution={ICON_ENVIRONMENT_RESOLUTION}
       >
         <SceneCaptureBridge onReady={handleReady} />
-      </GxLogo>
+      </TxLogo>
     </div>
   );
 }
@@ -228,13 +228,13 @@ function IconPreviewImage({
   );
 }
 
-type GxLogoIconExporterProps = {
+type TxLogoIconExporterProps = {
   compact?: boolean;
 };
 
-export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps) {
+export function TxLogoIconExporter({ compact = false }: TxLogoIconExporterProps) {
   const [captureJob, setCaptureJob] = useState<IconCaptureJob | null>(null);
-  const [previewGx, setPreviewGx] = useState<string | null>(null);
+  const [previewTx, setPreviewTx] = useState<string | null>(null);
   const [previewX, setPreviewX] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -249,9 +249,9 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
 
     void (async () => {
       try {
-        const gxCanvas = await captureIconVariant("icon", setCaptureJob);
+        const txCanvas = await captureIconVariant("icon", setCaptureJob);
         if (cancelled) return;
-        setPreviewGx(gxCanvas.toDataURL("image/png"));
+        setPreviewTx(txCanvas.toDataURL("image/png"));
 
         const xCanvas = await captureIconVariant("iconX", setCaptureJob);
         if (cancelled) return;
@@ -278,7 +278,7 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
 
   const exportSize = useCallback(
     async (size: number, label: string, source: HTMLCanvasElement) => {
-      const prefix = size <= FAVICON_X_MAX ? "gx-x" : "gx";
+      const prefix = size <= FAVICON_X_MAX ? "tx-x" : "tx";
       const suffix = background === "transparent" ? "" : `-${background}`;
       const dataUrl = compositeWithBackground(source, size, background);
       downloadDataUrl(dataUrl, `${prefix}-icon-${label}${suffix}.png`);
@@ -289,10 +289,10 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
   const exportAll = useCallback(async () => {
     setBusy(true);
     try {
-      const gxSource = await runCapture("icon");
+      const txSource = await runCapture("icon");
       for (const { label, size } of ICON_EXPORT_SIZES) {
         if (size <= FAVICON_X_MAX) continue;
-        await exportSize(size, label, gxSource);
+        await exportSize(size, label, txSource);
         await new Promise((r) => setTimeout(r, 80));
       }
 
@@ -328,8 +328,8 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
     ? "grid grid-cols-2 gap-3 border border-zinc-200 p-3 dark:border-zinc-800"
     : "grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800";
 
-  const loadingGx = !previewGx && Boolean(captureJob?.variant === "icon");
-  const loadingX = previewGx != null && !previewX && captureJob?.variant === "iconX";
+  const loadingTx = !previewTx && Boolean(captureJob?.variant === "icon");
+  const loadingX = previewTx != null && !previewX && captureJob?.variant === "iconX";
 
   return (
     <div className={`mx-auto flex w-full max-w-lg flex-col ${rootGap}`}>
@@ -339,23 +339,23 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
 
       <div className={panelClass}>
         <IconPreviewImage
-          label="gx (48px+)"
-          previewUrl={previewGx}
+          label="tx (48px+)"
+          previewUrl={previewTx}
           previewSize={previewSize}
-          loading={loadingGx}
+          loading={loadingTx}
           background={background}
         />
         <IconPreviewImage
           label="x (≤48px)"
           previewUrl={previewX}
           previewSize={previewSize}
-          loading={loadingX || (previewGx != null && !previewX && !ready)}
+          loading={loadingX || (previewTx != null && !previewX && !ready)}
           background={background}
         />
       </div>
       <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
         {ready
-          ? "Full gx for larger icons; chrome x only for 16–48px favicons."
+          ? "Full tx for larger icons; chrome x only for 16–48px favicons."
           : "Rendering chrome previews…"}
       </p>
 
@@ -411,7 +411,7 @@ export function GxLogoIconExporter({ compact = false }: GxLogoIconExporterProps)
               </span>
               <span className="block text-xs text-zinc-500">
                 {label}
-                {size <= FAVICON_X_MAX ? " · x" : " · gx"}
+                {size <= FAVICON_X_MAX ? " · x" : " · tx"}
               </span>
             </button>
           ))}

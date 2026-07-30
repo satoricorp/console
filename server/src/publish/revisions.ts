@@ -17,7 +17,7 @@ function strArray(value: unknown): string[] | undefined {
 /**
  * Normalize a publish bundle (or its JSONB payload) to a flat revision list.
  * Schema v2 bundles carry `revisions` directly; v1 bundles carry the legacy
- * stack/change shape, where `jj_change_id` already held the GX trailer
+ * stack/change shape, where `jj_change_id` already held the TX trailer
  * revision ID. Values may come straight from pr_events.payload, so every
  * field is runtime-checked rather than trusted.
  */

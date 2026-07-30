@@ -1,7 +1,7 @@
 import { api } from "../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { getDemoReview } from "@/lib/demo-review";
-import { gxApiJson } from "@/lib/gx-api-server";
+import { txApiJson } from "@/lib/tx-api-server";
 import type { ReviewResponse } from "@/lib/reviews-client";
 import { ReviewView } from "./review-view";
 import { SignInLink } from "@/components/sign-in-link";
@@ -34,7 +34,7 @@ export default async function ReviewPage({
           Sign in to review
         </h1>
         <p className="mt-2 text-sm text-neutral-500">
-          GX review pages are private to the publisher and their org.
+          TX review pages are private to the publisher and their org.
         </p>
         <p className="mt-4 text-sm">
           <SignInLink className="underline underline-offset-2" /> with GitHub to
@@ -46,7 +46,7 @@ export default async function ReviewPage({
 
   let initial: ReviewResponse | null = null;
   try {
-    initial = await gxApiJson<ReviewResponse>(
+    initial = await txApiJson<ReviewResponse>(
       viewer.id,
       `/v1/reviews/${bookmarkId}`,
     );

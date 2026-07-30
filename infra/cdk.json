@@ -1,5 +1,5 @@
 {
-  "app": "bunx tsx bin/gx-server.ts",
+  "app": "bunx tsx bin/tx-server.ts",
   "context": {
     "@aws-cdk/aws-ec2:restrictDefaultSecurityGroup": true,
     "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,

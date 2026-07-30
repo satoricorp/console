@@ -41,7 +41,7 @@ export async function forwardToConvex(
         // Postgres owns installation -> org. Convex indexes into
         // gx-{orgId}-{repo}, and deriving the org there independently is how
         // the two would come to disagree about who owns an installation.
-        ...(orgId ? { "X-GX-Org-Id": orgId } : {}),
+        ...(orgId ? { "X-TX-Org-Id": orgId } : {}),
       },
       body: payload,
       signal: AbortSignal.timeout(8000),

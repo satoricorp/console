@@ -1,6 +1,6 @@
 # Plan: Full-source review context + honest attribution
 
-Goal: PR summaries, review plans, and @gx chat replies draw on all four evidence
+Goal: PR summaries, review plans, and @tx chat replies draw on all four evidence
 buckets — **agent sessions, codebase, previous PRs, independent resources** — and
 the attribution shown to users reflects what the model was actually given, with
 hard tenant isolation (no org can ever read another org's indexed data).
@@ -11,9 +11,9 @@ hard tenant isolation (no org can ever read another org's indexed data).
 |---|---|---|
 | Review plan (`server/src/review-plan/context.ts`) | pr_event payload (patches, sessions, provenance), hunk_links | No |
 | PR summary (`server/src/summary/generate.ts`) | payload revisions/sessions, hunk_links, session_events | No (`indexSnippets` field exists, never populated) |
-| @gx chat (`server/src/gx-mention/handler.ts`) | same `loadExtractContext`; "Indexed codebase context" prompt section always "(none)" | No |
+| @tx chat (`server/src/tx-mention/handler.ts`) | same `loadExtractContext`; "Indexed codebase context" prompt section always "(none)" | No |
 | CLI `/v1/review/context` (`server/src/routes/review.ts`) | rules, hunk_links, collisions + `searchIndex` | Yes — org/repo namespace |
-| CLI local review (`~/git/gx/internal/codereview/review_resources.go`) | `gx-sessions` (`code_file`, `session_transcript`, `session_context`, filter `repo_root`) + `gx-review-knowledge` (`review_corpus`) | Yes — but console server never touches these |
+| CLI local review (`~/git/totality/internal/codereview/review_resources.go`) | `gx-sessions` (`code_file`, `session_transcript`, `session_context`, filter `repo_root`) + `gx-review-knowledge` (`review_corpus`) | Yes — but console server never touches these |
 
 Attribution today: `attributionSources` is an LLM self-estimate
 (`server/src/llm/prompts/review-plan.ts` says "not measured"), with a hardcoded
@@ -32,7 +32,7 @@ Namespaces in play:
 - `gx-{orgId}-{repoSlug}` — console server writes: `push_delta`, `hunk_link`,
   `published_revision_diff`, `published_session_context`,
   `code_review_summary`, `code_review_history` (`server/src/indexing/*`)
-- `gx-sessions` — gx CLI writes: `code_file`, `session_transcript`,
+- `gx-sessions` — tx CLI writes: `code_file`, `session_transcript`,
   `session_context`; filtered only by client-supplied `repo_root`/attributes
 - `gx-review-knowledge` — shared, non-tenant `review_corpus` (independent
   resources; the OWASP-style content promised in
@@ -74,7 +74,7 @@ Namespaces in play:
 - `resolveGitHubToken`: a valid GitHub token no longer suffices. The resolved
   GitHub user id must map to a member of the requested org.
 - `withDefaultOrg` only when `localDevAuthEnabled()` (`NODE_ENV !== production`
-  and no `GX_CLOUD_API_KEY`). Missing `X-Org-Id` in prod → reject. Assert + log
+  and no `TX_CLOUD_API_KEY`). Missing `X-Org-Id` in prod → reject. Assert + log
   so local-dev can never be active in prod.
 - Cloud API key path (`resolveCloudApiKey`) is trusted infrastructure; skip
   membership, but log org access with `tokenLabel` for audit.
@@ -100,7 +100,7 @@ Namespaces in play:
 - Integration: seed two orgs A/B with indexed data (use the existing
   `setIndexingFetch` seam + fake tpuf server as in `server/test/indexing.test.ts`);
   authenticated as A-member, request B's `/v1/review/context`, summary, review
-  plan, and gx-mention routes → all 403, and assert the fake tpuf server
+  plan, and tx-mention routes → all 403, and assert the fake tpuf server
   received **zero** requests for B's namespace.
 - Query-shape regression: assert every captured tpuf query body includes the
   `org_id` Eq filter.
@@ -138,7 +138,7 @@ retrieveReviewContext(db, {
 - `Snippet = { id, bucket, sourceKind, text, score, file?, lines? }` with a
   stable citation id (`C1…`, `P1…`, `D1…`, `A1…` per bucket).
 - **`REVIEW.md` (required product behavior):** repo-root review policy already
-  used by local `gx review` (`~/git/gx/internal/codereview/review_policy.go`).
+  used by local `tx review` (`~/git/totality/internal/codereview/review_policy.go`).
   Console does **not** read it today — fix that in the broker. This is the
   "custom docs" path; do **not** invent a separate per-org docs corpus.
   - Prefer indexed `source_kind: "review_policy"` chunks in the org namespace
@@ -162,8 +162,8 @@ retrieveReviewContext(db, {
   `(orgId, repoFullName, queryHash)` so summary+plan on the same PR share one
   embed/ANN round-trip.
 - Config: reuse `indexingConfig()`; add
-  `GX_REVIEW_KNOWLEDGE_NAMESPACE` (default `gx-review-knowledge`) to match the
-  CLI's `GX_REVIEW_KNOWLEDGE_NAMESPACE`.
+  `TX_REVIEW_KNOWLEDGE_NAMESPACE` (default `gx-review-knowledge`) to match the
+  CLI's `TX_REVIEW_KNOWLEDGE_NAMESPACE`.
 
 ### 1.1b Index `REVIEW.md` on push
 
@@ -187,11 +187,11 @@ semantic indexing through the server.**
   max chunks/request + per-org bytes/day; `repo_full_name` must belong to the
   org's GitHub installation. Reject with 400/429 otherwise. Client-sent
   `org_id` is overwritten.
-- gx CLI change (`~/git/gx/internal/semantic/`): when authenticated against
+- tx CLI change (`~/git/totality/internal/semantic/`): when authenticated against
   api.gx.run, send chunks to `/v1/index/chunks` instead of writing turbopuffer
   directly. Keep direct-write mode for standalone/local use
-  (`GX_TPUF_NAMESPACE` unset ⇒ server mode).
-- Backfill: one-shot job reindexes each org's repos on next `gx sync`/push (the
+  (`TX_TPUF_NAMESPACE` unset ⇒ server mode).
+- Backfill: one-shot job reindexes each org's repos on next `tx sync`/push (the
   chunker is deterministic — `chunk_hash` attribute enables idempotent upsert).
 - Interim (until CLI ships): broker's codebase bucket falls back to
   `push_delta`/`hunk_link` chunks already in the org namespace, and the
@@ -242,11 +242,11 @@ against the fake store with realistic payload sizes (queries parallelized).
   buckets listed in "Context provided"**, and each `notableChange` gains an
   optional `evidence: ["C2","D1"]` array citing snippet ids.
 
-### 2.3 @gx chat
+### 2.3 @tx chat
 
-- `gx-mention/handler.ts`: populate `context.indexSnippets` from the broker so
+- `tx-mention/handler.ts`: populate `context.indexSnippets` from the broker so
   the existing "Indexed codebase context" section and the citation machinery in
-  `gx-mention/citations.ts` finally light up. No prompt changes needed beyond
+  `tx-mention/citations.ts` finally light up. No prompt changes needed beyond
   bucket labels.
 
 ### 2.4 CLI `/v1/review/context` (**Eng 4A**)
@@ -290,9 +290,9 @@ against the fake store with realistic payload sizes (queries parallelized).
     non-empty broker buckets + `pr-payload` when payload evidence was present.
     If only payload → `[{ source: "pr-payload", pct: 100 }]`.
   - Validate `notableChanges[].evidence` ids exist in the manifest; strip
-    unknown ids (same posture as gx-chat citations).
+    unknown ids (same posture as tx-chat citations).
 
-### 3.2 Measured mode (flag: `GX_MEASURED_ATTRIBUTION=1`)
+### 3.2 Measured mode (flag: `TX_MEASURED_ATTRIBUTION=1`)
 
 - Compute percentages from `evidence` citation counts (weighted by bucket),
   not the model's estimate; store `attributionMode: "measured" | "estimated"`
@@ -352,7 +352,7 @@ prompts/attribution before GA.
   the caller's org namespace + knowledge namespace) — feeds a weekly audit
   query.
 
-### 4.3 Staged rollout (flag: `GX_CONTEXT_BROKER=1`)
+### 4.3 Staged rollout (flag: `TX_CONTEXT_BROKER=1`)
 
 1. Dev with mock provider + fake tpuf (CI).
 2. Staging, internal org only; run the security red-team matrix **again**
@@ -375,8 +375,8 @@ CLI /v1/index/chunks (1.2) ┘        (codebase bucket upgrades from "history on
 ```
 
 Phase 0 ships alone as its own PR(s) and deploys first. Phases 1–3 can be one
-stacked series behind the flag. The gx CLI change (1.2) is a separate repo/PR
-(`~/git/gx`) and can land in parallel after `/v1/index/chunks` exists.
+stacked series behind the flag. The tx CLI change (1.2) is a separate repo/PR
+(`~/git/totality`) and can land in parallel after `/v1/index/chunks` exists.
 
 ## Eng review decisions (2026-07-12)
 
@@ -412,7 +412,7 @@ Scope: **full plan as written (option B)** — Phase 0 still ships/deploys alone
 ## What already exists
 
 - `searchIndex` / `loadReviewContext` — org/repo retrieval (extend, don't parallel forever)
-- `IndexSnippetRow` + gx-mention citation ids — wire `indexSnippets`
+- `IndexSnippetRow` + tx-mention citation ids — wire `indexSnippets`
 - `searchCodeReviewHistory` — `source_kind` filter pattern for buckets
 - `setIndexingFetch` — fake tpuf in tests
 - `validate.ts` attribution parse — replace fallback; add clamp + `pr-payload`
@@ -447,15 +447,15 @@ Scope: **full plan as written (option B)** — Phase 0 still ships/deploys alone
 | Phase 0.3 tpuf org_id filter | `server/src/indexing/` | — (parallel with 0.1/0.2 once schema exists for tests) |
 | Phase 1.1 broker | `server/src/context/` | Phase 0 merged |
 | Phase 1.2 `/v1/index/chunks` | `server/src/routes/`, indexing | Phase 0 |
-| gx CLI semantic → server | `~/git/gx` | `/v1/index/chunks` exists |
-| Phase 2 wiring + 4A CLI | summary, review-plan, gx-mention, review/context | broker |
+| tx CLI semantic → server | `~/git/totality` | `/v1/index/chunks` exists |
+| Phase 2 wiring + 4A CLI | summary, review-plan, tx-mention, review/context | broker |
 | Phase 3 attribution + UI | validate, prompts, `src/components/reviews/` | Phase 2 manifest |
 | Phase 4 eval/nightly | `server/test/eval/` | Phase 3 |
 
 ```
 Lane A: Phase 0 (auth → red-team) → deploy
 Lane B (after A): broker + chunks endpoint
-Lane C (parallel with B after chunks API): gx CLI index client
+Lane C (parallel with B after chunks API): tx CLI index client
 Lane D (after B): wire generators + CLI context + attribution/UI
 Lane E (after D): nightly eval + staged rollout
 ```

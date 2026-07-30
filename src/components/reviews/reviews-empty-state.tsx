@@ -8,13 +8,13 @@ export function ReviewsEmptyState() {
     <div className="space-y-8">
       <div className="space-y-4 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         <h2 className="text-[13px] font-medium text-zinc-950 dark:text-zinc-50">
-          How GX works
+          How TX works
         </h2>
 
         <p>
           You keep using plain Git exactly as you do today. Just run{" "}
           <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
-            gx init
+            tx init
           </code>{" "}
           once in your repository — it installs Git hooks that capture your
           session data automatically.
@@ -29,16 +29,16 @@ export function ReviewsEmptyState() {
           <code className="font-mono text-xs text-zinc-950 dark:text-zinc-100">
             git push
           </code>{" "}
-          work as usual: each commit is recorded as a GX revision, and your
+          work as usual: each commit is recorded as a TX revision, and your
           next push publishes the session — the review appears here.
         </p>
 
-        <CopyCommand command="gx init" />
+        <CopyCommand command="tx init" />
 
         <p>
           Once a repository is set up, you will notice you&apos;ll start to
           receive PR summaries in your GitHub PRs and be able to chat directly
-          with GX inside of GitHub.
+          with TX inside of GitHub.
         </p>
 
         <p>

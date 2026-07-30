@@ -42,7 +42,7 @@ async function fetchUserInstallations(accessToken: string) {
 }
 
 /**
- * The GX App installation covering a repository owner, as seen by this user.
+ * The TX App installation covering a repository owner, as seen by this user.
  *
  * The connect path knows a user and a repository but never sees a webhook, so
  * this is how it reaches the same installation id the webhook path carries —

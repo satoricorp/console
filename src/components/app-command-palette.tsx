@@ -194,7 +194,7 @@ export function AppCommandPalette() {
               <CommandSeparator className="bg-zinc-900" />
               <CommandGroup heading="Setup" className="text-zinc-50">
                 <CommandItem
-                  value="download gx"
+                  value="download tx"
                   onSelect={() => runCommand(DOWNLOAD_PATH)}
                   className={commandItemClass}
                 >

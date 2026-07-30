@@ -118,7 +118,7 @@ export const handleGithubWebhook = internalAction({
     payload: v.string(),
     signature: v.string(),
     event: v.string(),
-    // The org the GX Cloud server resolved from Postgres, which owns this
+    // The org the TX Cloud server resolved from Postgres, which owns this
     // mapping. Optional because a delivery can arrive before the installation
     // is recorded there, in which case the stored projection is used instead.
     orgId: v.optional(v.string()),
@@ -173,7 +173,7 @@ export const handleGithubWebhook = internalAction({
     if (!resolvedOrgId) return;
 
     // Indexing stays opt-in: a repository nobody connected is not indexed on
-    // our initiative. `gx review` and the PR summary say so, and say where to
+    // our initiative. `tx review` and the PR summary say so, and say where to
     // connect it.
     const job = await ctx.runQuery(internal.indexing.getJobByFullName, {
       orgId: resolvedOrgId,

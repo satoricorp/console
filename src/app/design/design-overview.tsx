@@ -7,7 +7,7 @@ import { ChevronDown } from "lucide-react";
 import type { WebGLRenderer } from "three";
 import { Vector2 } from "three";
 import { Button } from "@/components/button";
-import { GxLogo } from "@/components/gx-logo/gx-logo";
+import { TxLogo } from "@/components/tx-logo/tx-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,10 +30,10 @@ const LOGO_EXPORT_HEIGHT = 520;
 const FAVICON_EXPORT_SIZE = 512;
 const LOGO_CAPTURE_FRAMES = 36;
 
-const GxLogoIconExporter = dynamic(
+const TxLogoIconExporter = dynamic(
   () =>
-    import("@/components/gx-logo/gx-logo-icon-exporter").then(
-      (mod) => mod.GxLogoIconExporter,
+    import("@/components/tx-logo/tx-logo-icon-exporter").then(
+      (mod) => mod.TxLogoIconExporter,
     ),
   { ssr: false },
 );
@@ -194,7 +194,7 @@ function ChromeLogoDownloads() {
       if (!source) return;
       downloadDataUrl(
         compositeLogo(source, background),
-        `gx-chrome-logo-${background}.png`,
+        `tx-chrome-logo-${background}.png`,
       );
     },
     [source],
@@ -205,7 +205,7 @@ function ChromeLogoDownloads() {
       if (!source) return;
       downloadText(
         compositeLogoSvg(source, background),
-        `gx-chrome-logo-${background}.svg`,
+        `tx-chrome-logo-${background}.svg`,
         "image/svg+xml",
       );
     },
@@ -214,14 +214,14 @@ function ChromeLogoDownloads() {
 
   const downloadFavicon = useCallback(() => {
     if (!faviconSource) return;
-    downloadDataUrl(compositeFavicon(faviconSource), "gx-favicon.png");
+    downloadDataUrl(compositeFavicon(faviconSource), "tx-favicon.png");
   }, [faviconSource]);
 
   const downloadFaviconSvg = useCallback(() => {
     if (!faviconSource) return;
     downloadText(
       compositeFaviconSvg(faviconSource),
-      "gx-favicon.svg",
+      "tx-favicon.svg",
       "image/svg+xml",
     );
   }, [faviconSource]);
@@ -234,7 +234,7 @@ function ChromeLogoDownloads() {
             Brand Assets
           </h1>
           <p className="max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Export the GX chrome mark and favicon. The default download uses a
+            Export the TX chrome mark and favicon. The default download uses a
             black background; use the menu for the light version.
           </p>
         </div>
@@ -242,7 +242,7 @@ function ChromeLogoDownloads() {
           className="pointer-events-none fixed top-0 -left-[10000px] h-[180px] w-[520px] overflow-hidden opacity-0"
           aria-hidden
         >
-          <GxLogo
+          <TxLogo
             variant="footer"
             tone="chrome"
             interactive={false}
@@ -254,13 +254,13 @@ function ChromeLogoDownloads() {
               height={LOGO_EXPORT_HEIGHT}
               onReady={handleReady}
             />
-          </GxLogo>
+          </TxLogo>
         </div>
         <div
           className="pointer-events-none fixed top-0 -left-[10000px] size-48 overflow-hidden opacity-0"
           aria-hidden
         >
-          <GxLogo
+          <TxLogo
             variant="iconX"
             tone="chrome"
             interactive={false}
@@ -272,14 +272,14 @@ function ChromeLogoDownloads() {
               height={FAVICON_EXPORT_SIZE}
               onReady={handleFaviconReady}
             />
-          </GxLogo>
+          </TxLogo>
         </div>
       </div>
 
       <div className="border border-zinc-800 bg-[#0a0a0a] p-4">
         <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_8rem] md:items-center">
           <div className="flex h-44 min-w-0 items-center justify-center overflow-hidden">
-            <GxLogo
+            <TxLogo
               variant="footer"
               tone="chrome"
               interactive={false}
@@ -289,7 +289,7 @@ function ChromeLogoDownloads() {
           </div>
           <div className="flex flex-col items-center gap-2">
             <div className="flex size-20 items-center justify-center border border-zinc-800 bg-[#0a0a0a]">
-              <GxLogo
+              <TxLogo
                 variant="iconX"
                 tone="chrome"
                 interactive={false}
@@ -448,7 +448,7 @@ function ComponentsSection() {
 }
 
 function IconExportSection() {
-  return <GxLogoIconExporter compact />;
+  return <TxLogoIconExporter compact />;
 }
 
 const SECTION_CONTENT: Record<DesignSectionId, React.ReactNode> = {

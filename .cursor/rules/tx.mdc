@@ -1,15 +1,15 @@
 ---
-description: Use GX for commits and PRs in this repo
+description: Use TX for commits and PRs in this repo
 alwaysApply: true
 ---
-# GX
+# TX
 
-This repo uses GX (`.gx/` present). Do not use `git commit` for normal work.
+This repo uses TX (`.totality/` present). Do not use `git commit` for normal work.
 
 - Stage: `git add`
-- Record: `gx commit -m "…"` (never `git commit`)
-- Publish: plain `git push` (pre-push hook runs capture). Do not run `gx push`.
-- Open PRs: `gh pr create` (human notes only — do not seed `## Summary`; GX appends below)
-- Inspect: `git status`, `git diff`, `git log`, `gx status`
+- Record: `tx commit -m "…"` (never `git commit`)
+- Publish: plain `git push` (pre-push hook runs capture). Do not run `tx push`.
+- Open PRs: `gh pr create` (human notes only — do not seed `## Summary`; TX appends below)
+- Inspect: `git status`, `git diff`, `git log`, `tx status`
 
-Read the gx skill before any commit, push, or PR.
+Read the tx skill before any commit, push, or PR.

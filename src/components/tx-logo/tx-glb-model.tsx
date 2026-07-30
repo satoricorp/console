@@ -11,12 +11,12 @@ import {
 } from "three";
 
 import {
-  GX_HEADER_MESH_PATH,
-  GX_MESH_PATH,
+  TX_HEADER_MESH_PATH,
+  TX_MESH_PATH,
   type LogoTone,
   type LogoVariantConfig,
 } from "./constants";
-import { clipGeometryToGlyphX } from "./gx-mesh-glyph";
+import { clipGeometryToGlyphX } from "./tx-mesh-glyph";
 
 /** Correct Blender export orientation until rotation is applied in Blender. */
 const BLENDER_MESH_ROTATION: [number, number, number] = [Math.PI, 0, 0];
@@ -43,13 +43,13 @@ function createChromeMaterial(tone: LogoTone = "chrome") {
   });
 }
 
-type GxGlbModelProps = {
+type TxGlbModelProps = {
   config: LogoVariantConfig;
   tone?: LogoTone;
   onReady?: () => void;
 };
 
-export function GxGlbModel({ config, tone = "chrome", onReady }: GxGlbModelProps) {
+export function TxGlbModel({ config, tone = "chrome", onReady }: TxGlbModelProps) {
   const { scene } = useGLTF(config.meshPath);
   const { model, scale } = useMemo(() => {
     const clone = scene.clone(true);
@@ -83,7 +83,7 @@ export function GxGlbModel({ config, tone = "chrome", onReady }: GxGlbModelProps
         2 * config.camera.position[2] * Math.tan(halfFov) * padding;
       const scaleX = viewPlane / Math.max(size.x, 0.001);
       const scaleY = viewPlane / Math.max(size.y, 0.001);
-      // Fill the square at full size — variantScale < 1 was shrinking gx vs x.
+      // Fill the square at full size — variantScale < 1 was shrinking tx vs x.
       fitScale = Math.min(scaleX, scaleY);
     } else {
       const maxDim = Math.max(size.x, size.y, size.z, 0.001);
@@ -137,5 +137,5 @@ export function GxGlbModel({ config, tone = "chrome", onReady }: GxGlbModelProps
   return <Center>{content}</Center>;
 }
 
-useGLTF.preload(GX_MESH_PATH);
-useGLTF.preload(GX_HEADER_MESH_PATH);
+useGLTF.preload(TX_MESH_PATH);
+useGLTF.preload(TX_HEADER_MESH_PATH);

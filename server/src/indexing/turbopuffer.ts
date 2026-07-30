@@ -214,7 +214,7 @@ function buildCodeReviewHistoryChunks(input: CodeReviewHistoryIndexInput): Index
 
   const summaryText = limitBytes(
     [
-      "GX code review summary.",
+      "TX code review summary.",
       `Repo: ${input.repoFullName}`,
       input.branchName ? `Branch: ${input.branchName}` : "",
       input.headSha ? `Head: ${input.headSha}` : "",
@@ -244,7 +244,7 @@ function buildCodeReviewHistoryChunks(input: CodeReviewHistoryIndexInput): Index
   for (const finding of input.findings) {
     const text = limitBytes(
       [
-        "GX code review finding history.",
+        "TX code review finding history.",
         `Repo: ${input.repoFullName}`,
         input.branchName ? `Branch: ${input.branchName}` : "",
         input.headSha ? `Head: ${input.headSha}` : "",
@@ -300,7 +300,7 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
     const baseBranchName = revision.base_branch_name?.trim() ?? "";
     const header = limitBytes(
       [
-        "GX published revision diff.",
+        "TX published revision diff.",
         `Repo: ${input.repoFullName}`,
         `Branch: ${branchName}`,
         baseBranchName ? `Base: ${baseBranchName}` : "",
@@ -348,7 +348,7 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
             file_path: part.file || files[0] || "",
             session_id: "",
             head_sha: input.headSha,
-            indexed_reason: "gx_pr_artifact",
+            indexed_reason: "tx_pr_artifact",
             event_id: input.eventId,
             text,
           },
@@ -382,7 +382,7 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
     const raw = sessionId ? input.sessionTexts?.[sessionId] : undefined;
     const header = limitBytes(
       [
-        "GX published session context.",
+        "TX published session context.",
         `Repo: ${input.repoFullName}`,
         `Branch: ${input.branchName}`,
         `Head: ${input.headSha}`,
@@ -410,7 +410,7 @@ function buildPublishedArtifactChunks(input: PublishArtifactIndexInput): IndexCh
             file: "",
             session_id: sessionId,
             head_sha: input.headSha,
-            indexed_reason: "gx_pr_artifact",
+            indexed_reason: "tx_pr_artifact",
             event_id: input.eventId,
             text,
           },
@@ -580,7 +580,7 @@ async function buildIncrementalChunks(
 
   const pushText = limitBytes(
     [
-      "GX incremental index push event.",
+      "TX incremental index push event.",
       `Repo: ${input.repoFullName}`,
       `Ref: ${input.ref ?? ""}`,
       `Head: ${input.afterSha ?? ""}`,
@@ -622,7 +622,7 @@ async function buildIncrementalChunks(
   for (const row of hunkRows) {
     const text = limitBytes(
       [
-        "GX hunk link for review context.",
+        "TX hunk link for review context.",
         `Repo: ${input.repoFullName}`,
         `File: ${row.file}`,
         `Lines: ${row.line_start}-${row.line_end}`,
@@ -743,7 +743,7 @@ export function namespaceURL(cfg: IndexingConfig, namespace: string, suffix = ""
  * holds identifier terms and is NOT stemmed, because identifier lookups must be
  * exact — TurboPuffer's tokenizer does not split camelCase, so sub-word recall
  * comes from the writer storing pre-split word parts in the value (see
- * CodeChunk.SymbolText in the gx CLI), not from the tokenizer.
+ * CodeChunk.SymbolText in the tx CLI), not from the tokenizer.
  *
  * Must stay in sync with transcriptTurboPufferSchema in
  * internal/semantic/transcript_row.go: both processes push a schema on every

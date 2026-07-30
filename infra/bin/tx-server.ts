@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
-import { GxDownloadsStack } from "../lib/gx-downloads-stack.js";
-import { GxServerStack } from "../lib/gx-server-stack.js";
+import { TxDownloadsStack } from "../lib/tx-downloads-stack.js";
+import { TxServerStack } from "../lib/tx-server-stack.js";
 
 const app = new cdk.App();
 const domainName = app.node.tryGetContext("domainName");
@@ -15,12 +15,12 @@ const env = {
   region: "us-east-1",
 };
 
-new GxDownloadsStack(app, "gx-downloads", {
+new TxDownloadsStack(app, "gx-downloads", {
   env,
   domainName,
 });
 
-new GxServerStack(app, "gx-server-staging", {
+new TxServerStack(app, "gx-server-staging", {
   env,
   domainName,
   environmentName: "staging",
@@ -31,7 +31,7 @@ new GxServerStack(app, "gx-server-staging", {
   rdsBackupRetentionDays: 3,
 });
 
-new GxServerStack(app, "gx-server-production", {
+new TxServerStack(app, "gx-server-production", {
   env,
   domainName,
   environmentName: "production",
