@@ -147,7 +147,7 @@ export async function postMissingPrSummaryAfterPublish(
 
   await db`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
     ) VALUES (
       ${input.orgId},
       ${input.bookmark.id},

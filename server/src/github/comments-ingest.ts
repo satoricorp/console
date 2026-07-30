@@ -77,7 +77,7 @@ export async function ingestLineComment(
       file,
       line,
       in_reply_to,
-      is_gx_mention,
+      is_tx_mention,
       created_at_ms
     ) VALUES (
       ${orgId},

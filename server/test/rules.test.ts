@@ -117,7 +117,7 @@ describeDb("handleTxMention integration", () => {
       RETURNING id
     `;
     const [comment] = await db<{ id: string }[]>`
-      INSERT INTO pr_comments (org_id, bookmark_id, author, body, is_gx_mention, created_at_ms)
+      INSERT INTO pr_comments (org_id, bookmark_id, author, body, is_tx_mention, created_at_ms)
       VALUES (${org.id}, ${bookmark.id}, 'alice', '@tx please skip rule never use var', true, ${now})
       RETURNING id
     `;

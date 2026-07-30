@@ -37,7 +37,7 @@ BEGIN
 
   -- Seed ledger facts
   INSERT INTO pr_comments (
-    org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+    org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
   ) VALUES (
     v_org_id, v_bookmark_id, 42, 'reviewer1', 'Please add tests', true, 1700000001000
   ) RETURNING id INTO v_comment_id;
