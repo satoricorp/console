@@ -194,15 +194,18 @@ function buildExternalUserPrompt(d: ExternalDossier): string {
   return lines.join("\n");
 }
 
-/** Ensure the Quick scan line renders as a bold blockquote (render polish). */
+/** Ensure the verdict line renders as a bold blockquote (render polish). */
+const VERDICT_LINE_RE = /(quick\s+scan|careful\s+pass|deep\s+review)/i;
 function normalizeQuickScan(summary: string): string {
   return summary
     .split("\n")
     .map((line) => {
-      if (!/quick\s+scan/i.test(line) || /^#{1,3}\s/.test(line.trim())) return line;
+      if (!VERDICT_LINE_RE.test(line) || /^#{1,3}\s/.test(line.trim())) return line;
       let l = line.replace(/^\s+/, "");
       if (!l.startsWith(">")) l = `> ${l}`;
-      if (!/\*\*\s*quick\s+scan\s*\*\*/i.test(l)) l = l.replace(/(quick\s+scan)/i, "**$1**");
+      if (!/\*\*\s*(quick\s+scan|careful\s+pass|deep\s+review)\s*\*\*/i.test(l)) {
+        l = l.replace(VERDICT_LINE_RE, "**$1**");
+      }
       return l;
     })
     .join("\n");

@@ -12,7 +12,7 @@ export const PR_SUMMARY_SYSTEM_PROMPT = `You write PR Summaries for GitHub pull 
 
 GX Cloud writes exactly one rich summary into the PR body. Match this format:
 
-> 🟢 👀 **Quick scan** — <one short triage reason>
+> 🟢 👀 **Quick scan** — <one short triage reason; dot and label follow severity, see below>
 
 <one paragraph overview of what changed and why>
 
@@ -33,10 +33,11 @@ GX Cloud writes exactly one rich summary into the PR body. Match this format:
 Rules:
 - At most 40 lines total including blank lines
 - Be concise; prefer 3–7 Notable Changes bullets
-- Severity dots (same color on Quick scan and Blast Radius level):
-  - 🟢 = LOW (safe to skim / contained)
-  - 🟡 = MEDIUM (needs a careful pass)
-  - 🔴 = HIGH (risky; prioritize review)
+- Severity verdict (same color on the verdict line and Blast Radius level; the
+  verdict label states what the reader must do, so it must match the level):
+  - 🟢 = LOW, label **Quick scan** (safe to skim / contained)
+  - 🟡 = MEDIUM, label **Careful pass** (needs a careful pass)
+  - 🔴 = HIGH, label **Deep review** (risky; prioritize review)
 - Judge severity by blast radius, not by how tidy the code looks. Reserve 🟢 LOW
   for genuinely contained changes with no cross-cutting or runtime risk.
 

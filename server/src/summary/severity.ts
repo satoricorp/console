@@ -1,4 +1,4 @@
-/** Traffic-light severity for PR Summary Quick scan + Blast Radius. */
+/** Traffic-light severity for the PR Summary verdict line + Blast Radius. */
 
 export type BlastRadiusLevel = "LOW" | "MEDIUM" | "HIGH";
 
@@ -7,6 +7,17 @@ export const SEVERITY_DOT: Record<BlastRadiusLevel, string> = {
   MEDIUM: "🟡",
   HIGH: "🔴",
 };
+
+// The verdict label states what the dot means. "Quick scan" next to a 🔴 reads
+// as permission to skim — the opposite of what HIGH asks of the reader — so
+// the label must agree with the level, not just the color.
+export const SEVERITY_VERDICT: Record<BlastRadiusLevel, string> = {
+  LOW: "Quick scan",
+  MEDIUM: "Careful pass",
+  HIGH: "Deep review",
+};
+
+const VERDICT_LABEL_RE = /(?:quick\s+scan|careful\s+pass|deep\s+review)/i;
 
 /** Alternation (not a char class) so surrogate-pair emoji stay intact. */
 const SEVERITY_DOT_RE = /(?:🟢|🟡|🔴)/gu;
@@ -36,8 +47,10 @@ export function detectBlastRadiusLevel(
 }
 
 /**
- * Ensure Quick scan and Blast Radius carry a 🟢/🟡/🔴 matching the
- * detected LOW|MEDIUM|HIGH level. Idempotent; fixes wrong or missing dots.
+ * Ensure the verdict line and Blast Radius carry a 🟢/🟡/🔴 matching the
+ * detected LOW|MEDIUM|HIGH level, and that the verdict label (Quick scan /
+ * Careful pass / Deep review) agrees with it. Idempotent; fixes wrong or
+ * missing dots and labels.
  */
 export function enrichSeverityDots(summary: string): string {
   const level = detectBlastRadiusLevel(summary);
@@ -47,8 +60,8 @@ export function enrichSeverityDots(summary: string): string {
   return summary
     .split("\n")
     .map((line) => {
-      if (/Quick\s+scan/i.test(line)) {
-        return ensureQuickScanDot(line, dot);
+      if (VERDICT_LABEL_RE.test(line)) {
+        return ensureVerdictLine(line, dot, SEVERITY_VERDICT[level]);
       }
       if (matchLevel(line)) {
         return ensureLevelDot(line, dot, level);
@@ -76,12 +89,13 @@ function matchLevel(text: string): BlastRadiusLevel | null {
   return m[1]!.toUpperCase() as BlastRadiusLevel;
 }
 
-/** `> 🟢 👀 **Quick scan** — …` (dot before the eyes). */
-function ensureQuickScanDot(line: string, dot: string): string {
-  const idx = line.search(/Quick\s+scan/i);
+/** `> 🟢 👀 **Quick scan** — …` (dot before the eyes, label matching the level). */
+function ensureVerdictLine(line: string, dot: string, verdict: string): string {
+  const idx = line.search(VERDICT_LABEL_RE);
   if (idx < 0) return line;
   const head = line.slice(0, idx).replace(SEVERITY_DOT_RE, "").replace(/  +/g, " ");
-  const tail = line.slice(idx);
+  // Replacing only the matched label keeps whatever bolding wraps it.
+  const tail = line.slice(idx).replace(VERDICT_LABEL_RE, verdict);
   if (head.includes("👀")) {
     return head.replace("👀", `${dot} 👀`) + tail;
   }
