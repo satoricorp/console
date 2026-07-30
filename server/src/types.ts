@@ -21,7 +21,7 @@ export type PushBundle = {
   event: string;
   schema_version?: number;
   created_at: number;
-  gx_version: string;
+  tx_version: string;
   pr_id?: string;
   review_id?: string;
   review_url?: string;
@@ -40,7 +40,7 @@ export type PushBundle = {
     head_commit_id: string;
     github_pull_request_url?: string;
   };
-  // Schema v2: flat list of published revisions (commit + GX trailer ID).
+  // Schema v2: flat list of published revisions (commit + TX trailer ID).
   revisions?: PublishRevision[];
   // Schema v1 (legacy): single current change …
   change?: {
@@ -51,7 +51,7 @@ export type PushBundle = {
     files?: string[];
     review_context?: ReviewContextPayload;
   };
-  // … plus the stack it sat on. jj_change_id carried the GX trailer revision ID.
+  // … plus the stack it sat on. jj_change_id carried the TX trailer revision ID.
   stack?: Array<{
     change?: {
       id?: number;
@@ -129,7 +129,7 @@ export type ExtractBody = {
   repoRoot: string;
   refRange: string;
   headCommit: string;
-  gxVersion?: string;
+  txVersion?: string;
   intentCandidates?: unknown[];
   hunkLinks: HunkLinkInput[];
   struggleSignals?: unknown[];

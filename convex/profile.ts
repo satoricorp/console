@@ -90,7 +90,7 @@ export const getMyProfile = query({
   },
 });
 
-/** Lightweight auth identity for BFF routes (GX API user id). */
+/** Lightweight auth identity for BFF routes (TX API user id). */
 export const getViewer = query({
   args: {},
   returns: v.union(

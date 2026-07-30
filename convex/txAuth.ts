@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { betterAuthUserIdFromCreateResult, hashToken } from "./gxAuthUtils";
+import { betterAuthUserIdFromCreateResult, hashToken } from "./txAuthUtils";
 
 export const ensureGithubUser = internalMutation({
   args: {
@@ -84,14 +84,14 @@ export const createCliSession = internalMutation({
     githubLogin: v.string(),
     machineId: v.string(),
     machineName: v.string(),
-    gxVersion: v.optional(v.string()),
+    txVersion: v.optional(v.string()),
     expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
     const tokenHash = await hashToken(args.token);
     const now = Date.now();
     const existingSessions = await ctx.db
-      .query("gxCliSessions")
+      .query("txCliSessions")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .collect();
 
@@ -103,14 +103,14 @@ export const createCliSession = internalMutation({
       }
     }
 
-    await ctx.db.insert("gxCliSessions", {
+    await ctx.db.insert("txCliSessions", {
       tokenHash,
       userId: args.userId,
       githubUserId: args.githubUserId,
       githubLogin: args.githubLogin,
       machineId: args.machineId,
       machineName: args.machineName,
-      gxVersion: args.gxVersion,
+      txVersion: args.txVersion,
       createdAt: now,
       expiresAt: args.expiresAt,
     });
@@ -124,7 +124,7 @@ export const verifyCliSession = internalMutation({
   handler: async (ctx, args) => {
     const tokenHash = await hashToken(args.token);
     const session = await ctx.db
-      .query("gxCliSessions")
+      .query("txCliSessions")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", tokenHash))
       .first();
 

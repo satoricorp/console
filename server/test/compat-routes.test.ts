@@ -5,14 +5,14 @@ import { authHeaders, installTestAuth } from "./auth";
 import { describeDb } from "./db-gate";
 
 const originalFetch = globalThis.fetch;
-const originalOpenAIKey = process.env.GX_OPENAI_API_KEY;
-const originalOpenAIBaseURL = process.env.GX_CLOUD_OPENAI_BASE_URL;
+const originalOpenAIKey = process.env.TX_OPENAI_API_KEY;
+const originalOpenAIBaseURL = process.env.TX_CLOUD_OPENAI_BASE_URL;
 
 describe("publish route", () => {
   test("POST /v1/publish is mounted behind local dev auth", async () => {
-    const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
+    const originalCloudApiKey = process.env.TX_CLOUD_API_KEY;
     const originalNodeEnv = process.env.NODE_ENV;
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "development";
 
     try {
@@ -29,9 +29,9 @@ describe("publish route", () => {
       expect(await res.json()).toEqual({ error: "Invalid JSON body" });
     } finally {
       if (originalCloudApiKey === undefined) {
-        delete process.env.GX_CLOUD_API_KEY;
+        delete process.env.TX_CLOUD_API_KEY;
       } else {
-        process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
+        process.env.TX_CLOUD_API_KEY = originalCloudApiKey;
       }
       if (originalNodeEnv === undefined) {
         delete process.env.NODE_ENV;
@@ -182,7 +182,7 @@ describeDb("compat bookmarks route", () => {
       revision: number;
       remote_head_sha: string | null;
     }>;
-    // Installed gx binaries gate catch-up on these two; do not drop them until
+    // Installed tx binaries gate catch-up on these two; do not drop them until
     // deprecated-route telemetry shows no old-CLI traffic.
     expect(rows[0]!.revision).toBe(3);
     expect(rows[0]!.remote_head_sha).toBe("remote123");
@@ -257,20 +257,20 @@ describeDb("compat OpenAI proxy routes", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     if (originalOpenAIKey === undefined) {
-      delete process.env.GX_OPENAI_API_KEY;
+      delete process.env.TX_OPENAI_API_KEY;
     } else {
-      process.env.GX_OPENAI_API_KEY = originalOpenAIKey;
+      process.env.TX_OPENAI_API_KEY = originalOpenAIKey;
     }
     if (originalOpenAIBaseURL === undefined) {
-      delete process.env.GX_CLOUD_OPENAI_BASE_URL;
+      delete process.env.TX_CLOUD_OPENAI_BASE_URL;
     } else {
-      process.env.GX_CLOUD_OPENAI_BASE_URL = originalOpenAIBaseURL;
+      process.env.TX_CLOUD_OPENAI_BASE_URL = originalOpenAIBaseURL;
     }
   });
 
   test("POST /gx/openai/chat-completions proxies valid chat payloads", async () => {
-    process.env.GX_OPENAI_API_KEY = "test-openai-key";
-    process.env.GX_CLOUD_OPENAI_BASE_URL = "https://openai.test/custom";
+    process.env.TX_OPENAI_API_KEY = "test-openai-key";
+    process.env.TX_CLOUD_OPENAI_BASE_URL = "https://openai.test/custom";
     const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init });
@@ -301,8 +301,8 @@ describeDb("compat OpenAI proxy routes", () => {
   });
 
   test("POST /gx/openai/responses proxies valid responses payloads", async () => {
-    process.env.GX_OPENAI_API_KEY = "test-openai-key";
-    process.env.GX_CLOUD_OPENAI_BASE_URL = "https://openai.test/v1";
+    process.env.TX_OPENAI_API_KEY = "test-openai-key";
+    process.env.TX_CLOUD_OPENAI_BASE_URL = "https://openai.test/v1";
     const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: String(url), init });

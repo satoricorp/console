@@ -1,9 +1,9 @@
 import type postgres from "postgres";
 import { findOrCreateBookmark } from "../bookmarks/adoption";
-import { containsGxMention } from "../gx-mention/handler";
+import { containsTxMention } from "../tx-mention/handler";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { resolveOrgIdForInstallation } from "./app";
-import { processGxMention } from "./mention";
+import { processTxMention } from "./mention";
 import type { GitHubComment } from "./webhook";
 
 export async function ingestLineComment(
@@ -25,7 +25,7 @@ export async function ingestLineComment(
 
   const body = input.comment.body?.trim() ?? "";
   const author = input.comment.user?.login ?? "unknown";
-  const isGx = containsGxMention(body);
+  const isTx = containsTxMention(body);
 
   if (typeof input.comment.id === "number") {
     const [existing] = await db<{ id: string; bookmark_id: string; author: string }[]>`
@@ -36,8 +36,8 @@ export async function ingestLineComment(
       LIMIT 1
     `;
     if (existing) {
-      if (input.webhookAction === "edited" && isGx) {
-        await processGxMention(db, {
+      if (input.webhookAction === "edited" && isTx) {
+        await processTxMention(db, {
           orgId,
           bookmarkId: existing.bookmark_id,
           commentId: existing.id,
@@ -88,7 +88,7 @@ export async function ingestLineComment(
       ${input.comment.path ?? null},
       ${input.comment.line ?? null},
       ${input.comment.in_reply_to_id ?? null},
-      ${isGx},
+      ${isTx},
       ${now}
     )
     RETURNING id
@@ -104,8 +104,8 @@ export async function ingestLineComment(
     repoScope: input.repoFullName,
   });
 
-  if (isGx) {
-    await processGxMention(db, {
+  if (isTx) {
+    await processTxMention(db, {
       orgId,
       bookmarkId: bookmark.id,
       commentId: row.id,

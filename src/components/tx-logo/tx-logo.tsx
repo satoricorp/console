@@ -8,12 +8,12 @@ import {
   type LogoTone,
   type LogoVariant,
 } from "./constants";
-import { configureGxLogoRenderer, GxLogoScene } from "./gx-logo-scene";
-import { useGxLogoMotion } from "./use-gx-logo-motion";
+import { configureTxLogoRenderer, TxLogoScene } from "./tx-logo-scene";
+import { useTxLogoMotion } from "./use-tx-logo-motion";
 
 export type { LogoTone } from "./constants";
 
-export type GxLogoProps = {
+export type TxLogoProps = {
   variant?: LogoVariant;
   tone?: LogoTone;
   className?: string;
@@ -33,7 +33,7 @@ export type GxLogoProps = {
   onReady?: () => void;
 };
 
-export function GxLogo({
+export function TxLogo({
   variant = "header",
   tone = "chrome",
   className,
@@ -45,15 +45,15 @@ export function GxLogo({
   onGlReady,
   onReady,
   children,
-}: GxLogoProps) {
+}: TxLogoProps) {
   const config = getLogoConfig(variant);
   const isHero = variant === "hero";
   const { motionEnabled, touchTrackingEnabled, disableMotion } =
-    useGxLogoMotion(interactive);
+    useTxLogoMotion(interactive);
   const pointerTrackingEnabled = motionEnabled || (isHero && touchTrackingEnabled);
   const isSquare =
     variant === "icon" || variant === "iconX" || pixelSize != null;
-  const ariaLabel = variant === "iconX" ? "x" : "gx";
+  const ariaLabel = variant === "iconX" ? "x" : "tx";
   const isHeader = variant === "header" || variant === "footer";
   /** Header is a small canvas — allow Retina DPR without the hero's continuous loop cost. */
   const dpr =
@@ -113,7 +113,7 @@ export function GxLogo({
         }}
         dpr={dpr}
         onCreated={({ gl, camera, invalidate }) => {
-          configureGxLogoRenderer(gl, variant, tone);
+          configureTxLogoRenderer(gl, variant, tone);
           camera.lookAt(0, 0, 0);
           disableMotion(gl);
           invalidate();
@@ -122,7 +122,7 @@ export function GxLogo({
         style={{ width: "100%", height: "100%", display: "block" }}
       >
         <Suspense fallback={null}>
-          <GxLogoScene
+          <TxLogoScene
             variant={variant}
             tone={tone}
             interactive={pointerTrackingEnabled}

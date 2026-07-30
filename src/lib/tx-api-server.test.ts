@@ -1,48 +1,48 @@
 import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test";
-import type * as gxApiServer from "./gx-api-server";
+import type * as txApiServer from "./tx-api-server";
 
 mock.module("server-only", () => ({}));
 
-let getGxApiBaseUrl: typeof gxApiServer.getGxApiBaseUrl;
-let gxApiRequest: typeof gxApiServer.gxApiRequest;
-let normalizeGxApiPath: typeof gxApiServer.normalizeGxApiPath;
+let getTxApiBaseUrl: typeof txApiServer.getTxApiBaseUrl;
+let txApiRequest: typeof txApiServer.txApiRequest;
+let normalizeTxApiPath: typeof txApiServer.normalizeTxApiPath;
 
-describe("gx api server helpers", () => {
+describe("tx api server helpers", () => {
   const originalFetch = globalThis.fetch;
-  const originalCloudURL = process.env.GX_CLOUD_URL;
-  const originalAPIKey = process.env.GX_CLOUD_API_KEY;
+  const originalCloudURL = process.env.TX_CLOUD_URL;
+  const originalAPIKey = process.env.TX_CLOUD_API_KEY;
 
   beforeAll(async () => {
-    const gxApi = await import("./gx-api-server");
-    getGxApiBaseUrl = gxApi.getGxApiBaseUrl;
-    gxApiRequest = gxApi.gxApiRequest;
-    normalizeGxApiPath = gxApi.normalizeGxApiPath;
+    const txApi = await import("./tx-api-server");
+    getTxApiBaseUrl = txApi.getTxApiBaseUrl;
+    txApiRequest = txApi.txApiRequest;
+    normalizeTxApiPath = txApi.normalizeTxApiPath;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    restoreEnv("GX_CLOUD_URL", originalCloudURL);
-    restoreEnv("GX_CLOUD_API_KEY", originalAPIKey);
+    restoreEnv("TX_CLOUD_URL", originalCloudURL);
+    restoreEnv("TX_CLOUD_API_KEY", originalAPIKey);
   });
 
-  test("uses GX_CLOUD_URL as an origin", () => {
-    process.env.GX_CLOUD_URL = "http://localhost:3201/";
+  test("uses TX_CLOUD_URL as an origin", () => {
+    process.env.TX_CLOUD_URL = "http://localhost:3201/";
 
-    expect(getGxApiBaseUrl()).toBe("http://localhost:3201");
+    expect(getTxApiBaseUrl()).toBe("http://localhost:3201");
   });
 
   test("keeps bookmark paths unprefixed and adds a leading slash", () => {
-    expect(normalizeGxApiPath("/bookmarks")).toBe("/bookmarks");
-    expect(normalizeGxApiPath("/bookmarks/abc?include_payload=1")).toBe(
+    expect(normalizeTxApiPath("/bookmarks")).toBe("/bookmarks");
+    expect(normalizeTxApiPath("/bookmarks/abc?include_payload=1")).toBe(
       "/bookmarks/abc?include_payload=1",
     );
-    expect(normalizeGxApiPath("/v1/reviews/abc")).toBe("/v1/reviews/abc");
-    expect(normalizeGxApiPath("bookmarks")).toBe("/bookmarks");
+    expect(normalizeTxApiPath("/v1/reviews/abc")).toBe("/v1/reviews/abc");
+    expect(normalizeTxApiPath("bookmarks")).toBe("/bookmarks");
   });
 
   test("sends console requests to the API", async () => {
-    process.env.GX_CLOUD_URL = "http://gx-cloud.test/";
-    process.env.GX_CLOUD_API_KEY = "service-token";
+    process.env.TX_CLOUD_URL = "http://tx-cloud.test/";
+    process.env.TX_CLOUD_API_KEY = "service-token";
 
     let requested: RequestInfo | URL | undefined;
     let init: RequestInit | undefined;
@@ -52,10 +52,10 @@ describe("gx api server helpers", () => {
       return Promise.resolve(Response.json({ ok: true }));
     }) as typeof fetch;
 
-    await gxApiRequest("user-1", "/bookmarks?merge_status=open");
+    await txApiRequest("user-1", "/bookmarks?merge_status=open");
 
     expect(requested).toBe(
-      "http://gx-cloud.test/bookmarks?merge_status=open&format=console",
+      "http://tx-cloud.test/bookmarks?merge_status=open&format=console",
     );
     expect(init?.headers).toMatchObject({
       Authorization: "Bearer service-token",

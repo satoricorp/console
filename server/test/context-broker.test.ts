@@ -10,7 +10,7 @@ import {
   setIndexingFetch,
 } from "../src/indexing/turbopuffer";
 
-const originalBroker = process.env.GX_CONTEXT_BROKER;
+const originalBroker = process.env.TX_CONTEXT_BROKER;
 const originalOpenAI = process.env.OPENAI_API_KEY;
 const originalTpuf = process.env.TURBOPUFFER_API_KEY;
 
@@ -18,8 +18,8 @@ describe("retrieveReviewContext broker", () => {
   afterEach(() => {
     clearBrokerMemoForTests();
     resetIndexingFetch();
-    if (originalBroker === undefined) delete process.env.GX_CONTEXT_BROKER;
-    else process.env.GX_CONTEXT_BROKER = originalBroker;
+    if (originalBroker === undefined) delete process.env.TX_CONTEXT_BROKER;
+    else process.env.TX_CONTEXT_BROKER = originalBroker;
     if (originalOpenAI === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalOpenAI;
     if (originalTpuf === undefined) delete process.env.TURBOPUFFER_API_KEY;
@@ -27,7 +27,7 @@ describe("retrieveReviewContext broker", () => {
   });
 
   test("returns empty when flag off", async () => {
-    delete process.env.GX_CONTEXT_BROKER;
+    delete process.env.TX_CONTEXT_BROKER;
     const result = await retrieveReviewContext({} as never, {
       orgId: "org-a",
       repoFullName: "acme/app",
@@ -38,7 +38,7 @@ describe("retrieveReviewContext broker", () => {
   });
 
   test("routes source_kinds into buckets and records manifest", async () => {
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
 
@@ -114,18 +114,18 @@ describe("retrieveReviewContext broker", () => {
   });
 
   test("previous-prs stays empty when no prior PR touched the changed files", async () => {
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
 
-    // What the live satoricorp/gx namespace returns for PR #112: the PR's own
+    // What the live satoricorp/tx namespace returns for PR #112: the PR's own
     // diff, plus an unrelated codereview-judge change.
     const priorRows = [
       {
         id: "self-1",
         $dist: 0.03,
         attributes: {
-          text: "GX published revision diff.\nBranch: demo/index-freshness-check",
+          text: "TX published revision diff.\nBranch: demo/index-freshness-check",
           source_kind: "published_revision_diff",
           file: "internal/cli/doctor.go",
           branch_name: "demo/index-freshness-check",
@@ -136,7 +136,7 @@ describe("retrieveReviewContext broker", () => {
         id: "judge-1",
         $dist: 0.02,
         attributes: {
-          text: "GX published revision diff.\nDescription: Make the judge verify every candidate",
+          text: "TX published revision diff.\nDescription: Make the judge verify every candidate",
           source_kind: "published_revision_diff",
           file: "internal/codereview/judge.go",
           branch_name: "main",
@@ -176,7 +176,7 @@ describe("retrieveReviewContext broker", () => {
 
     const result = await retrieveReviewContext({} as never, {
       orgId: "org-a",
-      repoFullName: "satoricorp/gx",
+      repoFullName: "satoricorp/tx",
       queryTerms: {
         changedFiles: [
           "internal/cli/doctor.go",
@@ -200,7 +200,7 @@ describe("retrieveReviewContext broker", () => {
     // answers with up to three times the requested count. searchIndex passes
     // that through (searchCodeReviewHistory depends on it), so the cap has to
     // hold here — a live previous-prs query with limit 8 served 13 rows.
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
 
@@ -243,7 +243,7 @@ describe("retrieveReviewContext broker", () => {
   });
 
   test("memoizes identical queries within TTL", async () => {
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
     let embedCalls = 0;
@@ -277,7 +277,7 @@ describe("retrieveReviewContext broker", () => {
   });
 
   test("every bucket keeps a share of the budget when all are full", async () => {
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
 
@@ -361,7 +361,7 @@ describe("retrieveReviewContext broker", () => {
 });
 describe("broker memo bounds", () => {
   test("expired entries are removed, not merely skipped", async () => {
-    process.env.GX_CONTEXT_BROKER = "1";
+    process.env.TX_CONTEXT_BROKER = "1";
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.TURBOPUFFER_API_KEY = "test-tpuf";
     setIndexingFetch((async (input: RequestInfo | URL) => {

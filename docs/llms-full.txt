@@ -1,384 +1,179 @@
-# Overview
-
-GX helps teams understand and review AI-written code without treating every pull request as an isolated diff.
-
-The open-source `gx` CLI installs Git hooks that capture coding sessions and link them to your commits as reviewable revisions, and adds AI review with `gx review`. You keep using plain Git — `git add`, `git commit`, `git push` — and GX does its work automatically on the way through. The paid GitHub features add [PR Summaries and `@gx` chat](/docs/github) inside GitHub pull requests.
-
-## Start here
-
-- [Get started](/docs/getting-started): install GX, sign in, and publish your first revision.
-- [How it works](/docs/how-it-works): why GX stores more context than Git, and what revisions are.
-- [CLI](/docs/cli): every command with flags, examples, and exit codes.
-- [MCP setup](/docs/mcp): give coding agents review context through the `gx_review` MCP tool.
-- [Pull Requests](/docs/github): PR Summaries, `@gx` chat, and paid GitHub review features.
-- [Troubleshooting](/docs/troubleshooting): common errors and how to fix them.
-
-## Core workflow
-
-You keep working in plain Git. Once `gx init` installs the hooks, your normal `git` commands do the GX work automatically — there is no GX-specific save verb to learn.
-
-```bash
-git add <files>                        # choose the scope of the change
-git commit -m "describe this change"   # a hook records it as a GX revision
-git push                               # the pre-push hook captures sessions + publishes review context
-```
-
-A commit looks like any other:
-
-```text
-$ git add src/retry.js
-$ git commit -m "add retry helper with attempt limit"
-[main b694d3be] add retry helper with attempt limit
- 1 file changed, 12 insertions(+)
-```
-
-Behind that ordinary commit, GX's `prepare-commit-msg` and `post-commit` hooks record a GX **revision** (`qltmnmynnyzk`) — an editable review unit that carries review context: which captured session produced it, and where it sits among your branches. When you `git push`, the pre-push hook links each captured session to the hunks it changed and publishes the review bundle.
-
-GX adds three commands on top of Git — and nothing that duplicates Git itself:
-
-```bash
-gx init      # set up hooks and identity in a repo (run once)
-gx review    # AI review of your current change, with codebase + session context (alias: gxr)
-gx doctor    # check capture, hooks, and workflow state
-```
-
-## Product model
-
-GX uses a few terms consistently:
-
-- **Session**: captured coding context from an agent, editor, or shell.
-- **Revision**: one reviewable logical change — a Git commit plus the context that explains how it was produced.
-- **Stack**: an ordinary Git branch carrying more than one revision — a line of work reviewed together.
-- **Review bundle**: the published payload that joins code changes, sessions, metadata, and review evidence.
-
-These are just names for what your ordinary Git commits and branches already are, plus the review context GX records around them. You never leave Git to get them.
-
-A Git commit is a durable snapshot plus a short message. That is still useful, but it is often too thin for AI-generated work: the commit does not know which agent session produced it, which prompt or shell commands mattered, whether the change was split out of a larger messy workspace, or how it relates to nearby generated work.
-
-A GX revision is the review unit: a Git commit plus the review context recorded around it — session provenance, generated summary, file-level intent, and its position on the branch. Calling it a revision keeps the focus on reviewable evolution of the work, not only on the final Git object.
-
-Your branch stays a plain Git branch. GX records the ordered revisions and context around the branch you already have, so reviewers can see the sequence of intent instead of only the final branch state.
-
-# Get started
-
-Start with GX when you want coding agents to produce reviewable work instead of one large undifferentiated diff.
-
-The usual path is:
-
-1. Install the CLI.
-2. Sign in with GitHub.
-3. Initialize GX in a repository.
-4. Stage and commit with Git, review, and push.
-
-## Install
-
-The CLI runs on macOS and Linux (arm64 / amd64):
-
-```bash
-curl -fsSL https://download.gx.run/install.sh | sh
-```
-
-On Windows, run GX inside WSL. You can request a native Windows build from the [download page](/download).
-
-The installer places three binaries in `~/.local/bin`:
-
-| Binary | Purpose |
-| --- | --- |
-| `gx` | the CLI |
-| `gx-mcp` | stdio MCP server for coding agents ([MCP setup](/docs/mcp)) |
-| `gxr` | shortcut for `gx review` |
-
-Verify the install:
-
-```bash
-gx version   # prints the installed version
-gx doctor    # checks capture, hooks, and workflow state
-```
-
-## Sign in
-
-GX uses GitHub for identity. Cloud sign-in is required to push metadata and use GX code review.
-
-```bash
-gx auth login
-gx auth status
-```
-
-The web app sign-in and CLI sign-in are linked through your GitHub account. After signing in from the CLI, you can see signed-in CLI devices in the web app, including machine name, GX version, last-used time, and session expiry. Pass `--name` to control how the machine appears there:
-
-```bash
-gx auth login --name "work-laptop"
-```
-
-Log out with:
-
-```bash
-gx auth logout
-```
-
-## Initialize a repo
-
-Run `gx init` once, from the repository you want GX to manage:
-
-```text
-$ gx init
-
-Configured     gx identity as Ada Doc <ada@example.com>
-Git hooks      ok: record on commit, capture on git push
-Claude hooks   ok: Stop/SessionEnd transcript capture
-MCP            ok: claude
-AGENTS.md      ok: added GX workflow instructions
-
-Next           git add <files> && git commit -m "..."
-```
-
-Line by line:
-
-- **gx identity** — the name and email recorded on GX revisions. Defaults to your Git identity; override with `gx init --name "..." --email "..."`.
-- **Git hooks** — `prepare-commit-msg` and `post-commit` record each `git commit` as a GX revision, and a `pre-push` hook captures sessions and publishes GX metadata when you `git push`.
-- **Claude hooks** — Claude Code `Stop`/`SessionEnd` hooks, so agent transcripts are captured as GX sessions.
-- **MCP** — registers the [GX MCP server](/docs/mcp) with supported agent CLIs found on the machine.
-- **AGENTS.md** — offers to append GX workflow instructions telling agents working in this repo to use plain Git (GX's hooks record the revision).
-
-For scripts and agent sandboxes, `gx init -y` accepts all defaults and suppresses interactive prompts.
-
-To skip the per-repository step entirely, `gx init --global` installs the hooks once for every repository on the machine — useful when you don't want to remember `gx init` in a new clone. See [CLI → Machine-wide hooks](/docs/cli#machine-wide-hooks).
-
-## Optional: bring your own model key
-
-You do not need a model API key to use GX. The core workflow is fully deterministic, and once you sign in, AI features like `gx review` run through GX Cloud on your plan or free trial.
-
-Set your own key only when you want GX to call a specific provider or model directly:
-
-```bash
-gx set key                                              # interactive: pick provider, paste key
-gx set key --provider anthropic --key "$ANTHROPIC_API_KEY"   # scripts
-```
-
-GX looks for an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the environment first, and stores a pasted key in `~/.gx/inference.json` (or `$GX_HOME/inference.json`). When both are available, your own key takes precedence over GX Cloud.
-
-Paid pull request features (PR Summaries, `@gx` chat) always run through GX Cloud, never your local keys.
-
-## First revision
-
-After making changes, stage the files that belong together and commit them with plain Git:
-
-```text
-$ git add src/retry.js
-$ git commit -m "add retry helper with attempt limit"
-[main b694d3be] add retry helper with attempt limit
- 1 file changed, 12 insertions(+)
-```
-
-What happened:
-
-- `git add` chose the scope — only `src/retry.js` is part of this revision. Use `git add -p` to select individual hunks.
-- `git commit` landed the change on the current branch as usual. Behind it, GX's `prepare-commit-msg` and `post-commit` hooks recorded a GX revision (`qltmnmynnyzk`) that carries the review context around the commit.
-- Because no coding session was captured for this commit, the revision's provenance is `absent`. When an agent session is captured, GX matches it automatically and links it instead.
-
-Then publish:
-
-```bash
-git status   # inspect first
-git push     # the GX pre-push hook captures sessions and publishes metadata
-```
-
-`git push` pushes normal Git refs; with the GX hook installed, capture and cloud publish happen on the way out.
-
-## Build a stack
-
-A stack is just an ordinary Git branch with more than one commit on it. Start a branch for a line of work, then keep committing to grow it:
-
-```text
-$ git checkout -b feature/retry-backoff
-Switched to a new branch 'feature/retry-backoff'
-
-$ git add src/backoff.js
-$ git commit -m "add exponential backoff helper"
-[feature/retry-backoff 14c101a1] add exponential backoff helper
- 1 file changed, 18 insertions(+)
-
-$ git add src/jitter.js
-$ git commit -m "add jitter to backoff delays"
-[feature/retry-backoff ae0d5b62] add jitter to backoff delays
- 1 file changed, 6 insertions(+)
-```
-
-GX recorded a revision for each commit as it landed. Inspect the stack with plain Git — it is just the branch's own commits, newest first:
-
-```text
-$ git log --oneline main..feature/retry-backoff
-ae0d5b62 add jitter to backoff delays
-14c101a1 add exponential backoff helper
-```
-
-The branch `feature/retry-backoff` is the stack: `main` is its base, and each commit on it is a GX revision. When you `git push`, the pre-push hook publishes the whole branch as a reviewable stack.
-
-## Agent workflow
-
-Agents work in plain Git, exactly like you do:
-
-1. Stage with `git add`
-2. Commit with `git commit` — GX's hooks record the revision
-3. Push with `git push` — the pre-push hook captures sessions and publishes metadata
-
-The MCP server adds one tool worth wiring up: agents can run `gx_review` for review context on the current change.
-
-See [MCP setup](/docs/mcp) for `add-mcp`, Executor, and per-tool parameters.
-
 # How it works
 
-GX adds a context layer around your existing Git workflow. It captures what happened during coding sessions, attaches that context to reviewable revisions, and publishes normal Git branches and commits — so reviewers see the intent behind a change, not just the final diff.
+Totality adds a context layer around your existing Git workflow. It captures what
+happened during coding sessions, attaches that context to ordinary Git commits,
+and uses it for two review surfaces: `tx review` locally and generated PR
+summaries on GitHub.
 
 ## The problem
 
-Git was built for humans typing commits one at a time. A commit stores a snapshot and a short message, and for human-paced work that is usually enough.
+Git was built for humans typing commits one at a time. A commit stores a
+snapshot and a short message, and for human-paced work that is usually enough.
 
 Agent-written code breaks two of Git's assumptions:
 
-1. **The context that explains a change never makes it into the repo.** The prompt that asked for the change, the commands the agent ran, the tests it executed, the dead ends it backed out of — all of that lives in a session transcript that is gone by review time. The commit message is whatever one line survived.
-2. **Review is now the bottleneck.** The cost of generating code is dropping toward zero, but teams still review line by line. When a pull request is one large undifferentiated diff with a thin message, the reviewer has to reconstruct intent from scratch.
+1. **The context that explains a change never makes it into the repo.** The
+   prompt that asked for the change, the commands the agent ran, the tests it
+   executed, the dead ends it backed out of — all of that lives in a session
+   transcript that is gone by review time. The commit message is whatever one
+   line survived.
+2. **Review is now the bottleneck.** The cost of generating code is dropping
+   toward zero, but teams still review line by line. When a pull request is one
+   large undifferentiated diff with a thin message, the reviewer reconstructs
+   intent from scratch.
 
-## What GX captures
+## What Totality captures
 
-GX records work at two levels:
+- **Sessions** — transcripts from Claude Code, Codex, and Cursor. The pre-push
+  hook captures them into `~/.totality/totality.db` and publishes them alongside
+  the code they produced.
+- **Revisions** — each plain `git commit` is recorded as one reviewable unit,
+  down to individual hunks. Totality links each revision to the session that
+  produced it by matching the changed hunks against captured session activity —
+  nothing is attached by hand.
 
-- **Sessions** — transcripts from coding agents (for example, Claude Code transcripts via `Stop`/`SessionEnd` hooks that `gx init` installs). GX stages a lightweight reference locally, and on `git push` publishes the session alongside the code it produced; the published session is kept with your review history in GX Cloud.
-- **Revisions** — each plain `git commit` records the staged changes as one reviewable unit via the GX hooks, down to individual [hunks](https://git-scm.com/book/en/v2/Git-Tools-Interactive-Staging) (a few changed lines, not whole files). GX links each revision to the session that produced it automatically, by matching the changed hunks against captured session activity — you never attach anything by hand.
+## How tx review works
 
-Because changes are stored as described hunks with linked sessions, GX can point reviewers at the parts that matter and let them skim the mechanical rest — instead of forcing a line-by-line read of everything.
+`tx review` reads the current change — a dirty working tree, or the branch's
+commits against its base — and reviews it with two independent AI reviewers
+plus repo context: the indexed codebase, captured sessions, review history, and
+your repo's review policy. A judge model then verifies and dedupes the
+findings.
 
-## Revisions
+Each surviving finding is printed with **Why** (the defect), **Do next** (the
+concrete fix), and its sources. When both reviewers raised the same issue
+independently, the report says so — that agreement is the strongest confidence
+signal a two-model panel produces.
 
-You already know the Git mental model of branches and commits. GX keeps exactly that model and records review context around it — no new objects to learn.
+The command writes nothing — no hooks, no repo state, no index mutation — so it
+runs anywhere, including CI (`--fail-on` turns it into a gate) and checkouts
+you do not own. See the [CLI reference](/docs/cli#tx-review).
 
-A **revision** is a Git commit plus the review context GX records around it: the session that produced it, the changed hunks, and a generated summary. Your branch is just a Git branch; GX adds nothing on top of it. Each revision is separately reviewable, and the order of commits on the branch tells the story of the work.
+## How PR summaries work
+
+On `git push`, the pre-push hook uploads a review bundle: the revisions, their
+hunks, and the linked sessions. When a pull request exists, Totality Cloud
+generates a summary from that bundle plus the indexed codebase, and writes it
+into the PR description below your own text.
+
+The summary opens with a verdict — 🟢 **Quick scan**, 🟡 **Careful pass**, or
+🔴 **Deep review** — judged by blast radius: what the change can break,
+including code the diff never touches. Notable Changes each carry an
+`Attribution:` line naming the concrete source that informed them. See
+[Pull Requests](/docs/pull-requests).
+
+## Why this speeds up review
+
+- The verdict tells a reviewer how much attention a PR needs before they open
+  the diff. A two-file rename that breaks downstream consumers gets 🔴; a
+  contained refactor gets 🟢.
+- Notable Changes point at the hunks that decide correctness, so the mechanical
+  rest can be skimmed instead of read line by line.
+- Session provenance answers "why is this here?" without a round-trip to the
+  author — the prompt, commands, and tests are part of the review context.
+- `tx review` catches findings before the PR exists, when they are cheapest to
+  fix.
 
 ## Everything is still just Git
 
-When you `git push`, the GX pre-push hook publishes:
+The hooks publish normal Git branches and commits; sessions and metadata go to
+Totality Cloud as a review bundle. Nothing about your repository becomes
+Totality-specific — if you stop using Totality tomorrow, your branches and
+commits remain ordinary Git.
 
-- normal Git **branches and commits**, so your Git log and GitHub stay standard;
-- the linked **sessions and metadata** to GX Cloud as a review bundle.
+---
 
-Nothing about your repository becomes GX-specific. If you stopped using GX tomorrow, your branches and commits remain ordinary Git.
+# Getting Started
 
-## Your Git workflow, unchanged
+Totality records which agent session produced each Git commit and uses that context
+for AI code review and generated pull request summaries. You work in plain Git.
 
-You might expect a set of `gx` verbs to learn. There are none for everyday work — after `gx init`, keep using the Git you already know:
+## Install
 
 ```bash
-git switch -c feature/my-change        # a normal branch, when you want one
-git add <files>                        # choose the scope of the change
-git commit -m "describe this change"   # a hook records it as a GX revision
-git push                               # the pre-push hook captures sessions + publishes
+curl -fsSL https://download.totality.sh/install.sh | sh
+tx auth login
 ```
 
-Plain `git commit` records the staged work as a GX revision. Use `git status` to inspect local state and `gx review` (alias `gxr`) to review the current change. Plain `git push` publishes the code plus linked session data and metadata to GitHub and GX Cloud through the pre-push hook.
+This installs bash/zsh completions and aliases, like `txr`, for `tx review`.
 
-## Where the context goes
+## Basic Usage
 
-The published review bundle powers the review surfaces:
+```bash
+cd your-repo
+tx init                                # once per repo: installs the Git hooks
+git add src/retry.js
+git commit -m "add retry helper"       # hook records the revision
+tx review                              # AI review before you push (optional)
+git push                               # hook captures the session and publishes
+gh pr create                           # Totality Cloud adds the summary to the PR
+```
 
-- [PR Summaries](/docs/github) tell reviewers what changed, why, and which files deserve attention first.
-- [`@gx` chat](/docs/github) answers questions inside the pull request, citing the sessions and diffs it used.
-- [`gx review`](/docs/cli) runs a local review using the same captured context before you ever open a PR.
+## Uninstall
 
-The recommended way to give agents review context is through the [MCP server](/docs/mcp): it exposes the `gx_review` tool so your coding tool can review its own work in the loop, without dropping to the terminal.
+```bash
+rm -f ~/.local/bin/tx ~/.local/bin/txr ~/.local/bin/tx-mcp
+rm -f ~/.local/share/bash-completion/completions/tx ~/.zfunc/_tx
+```
+
+Installed Git hooks exit silently when the binary is absent, so plain Git keeps
+working. Local data remains in `~/.totality`.
+
+## Pages
+
+- [CLI](/docs/cli) — every command: `tx init`, `tx review`, `tx auth`, `tx doctor`
+- [MCP](/docs/mcp) — connect `tx_review` to Claude Code, Cursor, and Codex
+- [Pull Requests](/docs/pull-requests) — generated PR summaries and `@tx` chat on GitHub
+
+---
 
 # CLI
 
-`gx` is the local CLI. It is open source and runs on your machine. It adds a quality and workflow layer around your existing repo instead of replacing GitHub.
+Initialize any repository with `tx init`. This installs git hooks that capture
+your session context and pairs it with your code changes, giving totality
+better context for review.
 
-You work in plain Git — `git add`, `git commit`, `git push` — and once `gx init` installs the hooks, GX records review context around your commits automatically: which session produced each change, and where it sits in your stack. GX adds a few commands of its own; it does not replace any Git command you already use.
-
-## Core loop
-
-Once `gx init` installs the hooks, you work entirely in plain Git. There is no GX save verb to learn — your normal commands do the GX work on the way through.
+## Totality CLI Overview
 
 ```bash
-git add <files>                        # choose the scope of the change
-git commit -m "describe this change"   # a hook records it as a GX revision
-git status                             # inspect state with plain Git
-git push                               # the pre-push hook captures sessions and publishes review context
+tx init      # set up hooks in a repo (run once)
+tx review    # AI review of the current change (alias: txr)
+tx auth      # sign in to Totality Cloud
+tx doctor    # diagnose capture, hooks, and publishing
+tx version   # print the version
 ```
 
-A commit looks like any other — GX records the revision behind it without changing Git's output:
-
-```text
-$ git add src/retry.js
-$ git commit -m "add retry helper with attempt limit"
-[main b694d3be] add retry helper with attempt limit
- 1 file changed, 12 insertions(+)
-```
-
-Behind that commit, GX's `prepare-commit-msg` and `post-commit` hooks record a GX **revision** — an editable review unit that carries context: which captured session produced it, and where it sits among your branches. On `git push`, the pre-push hook links each captured session to the hunks it changed and publishes the review bundle that becomes your PR summary.
-
-A revision is a Git commit plus the review context GX records around it; a stack is just the Git branch those revisions sit on. You never leave Git to get them.
-
-Provenance is inferred automatically. GX matches captured sessions to the commit's changed hunks, so the review bundle knows which session produced each change — there is no manual attach step, and agents do not declare provenance by hand.
-
-GX adds a few commands on top of Git — and nothing that duplicates Git itself:
+## tx init
 
 ```bash
-gx init      # set up hooks and identity in a repo (run once)
-gx review    # AI review of your current change, with codebase + session context (alias: gxr)
-gx doctor    # check capture, hooks, and workflow state
+tx init
 ```
 
-Setup and support commands round out the surface: `gx auth`, `gx set`, and `gx version`.
-
-## gx init
-
-```bash
-gx init
-```
-
-Prepares the current repository for GX: configures local identity, installs the Git hooks that record each commit as a revision and capture sessions on push (`prepare-commit-msg`, `post-commit`, and `pre-push`), installs Claude Code transcript-capture hooks, registers the MCP server with supported agent CLIs, and offers to add GX workflow instructions to `AGENTS.md`.
-
-Run it once per repository.
+`tx init` installs the Git hooks and registers the MCP server. Run it once per
+repository.
 
 | Flag | Meaning |
 | --- | --- |
-| `--name <name>` | user name to store in GX config (defaults to Git identity) |
-| `--email <email>` | user email to store in GX config |
+| `--name <name>` | user name to store in Totality config (defaults to Git identity) |
+| `--email <email>` | user email to store in Totality config |
 | `-y`, `--yes` | accept defaults and suppress prompts — use in scripts and agent sandboxes |
-| `--global` | install the hooks machine-wide instead of for one repository (see below) |
+| `--global` | install the hooks machine-wide instead of for one repository |
 
-```text
-$ gx init
-
-Configured     gx identity as Ada Doc <ada@example.com>
-Git hooks      ok: record on commit, capture on git push
-Claude hooks   ok: Stop/SessionEnd transcript capture
-MCP            ok: claude
-AGENTS.md      ok: added GX workflow instructions
-
-Next           git add <files> && git commit -m "..."
-```
-
-### Machine-wide hooks
-
-`gx init --global` installs the hooks once for every repository, so you still get
-capture and PR summaries in a repo where you forgot to run `gx init`:
+### Global hooks
 
 ```bash
-gx init --global
+tx init --global
 ```
 
-It writes the hooks to `~/.gx/hooks` and points Git at them with
-`git config --global core.hooksPath`. Because a global hooks path makes Git ignore
-each repository's own `.git/hooks`, GX's scripts **chain**: they do GX's work and
-then run the repository's own hook of the same name, passing along its arguments,
-input, and exit code — so husky, lefthook, and hand-written hooks keep working.
+Installs the hooks once for every repository. The scripts chain to each
+repository's own hooks of the same name, so husky, lefthook, and hand-written
+hooks keep working. If a global hooks path is already set to something else,
+`tx init --global` stops rather than overwriting it.
 
-If a global hooks path is already set to something that is not GX's, `gx init --global`
-stops and tells you rather than overwriting it.
-
-Exclude a single repository, from inside it:
+Opt a single repository out, from inside it:
 
 ```bash
-git config gx.enabled false
+git config tx.enabled false
 ```
 
 Undo the machine-wide install:
@@ -387,1063 +182,337 @@ Undo the machine-wide install:
 git config --global --unset core.hooksPath
 ```
 
-`gx doctor` reports whether the machine-wide hooks are installed and healthy.
-
-## gx review
+## tx review
 
 ```bash
-gx review                                 # alias: gxr
-gx review "check auth rollback risks"
+tx review                                 # alias: txr
+tx review "check the auth rollback path"
+tx review --scope security                # focused pass
+tx review --focus src/auth --deep         # deep review of one directory
 ```
 
-Reviews your changes using codebase context, captured sessions, review resources, and optional prompt guidance. Findings are printed as markdown and recorded to review history so future reviews can retrieve previous decisions.
-
-AI reviewers are optional and resolve credentials in this order: your own key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, or `gx set key`), then GX Cloud when you are signed in (on your plan or free trial), then deterministic checks only — the review always completes, with a warning naming what was unavailable.
+Reviews the current codebase state. `tx review` uses your indexed codebases,
+two separate models to identify the most important issues with a judge to
+dedupe findings. This can be run in the terminal or via [MCP](/docs/mcp).
 
 | Flag | Meaning |
 | --- | --- |
 | `[prompt]` | optional positional prompt to steer the review |
 | `--base <ref>` | review the commit range `<ref>...HEAD` instead of the working tree |
-| `--scope <scope>` | focused review scope: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
-| `--focus <path>` | limit review to files under this path prefix |
+| `--scope <name>` | focused lens: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `--focus <path>` | limit the review to files under a path prefix |
+| `--repo` | review the whole repository rather than the current change |
 | `--deep` | full-spectrum review with more local and indexed context |
-| `--verbose` | include repo facts, docs, and changed files in the output |
-| `--json` | print the report as JSON instead of markdown |
+| `--verbose` | include repo facts, docs, and changed files |
+| `--json` | print the report as JSON |
 | `--fail-on <level>` | exit non-zero when findings at or above this level survive |
 | `--no-publish` | skip posting the PR review comment and recording review history |
 
-Examples:
-
-```bash
-gx review --scope security                  # security-focused pass over the current changes
-gx review --focus src/auth --deep           # deep review of just the auth directory
-gx review "did we break the retry contract?"
-```
-
 ### What gets reviewed
 
-`gx review` picks the change set in this order:
+1. `--base <ref>` when given — the range `<ref>...HEAD`
+2. Otherwise a dirty working tree
+3. Otherwise the branch's commits against an auto-detected base (`main`,
+   `master`, `origin/main`, `origin/master`), or the last commit when HEAD is
+   the base branch
 
-1. `--base <ref>`, when you pass it — the range `<ref>...HEAD`.
-2. Your working-tree changes, when there are any. This is the usual case while you work.
-3. Otherwise the commits on your branch, `<merge-base>...HEAD` against the base branch it detects (`main`, `master`, `origin/main`, `origin/master`), falling back to the last commit.
+If nothing was found, `tx review` says so. "Nothing was reviewed" is its own
+outcome and never counts as a clean pass.
 
-So a clean checkout with everything committed still gets reviewed. If there is genuinely nothing to review, `gx review` says so and names the refs it tried — it never reports a clean review of code it did not read.
+### Read-only
 
-`gx review` is read-only: it does not require `gx init`, and it never installs hooks or writes GX state into the repository it reviews. You can point it at any checkout, including one you do not own.
+`tx review` does not mutate any logic, and doesn't require `tx init`
+(`tx init` is required for PR summaries and chat).
 
 ### As a CI gate
 
 ```bash
-gx review --base origin/main --fail-on strong --no-publish --json
+tx review --base origin/main --fail-on strong --no-publish
 ```
 
-`--fail-on` takes `none` (the default), `any`, `speculative`, `worth-exploring`, `strong`, or `blocking`. Exit codes:
+`--fail-on` fails the review when findings at or above the level survive:
+
+| Level | Meaning |
+| --- | --- |
+| `none` | never fail (default) |
+| `any` | fail on anything the review raised |
+| `speculative` | findings at `speculative` strength or above |
+| `worth-exploring` | findings at `worth-exploring` strength or above |
+| `strong` | findings at `strong` strength or above |
+| `blocking` | only findings that should stop a merge |
+
+Exit codes:
 
 | Code | Meaning |
 | --- | --- |
-| `0` | no findings at or above the level |
-| `3` | findings at or above the level survived |
+| `0` | reviewed, and nothing at or above the threshold survived |
+| `3` | findings at or above the threshold survived |
 | `4` | nothing was reviewed — a gate should not pass without inspecting code |
 
-Pair it with `--no-publish` so a CI run does not post PR comments, and `--json` to parse findings yourself.
+Pair with `--no-publish` so CI never posts PR comments, and `--json` to parse
+findings yourself.
 
-## gx auth
+## tx auth
 
 ```bash
-gx auth login                     # sign in through GitHub
-gx auth login --name "work-mbp"   # set the machine name shown in the console
-gx auth status                    # show current auth state (--json for scripts)
-gx auth logout
+tx auth login
+tx auth status
+tx auth logout
 ```
 
-Signs the CLI into GX Cloud through GitHub. Signed-in devices appear in the web app with machine name, GX version, last-used time, and session expiry.
+Signs the CLI into Totality Cloud through GitHub.
 
-## gx set key
+## tx doctor
 
 ```bash
-gx set key                                            # interactive: pick provider, paste key
-gx set key --provider anthropic --key "$ANTHROPIC_API_KEY"
+tx doctor            # diagnose capture, hooks, auth, and the publish queue
+tx doctor --fix      # apply safe repairs
+tx doctor --json     # machine-readable report
+tx doctor --report   # send this diagnosis and recent logs to support
 ```
 
-Optional — GX works without a key, and signed-in users get AI features through GX Cloud. Set one when you want GX to call a specific provider or model directly. Stores the key in `~/.gx/inference.json` (or `$GX_HOME/inference.json`); an existing `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in the environment is preferred when present. Providers: `anthropic`, `openai`.
-
-## gx doctor
+## tx version
 
 ```bash
-gx doctor            # diagnose capture, hooks, and the publish queue
-gx doctor --fix      # apply safe repairs
-gx doctor --json     # machine-readable report
-gx doctor --report   # send this diagnosis and recent logs to support
-```
-
-Checks local GX state: session capture health, the Git and Claude hooks, the publish upload queue (and retries anything stuck there), and repository workflow state. `--fix` applies the repairs it can make safely.
-
-`--report` uploads the diagnosis together with recent GX logs and prints a report ID and URL — use it when something misbehaves and you want the team to see what happened. It needs GX Cloud: use a released install and `gx auth login`.
-
-## gx version
-
-```bash
-gx version
-gx version --json   # machine-readable build metadata
+tx version
+tx version --json
 ```
 
 ## Shortcuts
 
-The CLI installer installs `gxr` as a shortcut for `gx review`:
+The installer links `txr` to the same binary:
 
 ```bash
-gxr   # gx review
+txr   # tx review
 ```
 
-It is a symlink to the same `gx` binary.
+---
 
-## Diagnostics (advanced)
+# MCP
 
-One hidden utility command, for forcing a capture upload out of band:
+The MCP server ships with the CLI as a local stdio binary. It shells out to the
+CLI, so repo state stays on your machine. It exposes one tool: `tx_review`.
+
+## Install
 
 ```bash
-gx capture sync   # force a session capture sync
+curl -fsSL https://download.totality.sh/install.sh | sh
+tx auth login
 ```
 
-Everything else lives on `gx doctor`.
+## Register with your agent
 
-# MCP Setup
+`tx init` registers the server automatically with agent CLIs found on your
+`PATH` (Claude Code, Cursor, Codex) and reports something like
+`MCP ok: Claude Code, Cursor`.
 
-The GX MCP server ships with the CLI as a local stdio binary (`gx-mcp`). It shells out to your `gx` binary, so repo state stays on your machine.
-
-## Install GX
+To register with every MCP client on your machine in one command, use
+[`add-mcp`](https://www.npmjs.com/package/add-mcp):
 
 ```bash
-curl -fsSL https://download.gx.run/install.sh | sh
-gx auth login
+npx add-mcp @satoricorp/totality --name tx -g -y
 ```
-
-That places `gx` and `gx-mcp` in `~/.local/bin`.
-
-If a repo is not initialized, MCP runs `gx init` non-interactively before `gx_review` runs — using Git identity when available, or `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL`.
-
-## Connect in one command
-
-Use [`add-mcp`](https://www.npmjs.com/package/add-mcp) to register GX with the agents on your machine (Cursor, Claude Code, Codex, OpenCode, VS Code, and more):
-
-```bash
-npx add-mcp "$HOME/.local/bin/gx-mcp" \
-  --name gx \
-  --env "GX_BINARY=$HOME/.local/bin/gx" \
-  -g
-```
-
-`-g` installs globally so GX is available in every project. Omit it to write project-level config (for example `.cursor/mcp.json`) instead.
-
-Useful flags:
 
 | Flag | Effect |
 | --- | --- |
-| `-y` | Non-interactive (skip prompts) |
-| `-a cursor` | Target a specific agent (repeatable) |
-| `--all` | Install to every supported agent |
-| `--auto-approve` | Pre-approve tools for Codex / Claude Code |
+| `-g` | install user-level so Totality is available in every project; omit for project-level config |
+| `-y` | non-interactive (skip prompts) |
+| `-a <agent>` | target a specific agent (repeatable), e.g. `-a cursor` |
 
-Most clients only load MCP servers at startup — restart the client or open a new chat after installing.
+Most clients load MCP servers at startup — restart the client or open a new
+chat after registering.
 
-### Or let `gx init` register
-
-```bash
-gx init
-```
-
-When supported agent CLIs are on your `PATH`, `gx init` registers GX automatically and reports something like `MCP ok: claude, Cursor`.
-
-## Set up with your agent
-
-Paste this into Claude, Cursor, or any MCP-capable agent:
-
-```text
-Help me set up the GX MCP server in this agent.
-
-GX is the quality layer for agent-written code. You keep using plain Git; GX's
-hooks record and publish automatically. The CLI installs a local stdio MCP
-binary at ~/.local/bin/gx-mcp that exposes one tool, gx_review.
-
-1. If gx isn't installed:
-   curl -fsSL https://download.gx.run/install.sh | sh
-   then: gx auth login
-2. Register the MCP globally with add-mcp:
-   npx add-mcp "$HOME/.local/bin/gx-mcp" --name gx --env "GX_BINARY=$HOME/.local/bin/gx" -g -y
-3. Tell me if I need to restart or open a new chat, then wait.
-4. Once tools are available, confirm gx_review shows up, then walk me through
-   the save flow — plain Git: git add → git commit → git push. GX's hooks
-   record the revision and publish the review bundle; gx_review is there when
-   I want AI review.
-
-Docs: https://gx.run/docs/mcp
-```
-
-## Use GX through Executor
-
-[Executor](https://executor.sh) is an MCP gateway: point agents at Executor once, then add GX (and other tools) as integrations behind it. Useful when you already route tools through Executor or want shared policy across agents.
-
-GX is a **local stdio** server, so add it from Executor running on the same machine (CLI or desktop). Stdio integrations spawn a subprocess — enable them only in trusted single-user setups.
-
-### From the Executor UI
-
-1. Install GX (see above) and start Executor locally (`executor install` then `executor web`, or the [desktop app](https://executor.sh)).
-2. Open **Add Integration** (or **Add Source**).
-3. Choose the **stdio** transport.
-4. Set:
-   - **Command:** `$HOME/.local/bin/gx-mcp` (expand to an absolute path if the UI requires it)
-   - **Name / namespace:** `gx`
-5. Optional: add env var `GX_BINARY` = `$HOME/.local/bin/gx`. If omitted, `gx-mcp` looks for `~/.local/bin/gx`, then `gx` on `PATH`.
-6. Save, then confirm the tool appears (search for `gx_review`).
-
-Agents that already talk to Executor pick up GX from the shared catalog — no per-client `gx-mcp` registration needed.
-
-### From the Executor SDK
-
-With stdio MCP allowed on the host:
-
-```ts
-import { createExecutor } from "@executor-js/sdk";
-import { mcpPlugin } from "@executor-js/plugin-mcp";
-
-const executor = await createExecutor({
-  plugins: [mcpPlugin({ dangerouslyAllowStdioMCP: true })] as const,
-});
-
-const scope = executor.scopes[0]!.id;
-
-await executor.mcp.addIntegration({
-  scope,
-  transport: "stdio",
-  name: "GX",
-  slug: "gx",
-  command: `${process.env.HOME}/.local/bin/gx-mcp`,
-  env: {
-    GX_BINARY: `${process.env.HOME}/.local/bin/gx`,
-  },
-});
-```
-
-`env` here supplies values for the connection (Executor stores them and injects them at launch). See [Executor MCP docs](https://executor.sh/docs/mcp-proxy) and [`@executor-js/plugin-mcp`](https://www.npmjs.com/package/@executor-js/plugin-mcp).
-
-### Connect your agent to Executor (not GX directly)
-
-If the agent should only speak to Executor:
-
-```bash
-# Local HTTP endpoint (port may differ — use the Connect card in the UI)
-npx add-mcp http://127.0.0.1:4788/mcp --transport http --name executor -g
-
-# Or stdio, with the executor CLI on PATH
-npx add-mcp "executor mcp" --name executor -g
-```
-
-Then add GX inside Executor as above.
-
-## Manual registration
-
-Prefer `add-mcp` when you can. These are the per-client equivalents:
-
-### Claude Code
-
-```bash
-claude mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
-```
-
-### Cursor
-
-```bash
-cursor mcp add gx -- env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
-```
-
-### Codex CLI and Codex app
-
-```bash
-codex mcp add gx --env GX_BINARY=$HOME/.local/bin/gx -- $HOME/.local/bin/gx-mcp
-```
-
-Or edit `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.gx]
-command = "/Users/YOU/.local/bin/gx-mcp"
-
-[mcp_servers.gx.env]
-GX_BINARY = "/Users/YOU/.local/bin/gx"
-```
-
-On Linux, use `/home/YOU/.local/bin/...`.
-
-### Other MCP clients
-
-Same stdio shape:
-
-```bash
-env GX_BINARY=$HOME/.local/bin/gx $HOME/.local/bin/gx-mcp
-```
-
-Example Cursor / Claude `mcp.json` entry:
+For clients neither path covers, the stdio shape is:
 
 ```json
 {
   "mcpServers": {
-    "gx": {
-      "command": "/Users/YOU/.local/bin/gx-mcp",
-      "env": {
-        "GX_BINARY": "/Users/YOU/.local/bin/gx"
-      }
+    "tx": {
+      "command": "npx",
+      "args": ["-y", "@satoricorp/totality"]
     }
   }
 }
 ```
 
-## Tools
+The server finds the CLI in `~/.local/bin` or on `PATH`; set `TOTALITY_BINARY`
+to point somewhere else.
 
-| Tool | CLI command | Purpose |
-| --- | --- | --- |
-| `gx_review` | `gx review [prompt]` | AI review using local and cloud context |
-
-`gx_review` is the only MCP tool. Saving and publishing are plain Git, not MCP calls: `git add` + `git commit` record the revision through GX's hooks, and `git push` captures the session and publishes the review bundle through the pre-push hook. Open the PR with `gh pr create`.
-
-`gx_review` accepts an optional `cwd` (repository working directory; defaults to the MCP server process cwd) and may run up to 5 minutes.
-
-### gx_review
+## tx_review
 
 | Parameter | Type | Meaning |
 | --- | --- | --- |
-| `prompt` | string | reviewer prompt, e.g. `"check auth rollback risks"` |
-| `scope` | enum | `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
+| `prompt` | string | optional reviewer prompt, e.g. `"check auth rollback risks"` |
+| `scope` | enum | focused lens: `architecture`, `security`, `performance`, `onboarding`, `docs`, `dependencies`, `testing`, `maintainability` |
 | `focus` | string | limit review to files under this path prefix |
 | `deep` | boolean | full-spectrum review with more local and indexed context |
 | `verbose` | boolean | include repo facts, docs, and changed files |
+| `repo` | boolean | review the whole repository instead of the current change |
+| `cwd` | string | repository working directory (defaults to the MCP server process cwd) |
 
-## Agent workflow
+Runs `tx review` with `--no-publish` always set, so an agent asking for review
+context never comments on a pull request. It is read-only and never initializes
+a repository. May run up to 5 minutes.
 
-When a user says "save work", "save using gx", or "save with gx", use plain Git — GX's hooks do the GX work automatically:
-
-1. Stage with `git add` (one logical change per revision)
-2. `git commit -m "..."` — a hook records it as a GX revision
-3. `git push` for ready stacks (unless they ask to keep work local) — the pre-push hook captures the session and publishes the review bundle
-4. Open the PR with `gh pr create` — do not seed a `## Summary`; GX Cloud appends it
-
-Run `gx_review` (or the `gx review` CLI) whenever you want AI review of the current change, typically before pushing.
-
-A typical save sequence:
-
-```bash
-git add src/backoff.js
-git commit -m "add exponential backoff helper"
-git push
-```
-
-Provenance is inferred automatically: the pre-push hook matches captured sessions to the hunks they changed, so there is nothing for the agent to attach by hand.
-
-GX PR summaries are posted for PRs whose branch was pushed through GX with `git push` while the pre-push hook is installed. A PR opened before that push will not get a summary until the branch is pushed through GX.
+Saving and publishing are plain Git, not MCP calls: `git add` + `git commit`
+record the revision through the hooks, `git push` captures and publishes.
 
 ## AGENTS.md instructions
 
-`gx init` offers to append these instructions to your repo's `AGENTS.md`. If you skipped that step, add them manually:
+`tx init` offers to append these instructions to your repo's `AGENTS.md`. If you
+skipped that step, add them manually:
 
 ```markdown
-Version control: plain Git. Once `gx init` installs the hooks, GX records and
-publishes automatically — there is no GX save verb.
+Version control: plain Git. Once `tx init` installs the hooks, Totality records
+and publishes automatically — there is no Totality save verb.
 
 Default flow:
 - Run `git add` to stage the files for this revision.
-- Run `git commit -m "..."` to save. A GX hook records the commit as a reviewable revision.
-- Run plain `git push` to publish. The GX pre-push hook captures the session and publishes code changes, sessions, and GX metadata to GX Cloud automatically — do not run `gx push` or `gx capture push` yourself; they bypass the hook.
-- Open PRs with `gh pr create` (or the GitHub UI). Do not seed a `## Summary` in the PR body — leave human notes only; GX Cloud appends the rich summary below once the PR exists.
+- Run `git commit -m "..."` to save. A Totality hook records the commit as a reviewable revision.
+- Run plain `git push` to publish. The Totality pre-push hook captures the session and
+  publishes automatically — do not run `tx push` or `tx capture push` yourself.
+- Open PRs with `gh pr create` (or the GitHub UI). Do not seed a `## Summary` in the
+  PR body — leave human notes only; Totality Cloud appends the rich summary below.
+- To amend, use `git commit --amend` and preserve the Totality revision trailer in the message.
 
-For AI review, run the `gx_review` MCP tool (or the `gx review` CLI) on the current change.
+For AI review, run the `tx_review` MCP tool (or the `tx review` CLI) on the current change.
 ```
 
-# Interact with GX in GitHub PRs
+---
 
-GX adds paid review features inside GitHub pull requests.
+# Pull Requests
 
-The CLI records sessions and revisions and publishes them for free. GitHub PR Summaries and `@gx` chat run through GX Cloud and require the paid PR feature set (or an active free trial).
+Totality Cloud writes a review summary into your pull request description and
+answers questions when you mention `@tx` in PR comments.
 
-## Prerequisites
+A summary looks like this:
 
-1. Sign in with `gx auth login` (or sign in on the console).
-2. Install the GX GitHub App on your personal account or organization so GX can post comments and read PR context. From the console, use **Install on GitHub** after the download step (`/install-github`), or open [github.com/apps/satoricorp-gx](https://github.com/apps/satoricorp-gx) directly.
-3. Point the GitHub App webhook at the GX Cloud API:
+```markdown
+> 🔴 👀 **Deep review** — clean rename in this repo, but indexed consumers still read the old field
 
-```text
-https://api.gx.run/github/webhook
+Renames `amount_cents` → `amount` in the `payment.settled` event payload and
+updates the emitter and its tests. Internally consistent — the risk is entirely
+downstream.
+
+## Blast Radius
+
+🔴 HIGH (2 files, 1 area, +18/-11 lines).
+3 consumers in `billing-dashboard` and `revenue-export` still read
+`amount_cents` and default to 0 on a missing field.
+
+## Notable Changes
+
+- Renamed `amount_cents` → `amount` in the settled-event payload
+  Attribution: codebase `internal/events/settled.go:34`
+- Old field still read by 3 cross-repo consumers; none updated in this PR
+  Attribution: codebase `billing-dashboard/src/ingest/settlement.ts:88`
+
+*Generated by Totality.*
 ```
 
-4. Publish work through GX (`git push` with the GX pre-push hook). A PR created only in the GitHub UI will not get a GX summary until that branch is pushed through GX with capture metadata present.
+## Setup
 
-## PR Summaries
+1. `tx auth login` (or sign in on the console)
+2. Install the Totality GitHub App on your account or organization:
+   [github.com/apps/satoricorp-gx](https://github.com/apps/satoricorp-gx)
+3. Publish through the hook: `git push` in a repo where `tx init` ran
 
-GX writes one rich PR Summary into the **pull request description** (not a separate comment). Any human description already on the PR stays above the GX block; later regenerations replace only the GX section.
+A PR whose branch was never pushed through the pre-push hook gets no summary —
+there is no captured context to summarize.
 
-When opening a PR (`gh pr create` or the GitHub UI), leave the body for your own notes — do **not** seed a `## Summary` section. GX Cloud appends the rich summary once the PR exists and publish metadata is available.
+## PR summaries
 
-The summary is intentionally short. It should tell reviewers:
+The summary is written into the **pull request description**, not a comment.
+Your own text stays above the Totality block; regeneration replaces only the
+block. Do not seed a `## Summary` section — leave the body for your own notes.
 
-- what changed
-- why it changed
-- which files deserve attention first
-- which files are mechanical or safe to skim
-- what session or agent context is relevant
+What each section is:
 
-The goal is to point reviewers to the important parts of the change instead of forcing them to read every line with no context.
-
-### When summaries are generated
-
-GX posts summaries from these paths:
-
-- **GitHub webhook** — on `pull_request` `opened` / `synchronize`, when the branch already has a published GX event
-- **After publish** — when plain `git push` (with the GX pre-push hook) has a PR number and the GitHub App is installed
-
-The [`POST /v1/summaries/generate`](/docs/reference/api) API stores a summary in GX Cloud. It does **not** write the PR description by itself.
-
-### When no session was captured
-
-A summary is worth more than the diff because a captured coding session explains it. When no session context reached the summary, GX says so in the PR body rather than letting a diff-only summary pass for a context-rich one:
-
-> *No captured coding session was linked to this branch, so this summary is based on the diff alone. That usually means the branch was pushed without GX's pre-push hook installed, so nothing was captured.*
-
-Install the hooks with `gx init` in the repo (or `gx init --global` once per machine) and push again — the pre-push hook captures the session on the way out. When context is present the note is absent, and the footer reports what informed the summary.
-
-### Trial and paid access
-
-Orgs on the free plan get PR Summaries during a free trial window (default 7 days from org creation, or the entitlement returned by GX Cloud). After the trial ends, summaries require a paid plan. When quota blocks a summary, GX can post an upgrade comment on the PR instead.
-
-## Chat with `@gx`
-
-Mention `@gx` in a PR comment to ask questions about the pull request.
-
-Ask for orientation:
-
-```text
-@gx summarize this PR for someone reviewing it cold
-@gx which files should I review first?
-@gx what is safe to skim?
-```
-
-Ask about a specific part of the diff:
-
-```text
-@gx explain the auth callback changes
-@gx why did the migration file change?
-@gx what does this new background job do?
-```
-
-Ask for risk or follow-up review:
-
-```text
-@gx what is the highest-risk change in this PR?
-@gx are there missing tests?
-@gx is this related to the previous retry bug?
-```
-
-GX answers from available review sources and cites the sources it used. Because published revisions carry session provenance, `@gx` can answer "why" questions — what the author asked for, which commands and tests ran — that a plain diff cannot.
-
-### Override learned rules
-
-You can use `@gx` to retire a learned rule:
-
-```text
-@gx skip rule never use var
-@gx do not enforce this migration naming rule
-```
-
-When a matching active rule exists, GX retires it and records the override. Rule overrides require GitHub **write**, **maintain**, or **admin** permission on the repository. Collaborators without write access are denied.
-
-## Data sources
-
-GX answers from the current PR first: the published GX revision diffs, changed hunks, file paths, PR comments, and the latest PR Summary.
-
-When available, GX can also use captured coding-session context, indexed codebase context, previous findings, learned rules, and git blame history. Current PR changes remain the source of truth for what changed.
-
-## GitHub App
-
-Install from the console (**Install on GitHub**) or at [github.com/apps/satoricorp-gx](https://github.com/apps/satoricorp-gx). To post summaries and replies, GX needs installation-scoped access for the repository. The local CLI can still record and push branches without the paid PR feature set. The paid features are the GitHub-hosted review layer: PR Summaries, `@gx` chat, and cloud-backed review context.
-
-# Troubleshooting
-
-Start with the built-in doctor:
-
-```bash
-gx doctor          # diagnose capture, hooks, and the publish queue
-gx doctor --fix    # apply safe repairs automatically
-```
-
-If something still misbehaves, `gx doctor --report` uploads the diagnosis and recent GX logs to support and prints a report ID you can share.
-
-## Common errors
-
-### Nothing staged to commit
-
-A GX revision follows your staged index, so stage the changes you want in it before committing:
-
-```bash
-git add <files>     # or git add -p to select hunks
-git commit -m "describe this change"
-```
-
-With an empty index there is nothing for the commit hook to record — stage your changes first.
-
-### `Run gx init first.`
-
-The repository has no GX identity yet. Initialize it once:
-
-```bash
-gx init        # interactive
-gx init -y     # accept defaults, for scripts and agent sandboxes
-```
-
-### Push reports remote divergence
-
-The remote moved since you last fetched — a branch was merged, closed, or force-pushed. Bring your local branch up to date, then push again:
-
-```bash
-git pull --rebase
-git push
-```
-
-### `Could not upload GX review context ... GX Cloud is not configured`
-
-The push of Git refs succeeded, but the session/metadata upload was skipped because the CLI has no cloud endpoint. Released installs have the endpoint baked in, so this usually means a from-source build — set `GX_CLOUD_URL` or reinstall the released CLI:
-
-```bash
-curl -fsSL https://download.gx.run/install.sh | sh
-gx auth status || gx auth login
-```
-
-Local remote metadata is still recorded, so nothing is lost. Queued uploads are drained on the next `git push`.
-
-### `gx-mcp not found; install GX CLI package first`
-
-`gx init` tried to register the MCP server but could not find the `gx-mcp` binary. Reinstall the CLI package, which places both binaries in `~/.local/bin`:
-
-```bash
-curl -fsSL https://download.gx.run/install.sh | sh
-```
-
-Then re-run `gx init`, or register manually per [MCP setup](/docs/mcp).
-
-### No PR Summary appeared on my pull request
-
-Check, in order:
-
-1. The branch was pushed with `git push` while the GX pre-push hook is installed. A PR created only in the GitHub UI has no capture metadata.
-2. The GX GitHub App is installed on the repository, with the webhook pointed at `https://api.gx.run/github/webhook`.
-3. Your org's trial window or paid plan is active — when quota blocks a summary, GX posts an upgrade comment instead. See [Pull Requests](/docs/github).
-
-### Sessions are not being captured
-
-`gx init` installs the capture hooks (Git pre-push, Claude Code `Stop`/`SessionEnd`). Verify and repair:
-
-```bash
-gx doctor          # shows capture and hook state
-gx doctor --fix
-```
-
-## Environment
-
-| Variable | Meaning |
+| Section | Content |
 | --- | --- |
-| `GX_HOME` | override GX's state directory (default `~/.gx`) — inference key, capture data, workspaces |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | model credentials for local inference; `gx set key` stores one persistently |
-| `GX_BINARY` | path to the `gx` binary the MCP server should run |
-| `GX_MCP_INIT_NAME` / `GX_MCP_INIT_EMAIL` | identity for MCP's non-interactive `gx init` |
+| Verdict line | 🟢 **Quick scan** (LOW) / 🟡 **Careful pass** (MEDIUM) / 🔴 **Deep review** (HIGH), plus a one-line triage reason. The label always matches the Blast Radius level |
+| Overview | one paragraph: what changed and why |
+| Blast Radius | severity with file/area/line counts and a risk note. Judged by what the change can break — including code the diff never touches — not by diff size |
+| Notable Changes | the changes a reviewer should look at first, each with an `Attribution:` line naming the concrete source: a codebase path, a captured agent session, a prior PR, or docs |
 
-## Uninstall
+Summaries are generated when the GitHub App sees `pull_request`
+`opened`/`synchronize` for a branch with published Totality context, and after a
+publish when a PR already exists. Push again to force a refresh.
 
-```bash
-rm -f ~/.local/bin/gx ~/.local/bin/gxr ~/.local/bin/gx-mcp
-```
+## Chat with @tx
 
-This removes the installed binaries only. Local GX data remains in `~/.gx`; delete that directory too if you want a clean slate. Your Git repositories are untouched — everything GX published is ordinary Git.
-
-## Send logs to support
-
-```bash
-gx doctor --report
-```
-
-Runs the diagnosis and uploads it with recent GX logs (requires `gx auth login`), then prints a report ID and URL to share with the team.
-
-# Changelog
-
-Breaking changes land here first. Subscribe to the repo or check back before upgrading.
-
-## July 2026 — GX is no longer a Git porcelain
-
-GX now does one thing: capture your coding sessions and make review great. You work in
-plain Git; GX's surface is `gx init` (hooks), `gx review` (AI review), and PR Summaries.
-This shipped as a series of CLI releases in July 2026.
-
-### Removed CLI commands
-
-`gx commit`, `gx status`, `gx push`, `gx edit`, `gx base`, `gx generate`, and `gx sync`
-have been removed. Use plain Git instead:
-
-| You used to run | Now run |
-| --- | --- |
-| `gx commit` | `git commit` |
-| `gx status` | `git status` |
-| `gx push` | `git push` |
-| `gx sync` | `git fetch` / `git pull` — GX publishes automatically on push |
-
-Capture is unaffected: the hooks installed by `gx init` record revisions on `git commit`
-and publish sessions on `git push`. Uploads that fail retry automatically on your next
-push, and `gx doctor` can retry them on demand.
-
-### Removed ambient capture (LaunchAgent)
-
-The background capture service (`gx ops capture` / the GX LaunchAgent) is removed.
-Session capture is transcript-based via the hooks `gx init` installs — nothing runs in
-the background anymore. Upgraded CLIs remove an existing LaunchAgent automatically the
-next time `gx init` runs; you can also remove it manually from `~/Library/LaunchAgents`.
-
-### A smaller command surface
-
-`gx demo` and the hidden `gx ops` tree are removed, and `gx report` folded into
-`gx doctor --report` (the old `gx report` still works as a hidden alias for one
-release). What remains: `gx init`, `gx review` (alias `gxr`), `gx auth`, `gx set`,
-`gx doctor`, and `gx version`.
-
-### MCP server exposes `gx_review` only
-
-The MCP tools `gx_commit`, `gx_status`, `gx_push`, `gx_publish`, and `gx_edit` were
-removed along with the porcelain. Agent configurations that reference them should call
-plain Git commands instead; review stays available as the `gx_review` tool.
-
-### Publish API: bundle schema v2
-
-`POST /v1/publish` bundles are now `schema_version: 2`: the `stack` array and the
-jj-era `change.jj_change_id` field are gone, replaced by a flat `revisions` list
-(commit, `GX:` trailer ID, description, files, branch, base branch, patch). Version 1
-bundles remain accepted, so older CLIs keep working during the transition — but
-upgrade to keep PR Summaries at full quality.
-
-### `GET /bookmarks` is now `GET /v1/reviews`
-
-"Bookmark" was jj's word for a branch, and the row it returns is really one review per
-pull request. The endpoint is now `GET /v1/reviews`. `GET /bookmarks` still works and
-returns an identical response — it forwards to the new path and sets a `Deprecation`
-header — so nothing breaks today. Point integrations at `/v1/reviews`; the old path
-will be removed once traffic to it stops.
-
-### Session retention
-
-Captured sessions are staged locally as lightweight references and published on
-`git push`; published sessions are kept with your review history in GX Cloud. Earlier
-docs described a 30-day local retention window — that description was inaccurate and
-has been removed.
-
-### Unchanged, and stable going forward
-
-- The `GX: https://gx.run/r/<id>` commit trailer format.
-- The PR Summary block and its `<!-- gx:pr-summary:v1 -->` marker — your PR
-  description stays above it, GX writes below it.
-- `gx init`, `gx init --global`, `gx review`, `gx doctor`, and the capture hooks.
-
-### Discontinued
-
-The GX menu bar app for macOS is discontinued as of July 2026. The CLI hooks replace
-everything it did.
-
-# API
-
-GX Cloud APIs use bearer-token authentication.
-
-```bash
-export GX_API_URL="https://api.gx.run"
-```
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | API and database reachability |
-| `GET /v1/auth/me` | inspect the authenticated caller |
-| `POST /v1/publish` | publish a GX review bundle (what the pre-push hook sends) |
-| `GET /v1/reviews` | list reviews for review surfaces (was `GET /bookmarks`) |
-| `GET /v1/review/context` | review context for a repo/ref range |
-| `GET /v1/reviews/:bookmarkId` (+ `/plan`, `/decision`) | Console review experience |
-| `POST /v1/summaries/generate` | generate and store a PR Summary |
-| `POST /github/webhook` | GitHub App webhook (PR Summaries, `@gx` chat) |
-| `POST /v1/extracts` | ingest hunk links and push metadata |
-| `POST /v1/sessions` | ingest raw captured session content |
-| `GET /v1/activity` | recent summaries, sessions, learned rules |
-| `POST /v1/code-review-history/record` / `/search` | record and search review findings |
-| `POST /v1/reported-logs` | upload CLI logs for support |
-| `POST /gx/openai/responses` / `/chat-completions` | OpenAI proxy through GX Cloud |
-
-## Authentication
-
-`requireAuth` accepts these modes:
-
-### GitHub token
-
-For most user-facing integrations:
-
-```bash
-gh auth status || gh auth login
-export GITHUB_TOKEN="$(gh auth token)"
-```
-
-If you need to refresh scopes for private repositories:
-
-```bash
-gh auth refresh -s read:user -s repo
-export GITHUB_TOKEN="$(gh auth token)"
-```
-
-Attach the token:
-
-```bash
--H "Authorization: Bearer $GITHUB_TOKEN"
-```
-
-GX validates GitHub tokens against the GitHub user API and maps the caller to `github:<id>`. You can optionally add `X-Org-Id: $GX_ORG_ID`; otherwise GX resolves a default org.
-
-### CLI session token
-
-After `gx auth login`, the CLI can use a `gxcs_*` session token. The API verifies it through Convex (`CONVEX_SITE_URL` must be configured on the server).
-
-```bash
--H "Authorization: Bearer $GX_CLI_SESSION_TOKEN"
-```
-
-### Console service key
-
-The Console BFF authenticates with the shared cloud API key and impersonates a user:
-
-```bash
--H "Authorization: Bearer $GX_CLOUD_API_KEY" \
--H "X-User-Id: $USER_ID" \
--H "X-Org-Id: $GX_ORG_ID"
-```
-
-## GET /health
-
-Check that the API and database are reachable.
-
-```bash
-curl "$GX_API_URL/health"
-```
-
-## GET /v1/auth/me
-
-Inspect the authenticated user, org, token label, CLI session, and machine when available.
-
-```bash
-curl "$GX_API_URL/v1/auth/me" \
-  -H "Authorization: Bearer $GITHUB_TOKEN"
-```
-
-With an explicit org:
-
-```bash
-curl "$GX_API_URL/v1/auth/me" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "X-Org-Id: $GX_ORG_ID"
-```
-
-Response fields include `org_id`, `user_id`, `token_label`, and optional GitHub/session machine fields.
-
-## POST /v1/publish
-
-Publish a GX review bundle. This is what the GX pre-push hook sends on `git push`, after Git has produced branches and commits and GX has captured sessions and review metadata.
-
-```bash
-curl "$GX_API_URL/v1/publish" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event": "gx.pr",
-    "schema_version": 2,
-    "created_at": 1760000000000,
-    "gx_version": "0.0.0",
-    "repo": {
-      "root_path": "/repo",
-      "backend": "git",
-      "remote_url": "https://github.com/org/repo.git"
-    },
-    "push": {
-      "branch_name": "feature/example",
-      "head_commit_id": "abc123",
-      "github_pull_request_url": "https://github.com/org/repo/pull/123"
-    },
-    "revisions": [],
-    "sessions": []
-  }'
-```
-
-`revisions` carries one entry per commit being published — `revision_id` (the ID from the commit's `GX:` trailer), `commit_id`, `description`, `files`, `branch_name`, `base_branch_name`, and `patch`. `sessions` carries the captured agent sessions with their model, token, and timing metadata. Bundles with `schema_version: 1` (the older `stack`/`change` shape) remain accepted.
-
-The server stores the publish event, upserts a bookmark, indexes artifacts when configured, and returns review/bookmark metadata. When a PR number is present and the GitHub App is installed, publish may also post a missing PR Summary.
-
-Without `event: "gx.pr"`, the same route accepts a lighter **registration-only** payload (`repo_full_name`, `branch_name`, `head_commit_id`, …) to upsert bookmark metadata.
-
-## GET /v1/reviews
-
-List reviews for review surfaces, newest first. One review is one branch's published work — the PR it becomes, the latest publish event, and its plan status.
-
-Query parameters: `merge_status` (`open`, `merged`, or `closed`; any other value is a `400`) and `repo_full_name`. Both optional.
-
-```bash
-curl "$GX_API_URL/v1/reviews?merge_status=open" \
-  -H "Authorization: Bearer $GITHUB_TOKEN"
-```
-
-Filter to one repository:
-
-```bash
-curl "$GX_API_URL/v1/reviews?repo_full_name=org/repo&merge_status=open" \
-  -H "Authorization: Bearer $GITHUB_TOKEN"
-```
-
-<Note>
-  `GET /bookmarks` is the former name of this endpoint and still works — it forwards to
-  `/v1/reviews` and returns exactly the same response, with a `Deprecation` header. Move
-  to `/v1/reviews`; the old path will be removed in a future release.
-</Note>
-
-Response: an array of reviews.
-
-```json
-[
-  {
-    "id": "bm_123",
-    "repo_full_name": "org/repo",
-    "branch_name": "feature/retry-backoff",
-    "title": "Add retry/backoff utilities",
-    "revision": 3,
-    "head_commit_id": "ae0d5b62...",
-    "remote_head_sha": "ae0d5b62...",
-    "merge_status": "open",
-    "updated_at_ms": 1760000000000
-  }
-]
-```
-
-## GET /v1/review/context
-
-Fetch review context for a repo/ref range. The response can include rules, collision hints, hunk links, and indexed snippets.
-
-```bash
-curl --get "$GX_API_URL/v1/review/context" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  --data-urlencode "repoRoot=/repo" \
-  --data-urlencode "base=main" \
-  --data-urlencode "head=HEAD"
-```
-
-## Console review experience
-
-These routes power the Console review UI. They require auth like other `/v1` routes.
-
-### GET /v1/reviews/:bookmarkId
-
-Load the full review experience for a bookmark (plan, usage, changes, summary, activity).
-
-### POST /v1/reviews/:bookmarkId/plan
-
-Generate or regenerate a review plan for the bookmark.
-
-### POST /v1/reviews/:bookmarkId/decision
-
-Record an approve/merge decision. Passing `merged: true` updates bookmark `merge_status`.
-
-## POST /v1/summaries/generate
-
-Generate a PR Summary for a bookmark or event and **store it in GX Cloud**. This endpoint does not post the comment to GitHub; GitHub posting is driven by the webhook and publish paths. See [GitHub PRs](/docs/github).
-
-```bash
-curl "$GX_API_URL/v1/summaries/generate" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"bookmarkId":"..."}'
-```
-
-Or generate from an event:
-
-```bash
-curl "$GX_API_URL/v1/summaries/generate" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"eventId":"..."}'
-```
-
-PR Summary and GitHub PR chat features are paid GX Cloud features (with a free-trial window).
-
-## POST /github/webhook
-
-GitHub App webhook endpoint for PR Summaries and `@gx` chat.
+Mention `@tx` in any PR comment:
 
 ```text
-POST https://api.gx.run/github/webhook
+@tx which files should I review first?
+@tx explain the auth callback changes
+@tx what is the highest-risk change in this PR?
+@tx are there missing tests?
 ```
 
-Authenticated with `X-Hub-Signature-256`, not a bearer token. Configure this URL on the GitHub App.
+Answers cite their sources: published revision diffs, changed hunks, PR comments,
+the latest summary, and — when available — captured session context, indexed
+codebase context, and previous findings. Because revisions carry session
+provenance, `@tx` can answer what the author asked for and which commands and
+tests ran.
 
-## POST /v1/extracts
+### Retire a learned rule
 
-Ingest hunk links and push metadata.
-
-```bash
-curl "$GX_API_URL/v1/extracts" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repoRoot": "/repo",
-    "refRange": "main..HEAD",
-    "headCommit": "abc123",
-    "gxVersion": "0.0.0",
-    "hunkLinks": [
-      {
-        "hunkID": "src/app.ts:10-20",
-        "file": "src/app.ts",
-        "lineStart": 10,
-        "lineEnd": 20,
-        "tier": 1,
-        "confidence": 0.91,
-        "authorship": "agent",
-        "tool": "codex",
-        "model": "gpt-5"
-      }
-    ]
-  }'
+```text
+@tx skip rule never use var
+@tx do not enforce this migration naming rule
 ```
 
-## POST /v1/sessions
+When a matching active rule exists, it is retired and the override recorded.
+Requires **write**, **maintain**, or **admin** permission on the repository.
 
-Ingest raw captured session content.
+---
 
-```bash
-curl "$GX_API_URL/v1/sessions" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sessionId": "session-123",
-    "tool": "codex",
-    "model": "gpt-5",
-    "content": "redacted transcript text",
-    "capturedAtMs": 1760000000000
-  }'
-```
+# Totality changelog: new features, updates, and fixes
 
-## GET /v1/activity
+## July 29, 2026
 
-Read recent summaries, sessions, and learned rules. `limit` accepts 1–100 (default 20); page with the returned `nextCursor`.
+**PR summary verdict labels** — The summary's triage line now states what the reader
+must do, not just a color: 🟢 **Quick scan** (LOW), 🟡 **Careful pass** (MEDIUM),
+🔴 **Deep review** (HIGH). The label is enforced server-side to always match the
+Blast Radius level, so a red summary can never read as permission to skim.
 
-```bash
-curl "$GX_API_URL/v1/activity?limit=20" \
-  -H "Authorization: Bearer $GITHUB_TOKEN"
-```
+**Totality** — The product formerly known as GX is now Totality. The CLI is `tx`
+(`txr` for one-shot review, `tx-mcp` for agents). Install from
+`download.totality.sh`; docs live at `docs.totality.sh`.
 
-With pagination:
+## July 26, 2026
 
-```bash
-curl "$GX_API_URL/v1/activity?limit=20&cursor=$CURSOR" \
-  -H "Authorization: Bearer $GITHUB_TOKEN"
-```
+**Plain Git is the whole workflow** — Capture and publishing are entirely hook-driven:
+`git commit` records a revision, `git push` captures the session and publishes. The
+porcelain that duplicated Git (`tx push`, `tx sync`, the background daemon, and the
+macOS menu-bar app) has been removed. If you have an older install, `tx init` cleans
+up the retired pieces.
 
-Response shape: `{ items, limit, nextCursor }`.
+**PR summaries write to the description** — Totality Cloud writes the rich summary
+into the pull request description below your own text, behind a Totality-owned
+marker. Your notes survive every regeneration.
 
-## POST /v1/code-review-history/record
+**`tx review` is guaranteed read-only** — Review writes nothing: no repo state, no
+`.git/index` mutation, no `~/.totality` on machines that never ran `tx`, and no
+uploads when a gate fails. `--fail-on` turns a review into a CI gate with distinct
+exit codes for "findings survived" and "nothing was reviewed". See the
+[CLI reference](/docs/cli#tx-review).
 
-Record review findings so future reviews can retrieve previous decisions and patterns.
+**Two-model review panel** — `tx review` runs two independent Anthropic reviewers
+plus a judge that verifies and dedupes findings. When both reviewers flag the same
+issue independently, the report says so — the strongest confidence signal a panel
+produces.
 
-```bash
-curl "$GX_API_URL/v1/code-review-history/record" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repoFullName": "org/repo",
-    "repoRootPath": "/repo",
-    "branchName": "feature/example",
-    "headCommitId": "abc123",
-    "sourceKind": "manual",
-    "prompt": "review auth changes",
-    "summaryText": "Auth review completed",
-    "findings": [
-      {
-        "title": "Missing validation",
-        "summary": "The handler accepts an unchecked token.",
-        "filePath": "src/auth.ts",
-        "lineStart": 42,
-        "severity": "medium",
-        "confidence": 0.8
-      }
-    ]
-  }'
-```
+## July 2, 2026
 
-## POST /v1/code-review-history/search
+**Generated GitHub PR summaries** — After you publish with plain `git push` and open
+a PR, Totality Cloud posts a generated review summary highlighting blast radius and
+high-impact review targets.
 
-Search prior review findings for a repo.
+**Code review history memory** — `tx review` pulls in indexed context from your past
+reviews and GitHub comment history, and attaches review policy context so findings
+stay consistent with how your team reviews code.
 
-```bash
-curl "$GX_API_URL/v1/code-review-history/search" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repoFullName": "org/repo",
-    "query": "auth validation",
-    "filePaths": ["src/auth.ts"],
-    "limit": 5
-  }'
-```
-
-## POST /v1/reported-logs
-
-Upload reported CLI logs for support.
-
-```bash
-curl "$GX_API_URL/v1/reported-logs" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "gx_version": "0.0.0",
-    "os": "darwin",
-    "arch": "arm64",
-    "repo_root": "/repo",
-    "repo_full_name": "org/repo",
-    "error": "publish failed",
-    "logs": [
-      {
-        "path": "publish.log",
-        "content": "redacted log content"
-      }
-    ]
-  }'
-```
-
-## POST /gx/openai/responses
-
-Proxy a valid OpenAI Responses API request through GX Cloud.
-
-```bash
-curl "$GX_API_URL/gx/openai/responses" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-5",
-    "instructions": "Be concise.",
-    "input": "Summarize this change."
-  }'
-```
-
-## POST /gx/openai/chat-completions
-
-Proxy a valid OpenAI Chat Completions request through GX Cloud.
-
-```bash
-curl "$GX_API_URL/gx/openai/chat-completions" \
-  -H "Authorization: Bearer $GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [
-      { "role": "user", "content": "Summarize this change." }
-    ]
-  }'
-```
+**Prompted `tx review`** — Trigger `tx review` with a targeted prompt to focus the
+review on a specific concern instead of the full default sweep.

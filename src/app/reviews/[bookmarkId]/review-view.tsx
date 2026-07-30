@@ -79,7 +79,7 @@ export function ReviewView({
 
   if (loading && !review) {
     return (
-      <div className="gx-review">
+      <div className="tx-review">
         <main className="wrap">
           <PlanPending />
         </main>
@@ -89,14 +89,14 @@ export function ReviewView({
 
   if (!review) {
     return (
-      <div className="gx-review">
+      <div className="tx-review">
         <main className="wrap" style={{ textAlign: "center", paddingTop: 80 }}>
           <h1 style={{ fontSize: 19, fontWeight: 650 }}>Review not found</h1>
-          <p style={{ color: "var(--gx-muted)", marginTop: 8 }}>{error}</p>
+          <p style={{ color: "var(--tx-muted)", marginTop: 8 }}>{error}</p>
           <p style={{ marginTop: 16 }}>
             <Link
               href={demoMode ? "/reviews?demo=1" : "/reviews"}
-              style={{ color: "var(--gx-muted)" }}
+              style={{ color: "var(--tx-muted)" }}
             >
               ← Reviews
             </Link>
@@ -112,7 +112,7 @@ export function ReviewView({
     (review.plan.status === "ready" && !plan);
 
   return (
-    <div className="gx-review">
+    <div className="tx-review">
       <ReviewSiteHeader review={review} demoMode={demoMode} />
       <main className="wrap">
         <ReviewHeader review={review} />

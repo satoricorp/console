@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type postgres from "postgres";
 import { getSql } from "../db";
 import { adoptLatestEventFromBranchSibling, findOrCreateBookmark } from "../bookmarks/adoption";
-import { containsGxMention } from "../gx-mention/handler";
+import { containsTxMention } from "../tx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
 import { QuotaExceededError } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
@@ -18,7 +18,7 @@ import {
 import { ingestLineComment, persistClassification } from "./comments-ingest";
 import { forwardToConvex } from "./convex-forward";
 import { handleInstallation, handleInstallationRepositories } from "./installation";
-import { processGxMention } from "./mention";
+import { processTxMention } from "./mention";
 import { updatePullRequestWithSummary, withUnindexedNotice } from "./pr-body";
 
 export const githubWebhookRoutes = new Hono();
@@ -308,7 +308,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       ${orgId},
       ${bookmark.id},
       ${null},
-      'gx',
+      'tx',
       ${postedBody},
       false,
       ${now}
@@ -454,7 +454,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
       ${review.id ?? null},
       ${author},
       ${body || "(review)"},
-      ${containsGxMention(body)},
+      ${containsTxMention(body)},
       ${now}
     )
     RETURNING id
@@ -477,8 +477,8 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
     repoScope: repo.full_name,
   });
 
-  if (containsGxMention(body)) {
-    await processGxMention(db, {
+  if (containsTxMention(body)) {
+    await processTxMention(db, {
       orgId,
       bookmarkId: bookmark.id,
       commentId: comment.id,
@@ -608,7 +608,7 @@ function shouldProcessCommentWebhook(action: string): boolean {
 function isGithubBot(login?: string | null): boolean {
   const normalized = (login ?? "").trim().toLowerCase();
   if (!normalized) return false;
-  return normalized.endsWith("[bot]") || normalized === "gx";
+  return normalized.endsWith("[bot]") || normalized === "tx";
 }
 
 async function distinctIdForWebhook(

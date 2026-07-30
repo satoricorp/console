@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   groupReviewsByRepo,
-  isGxSupportedReview,
+  isTxSupportedReview,
   isNoDataReview,
   isOpenGithubReview,
   partitionReviewsList,
@@ -12,7 +12,7 @@ function item(
   overrides: Partial<ReviewListItem> & Pick<ReviewListItem, "id">,
 ): ReviewListItem {
   return {
-    repo_full_name: "acme/gx",
+    repo_full_name: "acme/tx",
     branch_name: "feat/x",
     title: "Example",
     revision: 1,
@@ -29,8 +29,8 @@ function item(
   };
 }
 
-describe("isGxSupportedReview / isNoDataReview", () => {
-  test("webhook-only shells without latest_event_id are not GX-supported", () => {
+describe("isTxSupportedReview / isNoDataReview", () => {
+  test("webhook-only shells without latest_event_id are not TX-supported", () => {
     const webhookOnly = item({
       id: "webhook",
       latest_event_id: null,
@@ -38,18 +38,18 @@ describe("isGxSupportedReview / isNoDataReview", () => {
       github_pr_url: "https://github.com/acme/gx/pull/12",
       file_count: 0,
     });
-    expect(isGxSupportedReview(webhookOnly)).toBe(false);
+    expect(isTxSupportedReview(webhookOnly)).toBe(false);
     expect(isNoDataReview(webhookOnly)).toBe(true);
   });
 
-  test("failed empty plans with GX evidence are no-data", () => {
+  test("failed empty plans with TX evidence are no-data", () => {
     const empty = item({
       id: "empty",
       plan_status: "failed",
       plan_error: "no_surviving_changes",
       file_count: 0,
     });
-    expect(isGxSupportedReview(empty)).toBe(true);
+    expect(isTxSupportedReview(empty)).toBe(true);
     expect(isNoDataReview(empty)).toBe(true);
   });
 });
@@ -64,7 +64,7 @@ describe("isOpenGithubReview", () => {
         item({ id: "closed", merge_status: "closed", github_pr_number: 12 }),
       ),
     ).toBe(false);
-    expect(isOpenGithubReview(item({ id: "gx-only" }))).toBe(false);
+    expect(isOpenGithubReview(item({ id: "tx-only" }))).toBe(false);
   });
 });
 

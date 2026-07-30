@@ -33,7 +33,7 @@ export async function postMissingPrSummaryAfterPublish(
     FROM pr_comments
     WHERE org_id = ${input.orgId}
       AND bookmark_id = ${input.bookmark.id}
-      AND author = 'gx'
+      AND author = 'tx'
     LIMIT 1
   `;
   if (existingPostedSummary) {
@@ -152,7 +152,7 @@ export async function postMissingPrSummaryAfterPublish(
       ${input.orgId},
       ${input.bookmark.id},
       ${null},
-      'gx',
+      'tx',
       ${postedBody},
       false,
       ${Date.now()}

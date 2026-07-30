@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "@gx/server",
+      "name": "@tx/server",
       "dependencies": {
         "@aws-sdk/client-bedrock-runtime": "^3.1071.0",
         "@hono/node-server": "^1.14.1",

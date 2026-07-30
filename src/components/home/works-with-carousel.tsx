@@ -79,7 +79,7 @@ export function WorksWithCarousel() {
         <div
           className="works-with-mask min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
           role="region"
-          aria-label="Coding agents and tools GX works with"
+          aria-label="Coding agents and tools TX works with"
         >
           <div className="works-with-track flex w-max">
             <ToolList />

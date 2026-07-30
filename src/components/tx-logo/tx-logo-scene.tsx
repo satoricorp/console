@@ -24,12 +24,12 @@ import {
   HEADER_ENVIRONMENT_RESOLUTION,
   HERO_ENVIRONMENT_RESOLUTION,
   ICON_ENVIRONMENT_RESOLUTION,
-  USE_GX_LOGO_MESH,
+  USE_TX_LOGO_MESH,
   type LogoTone,
   type LogoVariant,
   type LogoVariantConfig,
 } from "./constants";
-import { GxGlbModel } from "./gx-glb-model";
+import { TxGlbModel } from "./tx-glb-model";
 import { laplacianSmoothGeometry } from "./round-geometry";
 
 const BLOB_FONT = "/fonts/Blob-Regular.typeface.json";
@@ -39,7 +39,7 @@ useFont.preload(BLOB_FONT);
 
 export type { LogoTone } from "./constants";
 
-type GxLogoSceneProps = {
+type TxLogoSceneProps = {
   variant?: LogoVariant;
   tone?: LogoTone;
   /** When false, no mouse parallax or float — used for icon PNG export. */
@@ -475,7 +475,7 @@ function roundTextGeometry(geometry: BufferGeometry, passes: number) {
   laplacianSmoothGeometry(geometry, passes, 0.38);
 }
 
-function GxTextMark({
+function TxTextMark({
   config,
   tone = "chrome",
   onReady,
@@ -565,7 +565,7 @@ function GxTextMark({
   return <Center>{text}</Center>;
 }
 
-function GxLogoMark({
+function TxLogoMark({
   config,
   tone = "chrome",
   onReady,
@@ -574,10 +574,10 @@ function GxLogoMark({
   tone?: LogoTone;
   onReady?: () => void;
 }) {
-  const mark = USE_GX_LOGO_MESH ? (
-    <GxGlbModel config={config} tone={tone} onReady={onReady} />
+  const mark = USE_TX_LOGO_MESH ? (
+    <TxGlbModel config={config} tone={tone} onReady={onReady} />
   ) : (
-    <GxTextMark config={config} tone={tone} onReady={onReady} />
+    <TxTextMark config={config} tone={tone} onReady={onReady} />
   );
 
   if (config.markAlign === "start") {
@@ -588,7 +588,7 @@ function GxLogoMark({
     );
   }
 
-  if (USE_GX_LOGO_MESH) {
+  if (USE_TX_LOGO_MESH) {
     return mark;
   }
 
@@ -606,7 +606,7 @@ function defaultEnvironmentResolution(variant: LogoVariant) {
   return 2048;
 }
 
-export function GxLogoScene({
+export function TxLogoScene({
   variant = "header",
   tone = "chrome",
   interactive = true,
@@ -615,12 +615,12 @@ export function GxLogoScene({
   hoverDrivenMotion = false,
   environmentResolution,
   onReady,
-}: GxLogoSceneProps) {
+}: TxLogoSceneProps) {
   const config = getLogoConfig(variant);
   const isHero = variant === "hero";
   const envResolution =
     environmentResolution ?? defaultEnvironmentResolution(variant);
-  const mark = <GxLogoMark config={config} tone={tone} onReady={onReady} />;
+  const mark = <TxLogoMark config={config} tone={tone} onReady={onReady} />;
 
   const content =
     interactive && heroFloat && isHero ? (
@@ -657,7 +657,7 @@ export function GxLogoScene({
   );
 }
 
-export function configureGxLogoRenderer(
+export function configureTxLogoRenderer(
   gl: WebGLRenderer,
   variant: LogoVariant = "header",
   tone: LogoTone = "chrome",

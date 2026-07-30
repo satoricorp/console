@@ -4,8 +4,8 @@ import { LegalPage } from "@/components/legal-page";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — GX",
-  description: "Terms of Service for GX by Satori Engineering Co.",
+  title: "Terms of Service — TX",
+  description: "Terms of Service for TX by Satori Engineering Co.",
 };
 
 export default function TermsPage() {
@@ -14,7 +14,7 @@ export default function TermsPage() {
       <section>
         <h2>1. Agreement</h2>
         <p>
-          These Terms of Service (“Terms”) govern your access to and use of GX
+          These Terms of Service (“Terms”) govern your access to and use of TX
           and related websites, apps, and services (the “Service”) provided by
           Satori Engineering Co. (“Satori,” “we,” “us,” or “our”). By creating
           an account or using the Service, you agree to these Terms.
@@ -24,7 +24,7 @@ export default function TermsPage() {
       <section>
         <h2>2. The Service</h2>
         <p>
-          GX is a code review and verification product. Features may change over
+          TX is a code review and verification product. Features may change over
           time. We may add, modify, or discontinue parts of the Service with or
           without notice, except where required by law or a paid subscription
           agreement.

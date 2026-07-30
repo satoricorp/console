@@ -157,7 +157,7 @@ function parseProvenance(raw: unknown[]): AgentProvenanceEntry[] {
 
 function extractSelfReport(provenance: AgentProvenanceEntry[]): SelfReport | null {
   for (const entry of provenance) {
-    if (entry.agentTool !== "gx_commit") continue;
+    if (entry.agentTool !== "tx_commit") continue;
     const source = entry.source;
     if (!source || typeof source !== "object") continue;
     const row = source as Record<string, unknown>;
@@ -361,7 +361,7 @@ export async function loadReviewPlanContext(
         : [],
     );
     allProvenance.push(...provenance);
-    // Empty string patches are common from some GX clients — treat as missing.
+    // Empty string patches are common from some TX clients — treat as missing.
     const rawPatch = typeof entry.patch === "string" ? entry.patch : null;
     const patch = rawPatch && rawPatch.trim() ? rawPatch : null;
     const filePatches = patch ? splitUnifiedDiff(patch) : [];

@@ -1,20 +1,20 @@
 "use client";
 
 /**
- * Standalone hero GX blender / 3D chrome transition.
+ * Standalone hero TX blender / 3D chrome transition.
  * Preserved for reuse — the marketing hero no longer mounts this as the main logo.
  */
-import { GxLogo, type GxLogoProps } from "./gx-logo";
+import { TxLogo, type TxLogoProps } from "./tx-logo";
 
-export type GxBlenderHeroProps = Omit<GxLogoProps, "variant">;
+export type TxBlenderHeroProps = Omit<TxLogoProps, "variant">;
 
-export function GxBlenderHero({
+export function TxBlenderHero({
   className,
   onReady,
   ...props
-}: GxBlenderHeroProps) {
+}: TxBlenderHeroProps) {
   return (
-    <GxLogo
+    <TxLogo
       variant="hero"
       className={className}
       onReady={onReady}

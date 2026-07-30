@@ -8,12 +8,12 @@ import * as targets from "aws-cdk-lib/aws-route53-targets";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
-type GxDownloadsStackProps = StackProps & {
+type TxDownloadsStackProps = StackProps & {
   domainName: string;
 };
 
-export class GxDownloadsStack extends Stack {
-  constructor(scope: Construct, id: string, props: GxDownloadsStackProps) {
+export class TxDownloadsStack extends Stack {
+  constructor(scope: Construct, id: string, props: TxDownloadsStackProps) {
     super(scope, id, props);
 
     if (props.env?.region && props.env.region !== "us-east-1") {
@@ -42,7 +42,7 @@ export class GxDownloadsStack extends Stack {
 
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       certificate,
-      comment: `GX downloads for ${hostName}`,
+      comment: `TX downloads for ${hostName}`,
       defaultBehavior: {
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
@@ -88,7 +88,7 @@ export class GxDownloadsStack extends Stack {
       value: distribution.distributionId,
     });
     new cdk.CfnOutput(this, "DownloadUrl", {
-      value: `https://${hostName}/GX-macOS.zip`,
+      value: `https://${hostName}/TX-macOS.zip`,
     });
   }
 }
