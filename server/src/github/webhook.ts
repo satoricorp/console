@@ -303,7 +303,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const now = Date.now();
   await db`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
     ) VALUES (
       ${orgId},
       ${bookmark.id},
@@ -447,7 +447,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
 
   const [comment] = await db<{ id: string }[]>`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
     ) VALUES (
       ${orgId},
       ${bookmark.id},

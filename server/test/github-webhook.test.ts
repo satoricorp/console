@@ -616,12 +616,12 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ body: string; is_gx_mention: boolean }[]>`
-      SELECT body, is_gx_mention FROM pr_comments
+    const comments = await db<{ body: string; is_tx_mention: boolean }[]>`
+      SELECT body, is_tx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
     `;
     expect(comments.length).toBe(1);
-    expect(comments[0]?.is_gx_mention).toBe(false);
+    expect(comments[0]?.is_tx_mention).toBe(false);
 
     const decisions = await db<{ action: string }[]>`
       SELECT action FROM decisions
@@ -664,11 +664,11 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ is_gx_mention: boolean }[]>`
-      SELECT is_gx_mention FROM pr_comments
+    const comments = await db<{ is_tx_mention: boolean }[]>`
+      SELECT is_tx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
     `;
-    expect(comments[0]?.is_gx_mention).toBe(true);
+    expect(comments[0]?.is_tx_mention).toBe(true);
     expect(
       fetchCalls.some((c) =>
         c.url.includes(`/pulls/${PR_NUMBER}/comments/${reviewCommentId}/replies`),
@@ -710,11 +710,11 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ is_gx_mention: boolean }[]>`
-      SELECT is_gx_mention FROM pr_comments
+    const comments = await db<{ is_tx_mention: boolean }[]>`
+      SELECT is_tx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${issueCommentId}
     `;
-    expect(comments[0]?.is_gx_mention).toBe(true);
+    expect(comments[0]?.is_tx_mention).toBe(true);
     expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(true);
 
     const [updatedRule] = await db<{ status: string }[]>`
