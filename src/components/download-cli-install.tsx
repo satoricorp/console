@@ -7,11 +7,11 @@ import { useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { CopyCommand } from "@/components/copy-command";
-import { CLI_INSTALL_COMMAND } from "@/lib/gx-download";
+import { CLI_INSTALL_COMMAND } from "@/lib/tx-download";
 import { githubSignInUrl, withOnboardingParam } from "@/lib/site-links";
 
-const AUTH_LOGIN_COMMAND = "gx auth login";
-const INIT_COMMAND = "gx init";
+const AUTH_LOGIN_COMMAND = "tx auth login";
+const INIT_COMMAND = "tx init";
 
 function WindowsIcon({ className }: { className?: string }) {
   return (
@@ -49,7 +49,7 @@ function WindowsRequest() {
     <div className="flex flex-col items-start gap-2">
       <p className="flex items-center gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
         <WindowsIcon className="h-3 w-3 shrink-0 text-zinc-950 dark:text-white" />
-        Run GX inside WSL (for Windows).
+        Run TX inside WSL (for Windows).
       </p>
       {isAuthenticated ? (
         <button

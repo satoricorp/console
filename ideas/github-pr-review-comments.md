@@ -14,11 +14,11 @@ This idea is parked for later. The current preferred first version is narrower t
 
 ## Preferred V1 Direction
 
-- Trigger reviews from `gx pr` publishes only.
-- Post one sticky GitHub PR overview comment, updating the existing managed comment on each new GX publish.
+- Trigger reviews from `tx pr` publishes only.
+- Post one sticky GitHub PR overview comment, updating the existing managed comment on each new TX publish.
 - Keep scores advisory only. Do not set required checks or block merges in v1.
 
-This uses the rich GX payload already captured during publish: changed files, patches, stack context, PR metadata, and agent session history. It avoids the extra webhook and deduplication work needed to review every ordinary GitHub push.
+This uses the rich TX payload already captured during publish: changed files, patches, stack context, PR metadata, and agent session history. It avoids the extra webhook and deduplication work needed to review every ordinary GitHub push.
 
 ## Implementation Outline
 
@@ -31,12 +31,12 @@ Add Postgres-backed job/comment state in `server`:
 Extend `POST /gx/pr` ingest:
 
 - After the existing ingest transaction succeeds, enqueue a review job only when the payload includes a GitHub PR URL.
-- Do not fail `gx pr` if review generation or GitHub writeback fails.
+- Do not fail `tx pr` if review generation or GitHub writeback fails.
 - Persist failures for debugging and possible retry.
 
 Add review generation:
 
-- Use the full GX payload to extract changed files, stack patches, PR title/body where available, and session summaries.
+- Use the full TX payload to extract changed files, stack patches, PR title/body where available, and session summaries.
 - Reuse the existing OpenAI and Turbopuffer retrieval patterns from PR chat for repository context when indexed context exists.
 - Return structured markdown sections:
   - Overview
@@ -49,9 +49,9 @@ Add review generation:
 Add GitHub writeback:
 
 - Use a GitHub App installation token when available; fall back to the existing service GitHub token only for local/dev.
-- Find an existing managed comment by a hidden marker such as `<!-- gx-pr-review-comment:v1 -->`.
+- Find an existing managed comment by a hidden marker such as `<!-- tx-pr-review-comment:v1 -->`.
 - Update the managed comment if found; otherwise create a new PR issue comment.
-- Include commit SHA and GX event id in the comment so users know what was reviewed.
+- Include commit SHA and TX event id in the comment so users know what was reviewed.
 
 ## GitHub Permissions And Interfaces
 
@@ -63,9 +63,9 @@ Likely GitHub App permissions:
 
 Potential env/config:
 
-- `GX_REVIEW_COMMENT_ENABLED=true|false`
-- `GX_REVIEW_SERVICE_SECRET` shared between `server` and Convex if review generation is exposed as a service-only Convex action
-- Optional `GX_REVIEW_MODEL`, defaulting to the existing review/chat model unless changed later
+- `TX_REVIEW_COMMENT_ENABLED=true|false`
+- `TX_REVIEW_SERVICE_SECRET` shared between `server` and Convex if review generation is exposed as a service-only Convex action
+- Optional `TX_REVIEW_MODEL`, defaulting to the existing review/chat model unless changed later
 
 ## Test Plan
 
@@ -84,14 +84,14 @@ Potential env/config:
 
 ## Deferred Alternatives
 
-- GitHub-native trigger: handle `pull_request.synchronize` events so every GitHub PR push is reviewed, including non-GX pushes.
+- GitHub-native trigger: handle `pull_request.synchronize` events so every GitHub PR push is reviewed, including non-TX pushes.
 - New comment per push: keep a historical review snapshot, at the cost of comment noise.
 - Inline review comments: add line-specific feedback with the Pull Request Review APIs, at the cost of more false-positive risk and API complexity.
 - Blocking checks: create GitHub checks/statuses and optionally fail when reliability or security scores fall below thresholds.
 
 ## Assumptions
 
-- V1 reviews only pushes that go through `gx pr`.
+- V1 reviews only pushes that go through `tx pr`.
 - V1 posts one PR-level overview comment, not inline review comments.
-- Review generation can be eventually consistent; a short delay after `gx pr` is acceptable.
+- Review generation can be eventually consistent; a short delay after `tx pr` is acceptable.
 - GitHub PR overview comments should use issue comments because GitHub PRs share the issues comment API.

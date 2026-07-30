@@ -8,7 +8,7 @@ import {
 import { authHeaders, installTestAuth, testAuthToken } from "./auth";
 
 const originalFetch = globalThis.fetch;
-const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
+const originalCloudApiKey = process.env.TX_CLOUD_API_KEY;
 const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
 
@@ -24,9 +24,9 @@ describe("requireAuth", () => {
     setOrgMemberCheckForTests(null);
     setOrgResolveForTests(null);
     if (originalCloudApiKey === undefined) {
-      delete process.env.GX_CLOUD_API_KEY;
+      delete process.env.TX_CLOUD_API_KEY;
     } else {
-      process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
+      process.env.TX_CLOUD_API_KEY = originalCloudApiKey;
     }
     if (originalConvexSiteUrl === undefined) {
       delete process.env.CONVEX_SITE_URL;
@@ -91,7 +91,7 @@ describe("requireAuth", () => {
   });
 
   test("allows local development without a bearer token when cloud API key is unset", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "development";
 
     const res = await authApp().request("http://localhost/secure", {
@@ -110,7 +110,7 @@ describe("requireAuth", () => {
   });
 
   test("rejects missing cloud API key configuration in production", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     globalThis.fetch = (async () =>
       new Response("bad token", { status: 401 })) as unknown as typeof fetch;
@@ -121,8 +121,8 @@ describe("requireAuth", () => {
     expect(res.status).toBe(401);
   });
 
-  test("authorizes a GX CLI session token for an org member", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+  test("authorizes a TX CLI session token for an org member", async () => {
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     process.env.CONVEX_SITE_URL = "https://convex.example";
     setOrgMemberCheckForTests(async (orgId, githubUserId) => {
@@ -160,7 +160,7 @@ describe("requireAuth", () => {
     expect(await res.json()).toEqual({
       orgId: "test-org",
       userId: "user_1",
-      tokenLabel: "gx-cli:octocat",
+      tokenLabel: "tx-cli:octocat",
       githubUserId: 12345,
       githubUserLogin: "octocat",
       sessionId: "session_1",
@@ -169,7 +169,7 @@ describe("requireAuth", () => {
   });
 
   test("resolves org for CLI session when X-Org-Id is omitted", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     process.env.CONVEX_SITE_URL = "https://convex.example";
     setOrgResolveForTests(async (githubUserId) => {
@@ -198,7 +198,7 @@ describe("requireAuth", () => {
     expect(await res.json()).toEqual({
       orgId: "resolved-org",
       userId: "user_1",
-      tokenLabel: "gx-cli:octocat",
+      tokenLabel: "tx-cli:octocat",
       githubUserId: 12345,
       githubUserLogin: "octocat",
       sessionId: "session_1",
@@ -207,7 +207,7 @@ describe("requireAuth", () => {
   });
 
   test("rejects CLI session without org membership or install", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     process.env.CONVEX_SITE_URL = "https://convex.example";
     setOrgResolveForTests(async () => null);
@@ -229,12 +229,12 @@ describe("requireAuth", () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({
-      error: "Install the GX GitHub App to continue",
+      error: "Install the TX GitHub App to continue",
     });
   });
 
   test("rejects CLI session spoofing another org", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     process.env.NODE_ENV = "production";
     process.env.CONVEX_SITE_URL = "https://convex.example";
     setOrgMemberCheckForTests(async (orgId) => orgId === "own-org");
@@ -259,7 +259,7 @@ describe("requireAuth", () => {
   });
 
   test("authorizes a GitHub access token for an org member", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     setOrgMemberCheckForTests(async (orgId, githubUserId) => {
       return orgId === "test-org" && githubUserId === 12345;
     });
@@ -292,7 +292,7 @@ describe("requireAuth", () => {
   });
 
   test("rejects GitHub token for non-member org", async () => {
-    delete process.env.GX_CLOUD_API_KEY;
+    delete process.env.TX_CLOUD_API_KEY;
     setOrgMemberCheckForTests(async () => false);
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: 12345, login: "octocat" }), {

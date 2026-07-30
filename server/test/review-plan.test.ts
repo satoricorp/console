@@ -69,7 +69,7 @@ describe("buildUsageBreakdown", () => {
         },
         {
           session_id: "pseudo",
-          agent_tool: "gx_commit",
+          agent_tool: "tx_commit",
           source: { task_summary: "do the thing" },
         },
       ],

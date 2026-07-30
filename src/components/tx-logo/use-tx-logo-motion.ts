@@ -21,7 +21,7 @@ function prefersReducedMotion(): boolean {
 }
 
 /** Heuristic device check before enabling logo mouse motion. */
-export function assessGxLogoMotionCapability(): boolean {
+export function assessTxLogoMotionCapability(): boolean {
   if (typeof window === "undefined") return false;
 
   if (prefersReducedMotion()) return false;
@@ -37,15 +37,15 @@ export function assessGxLogoMotionCapability(): boolean {
 }
 
 /** Touch devices: hero logo follows finger while dragging (lighter than full motion). */
-export function assessGxLogoTouchTracking(): boolean {
+export function assessTxLogoTouchTracking(): boolean {
   if (typeof window === "undefined") return false;
   if (prefersReducedMotion()) return false;
   return window.matchMedia("(hover: none)").matches;
 }
 
-export function useGxLogoMotion(requested: boolean) {
+export function useTxLogoMotion(requested: boolean) {
   const [motionEnabled, setMotionEnabled] = useState(
-    () => requested && assessGxLogoMotionCapability(),
+    () => requested && assessTxLogoMotionCapability(),
   );
   const [gpuBlocked, setGpuBlocked] = useState(false);
 
@@ -56,7 +56,7 @@ export function useGxLogoMotion(requested: boolean) {
   }, []);
 
   const touchTrackingEnabled =
-    requested && !gpuBlocked && assessGxLogoTouchTracking();
+    requested && !gpuBlocked && assessTxLogoTouchTracking();
 
   return {
     motionEnabled: requested && motionEnabled && !gpuBlocked,

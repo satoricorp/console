@@ -9,7 +9,7 @@ export const getMyCliDevices = query({
 
     const now = Date.now();
     const sessions = await ctx.db
-      .query("gxCliSessions")
+      .query("txCliSessions")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
 
@@ -19,7 +19,7 @@ export const getMyCliDevices = query({
         id: session._id,
         machineId: session.machineId,
         machineName: session.machineName,
-        gxVersion: session.gxVersion ?? null,
+        txVersion: session.txVersion ?? null,
         createdAt: session.createdAt,
         expiresAt: session.expiresAt ?? null,
         lastUsedAt: session.lastUsedAt ?? null,

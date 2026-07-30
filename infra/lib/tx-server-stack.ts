@@ -13,7 +13,7 @@ import * as route53 from "aws-cdk-lib/aws-route53";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
-type GxServerStackProps = StackProps & {
+type TxServerStackProps = StackProps & {
   domainName: string;
   environmentName: "staging" | "production";
   recordName: "staging" | "api";
@@ -43,8 +43,8 @@ const bedrockInferenceProfileIds = [
   "us.anthropic.claude-opus-4-5-20251101-v1:0",
 ];
 
-export class GxServerStack extends Stack {
-  constructor(scope: Construct, id: string, props: GxServerStackProps) {
+export class TxServerStack extends Stack {
+  constructor(scope: Construct, id: string, props: TxServerStackProps) {
     super(scope, id, props);
 
     const zone = route53.HostedZone.fromLookup(this, "HostedZone", {
@@ -107,7 +107,7 @@ export class GxServerStack extends Stack {
 
     const appSecret = new secretsmanager.Secret(this, "AppSecret", {
       secretName: `/gx/${props.environmentName}/server`,
-      description: `GX ${props.environmentName} server app secrets`,
+      description: `TX ${props.environmentName} server app secrets`,
       generateSecretString: {
         secretStringTemplate: JSON.stringify({
           GX_CLOUD_API_KEY: "replace-me",
@@ -182,9 +182,9 @@ export class GxServerStack extends Stack {
             PGDATABASE: "gx",
             PGSSLMODE: "require",
             PORT: String(containerPort),
-            GX_CONTEXT_BROKER: "1",
+            TX_CONTEXT_BROKER: "1",
             ...(props.environmentName === "production"
-              ? { GX_SITE_URL: "https://totality.sh" }
+              ? { TX_SITE_URL: "https://totality.sh" }
               : {}),
           },
           secrets: {
@@ -192,7 +192,7 @@ export class GxServerStack extends Stack {
             PGPORT: ecs.Secret.fromSecretsManager(database.secret!, "port"),
             PGUSER: ecs.Secret.fromSecretsManager(database.secret!, "username"),
             PGPASSWORD: ecs.Secret.fromSecretsManager(database.secret!, "password"),
-            GX_CLOUD_API_KEY: ecs.Secret.fromSecretsManager(
+            TX_CLOUD_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
               "GX_CLOUD_API_KEY",
             ),
@@ -220,18 +220,18 @@ export class GxServerStack extends Stack {
               appSecret,
               "TURBOPUFFER_API_KEY",
             ),
-            GX_POSTHOG_KEY: ecs.Secret.fromSecretsManager(
+            TX_POSTHOG_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
               "GX_POSTHOG_KEY",
             ),
-            GX_POSTHOG_HOST: ecs.Secret.fromSecretsManager(
+            TX_POSTHOG_HOST: ecs.Secret.fromSecretsManager(
               appSecret,
               "GX_POSTHOG_HOST",
             ),
             // Same key as OPENAI_API_KEY: createLLMProvider prefers Bedrock
-            // whenever AWS creds exist unless GX_OPENAI_API_KEY is set, and
+            // whenever AWS creds exist unless TX_OPENAI_API_KEY is set, and
             // Bedrock invokes currently fail in this account.
-            GX_OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
+            TX_OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
               "OPENAI_API_KEY",
             ),

@@ -8,8 +8,8 @@ import { withRetry } from "./retry";
  * just written, so retrieval stops answering with files that no longer exist.
  *
  * The `source_kind` half of the filter is not optional. This namespace is
- * shared: the GX Cloud server writes `push_delta` and `hunk_link` rows into it
- * on every push, and the gx CLI writes session transcripts and review policy.
+ * shared: the TX Cloud server writes `push_delta` and `hunk_link` rows into it
+ * on every push, and the tx CLI writes session transcripts and review policy.
  * None of those carry the commit id of an index run, so a sweep on
  * `commit_id NotEq` alone — which is what this did while the namespace was
  * private to this indexer — would delete every one of them on each merge, and

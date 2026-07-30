@@ -3,10 +3,10 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
-const GxLogoIconExporter = dynamic(
+const TxLogoIconExporter = dynamic(
   () =>
-    import("@/components/gx-logo/gx-logo-icon-exporter").then(
-      (mod) => mod.GxLogoIconExporter,
+    import("@/components/tx-logo/tx-logo-icon-exporter").then(
+      (mod) => mod.TxLogoIconExporter,
     ),
   { ssr: false },
 );
@@ -16,7 +16,7 @@ export function IconExportClient() {
     <main className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-2xl flex-col justify-center gap-10 px-6 py-16">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          GX icon export
+          TX icon export
         </h1>
         <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
           Renders at 1024×1024, then scales to standard favicon and app-icon
@@ -36,7 +36,7 @@ export function IconExportClient() {
           icons that require a solid fill.
         </p>
       </div>
-      <GxLogoIconExporter />
+      <TxLogoIconExporter />
       <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-400">
         <p className="font-medium text-zinc-900 dark:text-zinc-50">
           Wire into Next.js after export
@@ -56,7 +56,7 @@ export function IconExportClient() {
           <li>
             Tune chrome mesh framing in{" "}
             <code className="text-zinc-800 dark:text-zinc-200">
-              src/components/gx-logo/constants.ts
+              src/components/tx-logo/constants.ts
             </code>{" "}
             under the <code className="text-zinc-800 dark:text-zinc-200">icon</code>{" "}
             variant.

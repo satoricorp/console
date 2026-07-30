@@ -1,10 +1,10 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from "three";
 
-/** World-space split between g and x in gx-icon.glb (after Blender rotation). */
+/** World-space split between g and x in tx-icon.glb (after Blender rotation). */
 const GLYPH_X_SPLIT_RATIO = 0.5;
 
 /**
- * Keeps triangles on the x side of the gx mark. Uses any-vertex test so bevels
+ * Keeps triangles on the x side of the tx mark. Uses any-vertex test so bevels
  * on the split line are not shaved off (centroid-only clipping cut the x stem).
  */
 export function clipGeometryToGlyphX(

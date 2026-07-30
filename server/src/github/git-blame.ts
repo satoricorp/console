@@ -79,9 +79,9 @@ export type GitBlameContextRow = {
   associatedPrNumber: number | null;
   associatedPrUrl: string | null;
   codeUrl: string | null;
-  gxEventIds: string[];
-  gxSessionIds: string[];
-  gxSessionEvents: Array<{
+  txEventIds: string[];
+  txSessionIds: string[];
+  txSessionEvents: Array<{
     sessionId: string;
     eventType: string;
     filePath: string | null;
@@ -346,7 +346,7 @@ async function fetchGitHubBlame(
 ): Promise<GitHubBlameRange[]> {
   const [owner, repo] = splitRepoFullName(repoFullName);
   const query = `
-    query GxGitBlame($owner: String!, $repo: String!, $expression: String!, $path: String!) {
+    query TxGitBlame($owner: String!, $repo: String!, $expression: String!, $path: String!) {
       repository(owner: $owner, name: $repo) {
         object(expression: $expression) {
           ... on Commit {
@@ -790,11 +790,11 @@ async function loadCachedGitBlameRows(
 
   const commitShas = [...new Set(rows.map((row) => row.commit_sha))];
   const provenance = commitShas.length > 0
-    ? await loadGxProvenance(db, input.orgId, input.repoFullName, commitShas)
+    ? await loadTxProvenance(db, input.orgId, input.repoFullName, commitShas)
     : new Map<string, {
         eventIds: string[];
         sessionIds: string[];
-        sessionEvents: GitBlameContextRow["gxSessionEvents"];
+        sessionEvents: GitBlameContextRow["txSessionEvents"];
       }>();
 
   return rows.map((row) => {
@@ -803,7 +803,7 @@ async function loadCachedGitBlameRows(
       row.commit_sha && row.line_start > 0
         ? `https://github.com/${input.repoFullName}/blob/${row.commit_sha}/${oldPath}#L${row.line_start}-L${row.line_end}`
         : null;
-    const gx = provenance.get(row.commit_sha);
+    const tx = provenance.get(row.commit_sha);
     return {
       filePath: row.file_path,
       previousFilePath: row.previous_file_path,
@@ -822,14 +822,14 @@ async function loadCachedGitBlameRows(
       associatedPrNumber: row.associated_pr_number,
       associatedPrUrl: row.associated_pr_url,
       codeUrl,
-      gxEventIds: gx?.eventIds ?? [],
-      gxSessionIds: gx?.sessionIds ?? [],
-      gxSessionEvents: gx?.sessionEvents ?? [],
+      txEventIds: tx?.eventIds ?? [],
+      txSessionIds: tx?.sessionIds ?? [],
+      txSessionEvents: tx?.sessionEvents ?? [],
     };
   });
 }
 
-async function loadGxProvenance(
+async function loadTxProvenance(
   db: SqlExecutor,
   orgId: string,
   repoFullName: string,
@@ -837,7 +837,7 @@ async function loadGxProvenance(
 ): Promise<Map<string, {
   eventIds: string[];
   sessionIds: string[];
-  sessionEvents: GitBlameContextRow["gxSessionEvents"];
+  sessionEvents: GitBlameContextRow["txSessionEvents"];
 }>> {
   const rows = await db<Array<{
     commit_sha: string;
@@ -887,7 +887,7 @@ async function loadGxProvenance(
   const byCommit = new Map<string, {
     eventIds: Set<string>;
     sessionIds: Set<string>;
-    sessionEvents: GitBlameContextRow["gxSessionEvents"];
+    sessionEvents: GitBlameContextRow["txSessionEvents"];
   }>();
   for (const row of rows) {
     if (!row.commit_sha) continue;
@@ -914,7 +914,7 @@ async function loadGxProvenance(
   const out = new Map<string, {
     eventIds: string[];
     sessionIds: string[];
-    sessionEvents: GitBlameContextRow["gxSessionEvents"];
+    sessionEvents: GitBlameContextRow["txSessionEvents"];
   }>();
   for (const [commit, entry] of byCommit) {
     out.set(commit, {

@@ -1,13 +1,13 @@
 /**
- * Single source of truth for gx logo sizing.
+ * Single source of truth for tx logo sizing.
  * Tune container (CSS rem) and camera together.
  */
 
-export const GX_MESH_PATH = "/models/gx-chrome.glb";
-export const GX_HEADER_MESH_PATH = "/models/gx-icon.glb";
+export const TX_MESH_PATH = "/models/tx-chrome.glb";
+export const TX_HEADER_MESH_PATH = "/models/tx-icon.glb";
 
 // The Text3D fallback does not match the Blender mark; deploys should always use the checked-in GLBs.
-export const USE_GX_LOGO_MESH = true;
+export const USE_TX_LOGO_MESH = true;
 
 function splinePill(textSize: number) {
   return {
@@ -39,8 +39,8 @@ type ContainerConfig = {
 export type LogoVariantConfig = ContainerConfig & {
   camera: CameraConfig;
   meshPath: string;
-  /** gx = full mark (mesh or text); x = single-letter export for tiny favicons. */
-  glyph: "gx" | "x";
+  /** tx = full mark (mesh or text); x = single-letter export for tiny favicons. */
+  glyph: "tx" | "x";
   /** Fit width and height inside the camera square (icon export). */
   squareFit?: boolean;
   /** Padding inside the square view (0–1). */
@@ -55,7 +55,7 @@ export type LogoVariantConfig = ContainerConfig & {
 };
 
 type VariantOptions = {
-  glyph?: "gx" | "x";
+  glyph?: "tx" | "x";
   squareFit?: boolean;
   squareFitPadding?: number;
 };
@@ -72,7 +72,7 @@ function defineVariant(
     ...container,
     camera,
     meshPath,
-    glyph: options.glyph ?? "gx",
+    glyph: options.glyph ?? "tx",
     squareFit: options.squareFit,
     squareFitPadding: options.squareFitPadding,
     targetMaxDimension,
@@ -86,7 +86,7 @@ export const LOGO_VARIANTS = {
     { position: [0, 0, 2.55], fov: 28 },
     1.22,
     1.88,
-    GX_HEADER_MESH_PATH,
+    TX_HEADER_MESH_PATH,
   ),
   footer: defineVariant(
     {
@@ -99,24 +99,24 @@ export const LOGO_VARIANTS = {
     { position: [0, 0, 2.55], fov: 28 },
     1.35,
     2.05,
-    GX_HEADER_MESH_PATH,
+    TX_HEADER_MESH_PATH,
   ),
-  /** Square export — full gx mark with padding so letters are not clipped. */
+  /** Square export — full tx mark with padding so letters are not clipped. */
   icon: defineVariant(
     { widthRem: 1, heightRem: 1 },
     { position: [0, 0, 2.55], fov: 28 },
     1.48,
     1.88,
-    GX_HEADER_MESH_PATH,
+    TX_HEADER_MESH_PATH,
     { squareFit: true, squareFitPadding: 0.86 },
   ),
-  /** Tiny favicons — chrome "x" clipped from gx-icon.glb (same material as header). */
+  /** Tiny favicons — chrome "x" clipped from tx-icon.glb (same material as header). */
   iconX: defineVariant(
     { widthRem: 1, heightRem: 1 },
     { position: [0, 0, 2.55], fov: 28 },
     1.48,
     1.88,
-    GX_HEADER_MESH_PATH,
+    TX_HEADER_MESH_PATH,
     { glyph: "x", squareFit: true, squareFitPadding: 0.74 },
   ),
   hero: defineVariant(
@@ -124,7 +124,7 @@ export const LOGO_VARIANTS = {
     { position: [0, 0, 3.05], fov: 32 },
     1.72,
     1.92,
-    GX_MESH_PATH,
+    TX_MESH_PATH,
   ),
 } as const satisfies Record<string, LogoVariantConfig>;
 

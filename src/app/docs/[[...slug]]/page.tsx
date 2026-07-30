@@ -44,7 +44,7 @@ export async function generateMetadata(
   if (!page) notFound();
 
   return {
-    title: `${page.data.title} — GX Docs`,
+    title: `${page.data.title} — TX Docs`,
     description: page.data.description,
   };
 }

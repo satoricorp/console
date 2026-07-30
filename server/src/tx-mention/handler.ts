@@ -4,26 +4,26 @@ import { loadGitBlameContext, parsePatchHunks, type GitBlameContext } from "../g
 import { githubPullFileLineUrl } from "../github/line-links";
 import { createReviewProviders } from "../llm/provider";
 import {
-  buildGxChatUserPrompt,
-  GX_CHAT_SYSTEM_PROMPT,
+  buildTxChatUserPrompt,
+  TX_CHAT_SYSTEM_PROMPT,
   type GitHubPrFileContext,
   type RecentComment,
-} from "../llm/prompts/gx-chat";
+} from "../llm/prompts/tx-chat";
 import {
   loadExtractContext,
   resolveSummaryTarget,
   type ExtractContext,
 } from "../summary/generate";
 import {
-  buildGxCitationContext,
-  formatGxCitedReply,
+  buildTxCitationContext,
+  formatTxCitedReply,
   inlineCitationIds,
-  parseGxChatModelReply,
+  parseTxChatModelReply,
   validCitationIds,
-  type GxCitationContext,
+  type TxCitationContext,
 } from "./citations";
 
-export type GxMentionInput = {
+export type TxMentionInput = {
   orgId: string;
   bookmarkId: string;
   commentId: string;
@@ -38,7 +38,7 @@ export type GxMentionInput = {
   };
 };
 
-export type GxMentionResult = {
+export type TxMentionResult = {
   reply: string | null;
   vetoedRuleText: string | null;
   retiredRuleIds: string[];
@@ -56,36 +56,36 @@ type ChatRun = {
 };
 
 const VETO_PATTERNS: RegExp[] = [
-  /@gx\s+(?:please\s+)?(?:skip|ignore|veto|override|retire)\s+(?:rule\s+)?(.+)/i,
-  /@gx\s+(?:don'?t|do not)\s+enforce\s+(.+)/i,
+  /@tx\s+(?:please\s+)?(?:skip|ignore|veto|override|retire)\s+(?:rule\s+)?(.+)/i,
+  /@tx\s+(?:don'?t|do not)\s+enforce\s+(.+)/i,
 ];
 
-export function containsGxMention(body: string): boolean {
-  return /@gx\b/i.test(body);
+export function containsTxMention(body: string): boolean {
+  return /@tx\b/i.test(body);
 }
 
-export function parseGxMention(body: string): string | null {
-  const match = body.match(/@gx\b/i);
+export function parseTxMention(body: string): string | null {
+  const match = body.match(/@tx\b/i);
   return match ? body.trim() : null;
 }
 
-export async function handleGxMention(
+export async function handleTxMention(
   db: postgres.Sql,
-  input: GxMentionInput,
-): Promise<GxMentionResult> {
+  input: TxMentionInput,
+): Promise<TxMentionResult> {
   const vetoTarget = extractVetoTarget(input.body);
   const retiredRuleIds: string[] = [];
 
   if (vetoTarget) {
     const allowed = await authorCanVetoRules(input);
     if (!allowed) {
-      console.info("gx-mention veto denied: author lacks write access", {
+      console.info("tx-mention veto denied: author lacks write access", {
         orgId: input.orgId,
         bookmarkId: input.bookmarkId,
         author: input.author,
       });
       return {
-        reply: `GX: only collaborators with write access can retire rules.`,
+        reply: `TX: only collaborators with write access can retire rules.`,
         vetoedRuleText: null,
         retiredRuleIds: [],
       };
@@ -128,10 +128,10 @@ export async function handleGxMention(
 
     const reply =
       retiredRuleIds.length > 0
-        ? `GX: retired ${retiredRuleIds.length} rule(s) matching "${vetoTarget}".`
-        : `GX: noted override for "${vetoTarget}" (no matching active rules).`;
+        ? `TX: retired ${retiredRuleIds.length} rule(s) matching "${vetoTarget}".`
+        : `TX: noted override for "${vetoTarget}" (no matching active rules).`;
 
-    console.info("gx-mention veto", {
+    console.info("tx-mention veto", {
       orgId: input.orgId,
       bookmarkId: input.bookmarkId,
       commentId: input.commentId,
@@ -146,7 +146,7 @@ export async function handleGxMention(
     };
   }
 
-  const question = stripGxMention(input.body);
+  const question = stripTxMention(input.body);
   const latestSummary = await loadLatestSummary(db, input.orgId, input.bookmarkId);
   const context = await loadMentionContext(db, input.orgId, input.bookmarkId);
   const recentComments = await loadRecentComments(db, input.orgId, input.bookmarkId, input.commentId);
@@ -163,14 +163,14 @@ export async function handleGxMention(
           fileHints: pickGitBlameFileHints(question, context, recentComments, input.file ?? null),
         })
       : null;
-  const citationContext = buildGxCitationContext({
+  const citationContext = buildTxCitationContext({
     latestSummary: latestSummary?.content ?? null,
     context,
     githubPrFiles,
     gitBlameContext,
     recentComments,
   });
-  const reply = await generateGxChatReply({
+  const reply = await generateTxChatReply({
     author: input.author,
     question,
     latestSummary: latestSummary?.content ?? null,
@@ -195,7 +195,7 @@ export async function handleGxMention(
     `;
   }
 
-  console.info("gx-mention chat", {
+  console.info("tx-mention chat", {
     orgId: input.orgId,
     bookmarkId: input.bookmarkId,
     commentId: input.commentId,
@@ -238,7 +238,7 @@ async function loadMentionContext(
     const target = await resolveSummaryTarget(db, orgId, { bookmarkId });
     return await loadExtractContext(db, orgId, target);
   } catch (error) {
-    console.info("gx-mention context unavailable", { orgId, bookmarkId, error });
+    console.info("tx-mention context unavailable", { orgId, bookmarkId, error });
     return null;
   }
 }
@@ -261,7 +261,7 @@ async function loadRecentComments(
 }
 
 async function loadGitHubPrFiles(
-  input: NonNullable<GxMentionInput["github"]>,
+  input: NonNullable<TxMentionInput["github"]>,
 ): Promise<GitHubPrFileContext[]> {
   try {
     const token = await getInstallationAccessToken(input.installationId);
@@ -278,7 +278,7 @@ async function loadGitHubPrFiles(
     );
     if (!response.ok) {
       const body = await response.text();
-      console.info("gx-mention GitHub PR files unavailable", {
+      console.info("tx-mention GitHub PR files unavailable", {
         repoFullName: input.repoFullName,
         pullNumber: input.pullNumber,
         status: response.status,
@@ -325,7 +325,7 @@ async function loadGitHubPrFiles(
       })
       .slice(0, 20);
   } catch (error) {
-    console.info("gx-mention GitHub PR files unavailable", {
+    console.info("tx-mention GitHub PR files unavailable", {
       repoFullName: input.repoFullName,
       pullNumber: input.pullNumber,
       error: error instanceof Error ? error.message : String(error),
@@ -345,7 +345,7 @@ export function shouldLoadGitHubPrFiles(context: ExtractContext | null): boolean
   );
 }
 
-async function generateGxChatReply(input: {
+async function generateTxChatReply(input: {
   author: string;
   question: string;
   latestSummary: string | null;
@@ -353,10 +353,10 @@ async function generateGxChatReply(input: {
   githubPrFiles: GitHubPrFileContext[];
   gitBlameContext: GitBlameContext | null;
   recentComments: RecentComment[];
-  citationContext: GxCitationContext;
+  citationContext: TxCitationContext;
 }): Promise<string> {
-  const providers = createReviewProviders(input.question || input.latestSummary || "gx mention");
-  const userPrompt = buildGxChatUserPrompt({
+  const providers = createReviewProviders(input.question || input.latestSummary || "tx mention");
+  const userPrompt = buildTxChatUserPrompt({
     ...input,
     citationPromptText: input.citationContext.promptText,
   });
@@ -364,8 +364,8 @@ async function generateGxChatReply(input: {
 
   for (const provider of providers) {
     try {
-      const completion = await provider.complete(GX_CHAT_SYSTEM_PROMPT, userPrompt);
-      const structured = parseGxChatModelReply(completion.text);
+      const completion = await provider.complete(TX_CHAT_SYSTEM_PROMPT, userPrompt);
+      const structured = parseTxChatModelReply(completion.text);
       const text = structured
         ? formatStructuredChatReply(structured, input.citationContext, provider.name)
         : normalizeChatReply(completion.text);
@@ -388,13 +388,13 @@ async function generateGxChatReply(input: {
 
   const failure = runs.find((run) => run.error)?.error;
   return failure
-    ? `GX: I couldn't answer from the review context (${failure}).`
-    : "GX: I couldn't answer from the available review context.";
+    ? `TX: I couldn't answer from the review context (${failure}).`
+    : "TX: I couldn't answer from the available review context.";
 }
 
 function formatStructuredChatReply(
   reply: { answer: string; citations: string[] },
-  citationContext: GxCitationContext,
+  citationContext: TxCitationContext,
   providerName: string,
 ): string {
   const requestedIds = [...reply.citations, ...inlineCitationIds(reply.answer)];
@@ -403,19 +403,19 @@ function formatStructuredChatReply(
   const invalidIds = requestedIds.filter((id) => !validIdSet.has(id));
 
   if (citationContext.citations.length > 0 && validIds.length === 0) {
-    console.info("gx-mention sources available but not cited", {
+    console.info("tx-mention sources available but not cited", {
       provider: providerName,
       availableCitationCount: citationContext.citations.length,
       invalidCitationIds: invalidIds,
     });
   } else if (invalidIds.length > 0) {
-    console.info("gx-mention dropped invalid citation ids", {
+    console.info("tx-mention dropped invalid citation ids", {
       provider: providerName,
       invalidCitationIds: invalidIds,
     });
   }
 
-  return formatGxCitedReply(reply.answer, validIds, citationContext.citations);
+  return formatTxCitedReply(reply.answer, validIds, citationContext.citations);
 }
 
 function normalizeChatReply(text: string): string {
@@ -427,9 +427,9 @@ function normalizeChatReply(text: string): string {
     .slice(0, 8);
   const reply = lines.join("\n").trim();
   if (!reply) {
-    return "GX: I couldn't answer from the available review context.";
+    return "TX: I couldn't answer from the available review context.";
   }
-  return /^gx:/i.test(reply) ? reply : `GX: ${reply}`;
+  return /^tx:/i.test(reply) ? reply : `TX: ${reply}`;
 }
 
 function scoreChatReply(text: string): number {
@@ -445,15 +445,15 @@ function scoreChatReply(text: string): number {
   return score;
 }
 
-function stripGxMention(body: string): string {
-  return body.replace(/@gx\b[:,]?\s*/gi, "").trim();
+function stripTxMention(body: string): string {
+  return body.replace(/@tx\b[:,]?\s*/gi, "").trim();
 }
 
 function escapeLikePattern(value: string): string {
   return value.replace(/([\\%_])/g, "\\$1");
 }
 
-async function authorCanVetoRules(input: GxMentionInput): Promise<boolean> {
+async function authorCanVetoRules(input: TxMentionInput): Promise<boolean> {
   if (!input.github) {
     // No GitHub context means an internal caller, not the public webhook.
     return true;

@@ -33,7 +33,7 @@ publishRoutes.post("/v1/publish", async (c) => {
     return c.json({ error: "Invalid JSON body" }, 400);
   }
 
-  if (isRecord(body) && body.event === "gx.pr") {
+  if (isRecord(body) && body.event === "tx.pr") {
     return handleArtifactPublish(c, body);
   }
   return handlePublishRegistration(c, body);
@@ -64,7 +64,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
         INSERT INTO pr_events (
           event,
           created_at_ms,
-          gx_version,
+          tx_version,
           user_id,
           session_id,
           machine_id,
@@ -82,7 +82,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
         ) VALUES (
           ${payload.event},
           ${payload.created_at || now},
-          ${payload.gx_version},
+          ${payload.tx_version},
           ${auth.userId},
           ${auth.sessionId ?? null},
           ${auth.machineId ?? null},
@@ -135,7 +135,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       sessionTexts: await loadPublishedSessionTexts(db, orgId, payload),
     });
     if (indexResult.status === "failed") {
-      console.info("GX artifact indexing failed", {
+      console.info("TX artifact indexing failed", {
         orgId: auth.orgId,
         repoFullName: result.bookmark.repo_full_name,
         eventId: result.eventId,
@@ -212,7 +212,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       201,
     );
   } catch (error) {
-    console.error("Failed to publish GX payload", error);
+    console.error("Failed to publish TX payload", error);
     return c.json({ error: "Failed to publish" }, 500);
   }
 }
@@ -260,19 +260,19 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
       201,
     );
   } catch (error) {
-    console.error("Failed to register GX publish", error);
+    console.error("Failed to register TX publish", error);
     return c.json({ error: "Failed to register publish" }, 500);
   }
 }
 
 function validatePublishPayload(value: unknown): PushBundle {
   if (!isRecord(value)) throw new Error("Body must be a JSON object");
-  if (value.event !== "gx.pr") throw new Error("Unsupported event");
+  if (value.event !== "tx.pr") throw new Error("Unsupported event");
   if (typeof value.created_at !== "number" || !Number.isFinite(value.created_at)) {
     throw new Error("created_at is required");
   }
-  if (typeof value.gx_version !== "string" || !value.gx_version.trim()) {
-    throw new Error("gx_version is required");
+  if (typeof value.tx_version !== "string" || !value.tx_version.trim()) {
+    throw new Error("tx_version is required");
   }
   if (!isRecord(value.repo)) throw new Error("repo is required");
   if (typeof value.repo.root_path !== "string" || !value.repo.root_path.trim()) {
@@ -387,7 +387,7 @@ function capturePublishArtifact(
       has_github_pr: bookmark.github_pr_number !== null,
       github_pr_number: bookmark.github_pr_number,
       index_status: input.indexStatus,
-      gx_version: payload.gx_version,
+      tx_version: payload.tx_version,
       source: "artifact",
     },
     input.orgId,
@@ -432,7 +432,7 @@ function parseGithubPrNumber(githubPrUrl: string | null | undefined): number | n
 }
 
 function reviewUrl(bookmarkId: string): string | undefined {
-  const siteUrl = (process.env.GX_SITE_URL || process.env.CONSOLE_SITE_URL || "")
+  const siteUrl = (process.env.TX_SITE_URL || process.env.CONSOLE_SITE_URL || "")
     .trim()
     .replace(/\/+$/, "");
   return siteUrl ? `${siteUrl}/reviews/${bookmarkId}` : undefined;

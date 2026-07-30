@@ -4,10 +4,10 @@
  *
  * Nothing upstream reports added/removed lines. `fileStats` on a capture
  * extract is `{excludedFiles: N}` — a count of files left out of capture, with
- * no line information at all — and a gx.pr artifact carries no equivalent. The
+ * no line information at all — and a tx.pr artifact carries no equivalent. The
  * only place a line count could come from was the model, which was shown a
  * patch excerpt truncated at 3000 characters per revision and asked to fill in
- * "+X/-Y lines". On satoricorp/gx#112 that produced "+95/-0" against a real
+ * "+X/-Y lines". On satoricorp/tx#112 that produced "+95/-0" against a real
  * +137/-0: a precise-looking number with no source behind it.
  *
  * These functions count the full patch instead, before any truncation, so the

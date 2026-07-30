@@ -9,31 +9,31 @@ import {
 } from "../src/telemetry/posthog";
 
 describe("posthog telemetry", () => {
-  const originalKey = process.env.GX_POSTHOG_KEY;
-  const originalHost = process.env.GX_POSTHOG_HOST;
+  const originalKey = process.env.TX_POSTHOG_KEY;
+  const originalHost = process.env.TX_POSTHOG_HOST;
 
   afterEach(() => {
     if (originalKey === undefined) {
-      delete process.env.GX_POSTHOG_KEY;
+      delete process.env.TX_POSTHOG_KEY;
     } else {
-      process.env.GX_POSTHOG_KEY = originalKey;
+      process.env.TX_POSTHOG_KEY = originalKey;
     }
     if (originalHost === undefined) {
-      delete process.env.GX_POSTHOG_HOST;
+      delete process.env.TX_POSTHOG_HOST;
     } else {
-      process.env.GX_POSTHOG_HOST = originalHost;
+      process.env.TX_POSTHOG_HOST = originalHost;
     }
     resetPostHogClientForTests();
   });
 
-  test("posthogFromEnv returns noop when GX_POSTHOG_KEY is unset", () => {
-    delete process.env.GX_POSTHOG_KEY;
+  test("posthogFromEnv returns noop when TX_POSTHOG_KEY is unset", () => {
+    delete process.env.TX_POSTHOG_KEY;
     const client = posthogFromEnv();
     expect(() => client.capture("server.test.noop", { ok: true })).not.toThrow();
   });
 
   test("capture is fire-and-forget and never throws", async () => {
-    delete process.env.GX_POSTHOG_KEY;
+    delete process.env.TX_POSTHOG_KEY;
     resetPostHogClientForTests();
     expect(() => capture("server.test.safe")).not.toThrow();
     await Bun.sleep(10);
@@ -76,9 +76,9 @@ describe("posthog telemetry", () => {
     expect(props.hunk_links_inserted).toBe(2);
   });
 
-  test("posthogFromEnv uses GX_POSTHOG_HOST override", async () => {
-    process.env.GX_POSTHOG_KEY = "phc_env_key";
-    process.env.GX_POSTHOG_HOST = "https://eu.i.posthog.com";
+  test("posthogFromEnv uses TX_POSTHOG_HOST override", async () => {
+    process.env.TX_POSTHOG_KEY = "phc_env_key";
+    process.env.TX_POSTHOG_HOST = "https://eu.i.posthog.com";
 
     const requests: string[] = [];
     const fetchImpl = mock(async (input: RequestInfo | URL) => {

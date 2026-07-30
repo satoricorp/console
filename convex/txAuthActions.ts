@@ -50,7 +50,7 @@ const completeCliAuthArgs = {
   githubAccessToken: v.string(),
   machineId: v.string(),
   machineName: v.string(),
-  gxVersion: v.optional(v.string()),
+  txVersion: v.optional(v.string()),
 };
 
 const CLI_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
@@ -65,10 +65,10 @@ async function capturePostHog(
   properties: Record<string, unknown> = {},
   distinctId = "dev",
 ) {
-  const apiKey = process.env.GX_POSTHOG_KEY?.trim();
+  const apiKey = process.env.TX_POSTHOG_KEY?.trim();
   if (!apiKey) return;
 
-  const host = (process.env.GX_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST)
+  const host = (process.env.TX_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST)
     .trim()
     .replace(/\/+$/, "");
 
@@ -81,7 +81,7 @@ async function capturePostHog(
         event,
         properties: {
           distinct_id: distinctId,
-          source: "gx-convex",
+          source: "tx-convex",
           ...properties,
         },
       }),
@@ -99,7 +99,7 @@ async function completeAuthWithGitHubToken(
     githubAccessToken: string;
     machineId: string;
     machineName: string;
-    gxVersion?: string;
+    txVersion?: string;
     source: "cli";
   },
 ): Promise<CompleteCliAuthResult> {
@@ -123,7 +123,7 @@ async function completeAuthWithGitHubToken(
 
   const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
   const userId = await ctx.runMutation(
-    internal.gxAuth.ensureGithubUser,
+    internal.txAuth.ensureGithubUser,
     {
       githubUserId,
       githubLogin: githubUser.login,
@@ -136,14 +136,14 @@ async function completeAuthWithGitHubToken(
 
   const cliSessionToken = newCliSessionToken();
   const cliSessionExpiresAt = Date.now() + CLI_SESSION_TTL_MS;
-  await ctx.runMutation(internal.gxAuth.createCliSession, {
+  await ctx.runMutation(internal.txAuth.createCliSession, {
     token: cliSessionToken,
     userId,
     githubUserId,
     githubLogin: githubUser.login,
     machineId: args.machineId,
     machineName: args.machineName,
-    gxVersion: args.gxVersion,
+    txVersion: args.txVersion,
     expiresAt: cliSessionExpiresAt,
   });
 
@@ -158,7 +158,7 @@ async function completeAuthWithGitHubToken(
       user_id: userId,
       github_user_id: githubUserId,
       login: githubUser.login,
-      gx_version: args.gxVersion ?? null,
+      tx_version: args.txVersion ?? null,
       machine_name_set: args.machineName.trim() !== "",
       has_github_app_install_url: Boolean(githubAppInstallURL),
     },
@@ -187,7 +187,7 @@ export const verifyCliSession = action({
     token: v.string(),
   },
   handler: async (ctx, args): Promise<VerifyCliSessionResult> => {
-    return ctx.runMutation(internal.gxAuth.verifyCliSession, {
+    return ctx.runMutation(internal.txAuth.verifyCliSession, {
       token: args.token,
     });
   },

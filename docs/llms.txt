@@ -1,24 +1,12 @@
-# GX
+# Totality
 
-> GX is the quality layer for agent-written code: capture coding sessions, link them to the commits they produced, and publish richer review context.
-
-## Core workflow
-
-```bash
-git add <files>
-git commit -m "describe this change"   # a GX hook records the revision
-git status
-git push                               # the pre-push hook captures sessions + publishes
-```
+> Totality records which agent session produced each Git commit and uses that context for AI code review and generated pull request summaries. You work in plain Git.
 
 ## Docs
 
-- [Overview](/docs): Product model — sessions, revisions, review bundles
-- [Get started](/docs/getting-started): Install, auth, gx init, first revision
-- [How it works](/docs/how-it-works): What GX captures, revisions vs commits, plain Git
-- [CLI](/docs/cli): gx init, gx review, gx doctor, and setup commands — with flags and examples
-- [MCP Setup](/docs/mcp): add-mcp connect, Executor integration, the gx_review tool, plain-git save workflow
-- [GitHub PRs](/docs/github): PR Summaries and @gx chat (paid / trial)
-- [Troubleshooting](/docs/troubleshooting): Common errors, environment variables, uninstall
-- [Changelog](/docs/changelog): Breaking changes and notable updates
-- [API](/docs/reference/api): GX Cloud HTTP APIs
+- [How it works](/docs/how-it-works): What Totality captures, how tx review and PR summaries use it, and why that makes review faster.
+- [Getting Started](/docs): Install Totality, initialize a repository, and publish your first reviewed change.
+- [CLI](/docs/cli): CLI Reference with flags, examples, and exit codes.
+- [MCP](/docs/mcp): Connect the Totality MCP server to Claude Code, Cursor, Codex, and other MCP clients.
+- [Pull Requests](/docs/pull-requests): Generated PR summaries in the pull request description, and @tx chat inside PR comments.
+- [Totality changelog: new features, updates, and fixes](/docs/changelog/overview): Changelog for Totality covering new features, product updates, CLI improvements, review workflow changes, and bug fixes.

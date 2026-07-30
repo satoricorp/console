@@ -157,10 +157,10 @@ describeDb("publish artifact upsert", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        event: "gx.pr",
+        event: "tx.pr",
         schema_version: 1,
         created_at: now + 1,
-        gx_version: "test",
+        tx_version: "test",
         repo: {
           root_path: "/tmp/publish-main",
           backend: "jj",
@@ -324,10 +324,10 @@ describeDb("publish artifact upsert", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        event: "gx.pr",
+        event: "tx.pr",
         schema_version: 1,
         created_at: now + 1,
-        gx_version: "test",
+        tx_version: "test",
         repo: {
           root_path: "/tmp/publish-link",
           backend: "jj",

@@ -33,11 +33,11 @@ describeDb("indexing turbopuffer", () => {
     const now = Date.now();
     const [event] = await db<{ id: string }[]>`
       INSERT INTO pr_events (
-        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+        created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
       ) VALUES (
         ${now}, '0.1.0-test', 'abc123',
         ${JSON.stringify({ refRange: "main..HEAD" })}::jsonb,
-        ${orgId}, ${indexingUserId}, '/Users/joe/git/gx'
+        ${orgId}, ${indexingUserId}, '/Users/joe/git/tx'
       )
       RETURNING id
     `;
@@ -46,7 +46,7 @@ describeDb("indexing turbopuffer", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        ${indexingUserId}, 'acme/gx', 'main', ${now}, ${now}, ${orgId}, ${event.id}
+        ${indexingUserId}, 'acme/tx', 'main', ${now}, ${now}, ${orgId}, ${event.id}
       )
       RETURNING id
     `;
@@ -76,7 +76,7 @@ describeDb("indexing turbopuffer", () => {
     const db = getSql();
     const result = await runIncrementalIndex(db, {
       orgId,
-      repoFullName: "acme/gx",
+      repoFullName: "acme/tx",
       reason: "push",
       ref: "refs/heads/main",
       afterSha: "deadbeef",
@@ -113,7 +113,7 @@ describeDb("indexing turbopuffer", () => {
     const db = getSql();
     const result = await runIncrementalIndex(db, {
       orgId,
-      repoFullName: "acme/gx",
+      repoFullName: "acme/tx",
       reason: "push",
       ref: "refs/heads/main",
       afterSha: "cafebabe",

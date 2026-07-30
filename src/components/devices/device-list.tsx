@@ -9,7 +9,7 @@ type CliDevice = {
   id: string;
   machineId: string;
   machineName: string;
-  gxVersion: string | null;
+  txVersion: string | null;
   createdAt: number;
   expiresAt: number | null;
   lastUsedAt: number | null;
@@ -49,7 +49,7 @@ function DeviceRow({ device }: { device: CliDevice }) {
           </span>
         </div>
         <p className="mt-1 truncate text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">
-          {device.gxVersion ? `GX ${device.gxVersion}` : "GX version unknown"} ·{" "}
+          {device.txVersion ? `TX ${device.txVersion}` : "TX version unknown"} ·{" "}
           {device.machineId}
         </p>
       </div>

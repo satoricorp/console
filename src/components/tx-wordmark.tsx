@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type GxWordmarkProps = {
+type TxWordmarkProps = {
   className?: string;
   /** Visual size preset for nav vs hero. */
   size?: "nav" | "hero";
@@ -11,7 +11,7 @@ const sizeClassName = {
   hero: "text-5xl leading-none tracking-tight sm:text-6xl",
 } as const;
 
-export function GxWordmark({ className, size = "nav" }: GxWordmarkProps) {
+export function TxWordmark({ className, size = "nav" }: TxWordmarkProps) {
   return (
     <span
       aria-hidden
@@ -21,7 +21,7 @@ export function GxWordmark({ className, size = "nav" }: GxWordmarkProps) {
         className,
       )}
     >
-      GX
+      TX
     </span>
   );
 }
