@@ -154,7 +154,7 @@ export const connectRepos = action({
 
       if (!orgId) {
         errors.push(
-          `${repo.fullName}: connected, but not indexed yet — install the GX GitHub App on ${repo.owner} so GX Cloud can index it`,
+          `${repo.fullName}: connected, but not indexed yet — install the TX GitHub App on ${repo.owner} so TX Cloud can index it`,
         );
         continue;
       }
@@ -195,7 +195,7 @@ export const connectRepos = action({
 /**
  * Re-indexes a repository on demand.
  *
- * This is where the "not indexed" warnings in `gx review` and PR summaries send
+ * This is where the "not indexed" warnings in `tx review` and PR summaries send
  * people, so it has to be reachable without waiting for the next merge — a
  * repository whose index failed, or that was connected before indexing worked,
  * would otherwise have no way forward but pushing a commit.
@@ -227,7 +227,7 @@ export const reindexRepo = action({
     if (!orgId) {
       return {
         started: false,
-        reason: `Install the GX GitHub App on ${owner} so GX Cloud can index this repository.`,
+        reason: `Install the TX GitHub App on ${owner} so TX Cloud can index this repository.`,
       };
     }
 

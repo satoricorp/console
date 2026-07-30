@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { api } from "../../../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
-import { gxApiRequest } from "@/lib/gx-api-server";
+import { txApiRequest } from "@/lib/tx-api-server";
 
 export async function POST(
   _request: Request,
@@ -13,7 +13,7 @@ export async function POST(
   }
 
   const { bookmarkId } = await context.params;
-  const upstream = await gxApiRequest(
+  const upstream = await txApiRequest(
     viewer.id,
     `/v1/reviews/${encodeURIComponent(bookmarkId)}/unarchive`,
     { method: "POST" },

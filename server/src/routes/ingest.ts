@@ -24,14 +24,14 @@ ingestRoutes.post("/v1/extracts", async (c) => {
 
   const db = getSql();
   const now = Date.now();
-  const gxVersion = body.gxVersion ?? "0.0.0-dev";
+  const txVersion = body.txVersion ?? "0.0.0-dev";
 
   const [event] = await db<{ id: string }[]>`
     INSERT INTO pr_events (
-      created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+      created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
     ) VALUES (
       ${now},
-      ${gxVersion},
+      ${txVersion},
       ${body.headCommit},
       ${db.json({
         refRange: body.refRange,

@@ -76,17 +76,17 @@ function formatAppState(state: {
 }
 
 /**
- * Paywall kill switch — OFF by default, so every signed-in user has full GX
+ * Paywall kill switch — OFF by default, so every signed-in user has full TX
  * Cloud AI access regardless of subscription or trial age.
  *
- * Set `GX_PAYWALL_ENABLED=1` in the Convex dashboard to turn billing back on;
+ * Set `TX_PAYWALL_ENABLED=1` in the Convex dashboard to turn billing back on;
  * that is the only step, which is why the trial/subscription logic below is
  * left fully intact rather than deleted. This is the decisive gate: the server
  * short-circuits on this answer and never reaches its Postgres org-trial
  * fallback for users that exist in Convex (server/src/metering/quota.ts:162-184).
  */
 function paywallEnabled(): boolean {
-  const raw = process.env.GX_PAYWALL_ENABLED?.trim().toLowerCase();
+  const raw = process.env.TX_PAYWALL_ENABLED?.trim().toLowerCase();
   return raw === "1" || raw === "true";
 }
 

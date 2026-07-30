@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "@gx/infra",
+      "name": "@tx/infra",
       "dependencies": {
         "aws-cdk-lib": "^2.259.0",
         "constructs": "^10.4.2",

@@ -27,8 +27,8 @@ export function getNamespace(orgId: string, fullName: string) {
  * The columns this writer sets, typed exactly as the other two writers type
  * them.
  *
- * A TurboPuffer namespace has one schema, and the GX Cloud server
- * (server/src/indexing/turbopuffer.ts) and the gx CLI
+ * A TurboPuffer namespace has one schema, and the TX Cloud server
+ * (server/src/indexing/turbopuffer.ts) and the tx CLI
  * (internal/semantic/transcript_row.go) both push theirs on every upsert into
  * this same namespace. A column declared with a different type here would be
  * rejected, so `start_line` is uint rather than int, the body column is `text`

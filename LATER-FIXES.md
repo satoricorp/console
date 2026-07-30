@@ -6,10 +6,10 @@ says what it would cost to leave alone.
 
 ---
 
-## RESOLVED 2026-07-28 — `handleGxMention` times out locally but is green in CI
+## RESOLVED 2026-07-28 — `handleTxMention` times out locally but is green in CI
 
-**Was:** `handleGxMention integration > retires matching rules on veto pattern`
-(it lives in `server/test/rules.test.ts`, not the `gx-mention.test.ts` this
+**Was:** `handleTxMention integration > retires matching rules on veto pattern`
+(it lives in `server/test/rules.test.ts`, not the `tx-mention.test.ts` this
 entry originally named) failed locally at exactly 5001ms while CI stayed green.
 
 **Root cause:** the exact-5001ms figure was `bun test`'s default per-test

@@ -73,13 +73,13 @@ export function InstallGithubAppStep() {
       <ol className="list-decimal space-y-2 pl-4 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         <li>Click the button below to open GitHub.</li>
         <li>Choose your personal account or an organization.</li>
-        <li>Install the GX app, then come back here and continue.</li>
+        <li>Install the TX app, then come back here and continue.</li>
       </ol>
 
       {installed ? (
         <p className="flex items-center gap-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
           <Check className="h-3.5 w-3.5 shrink-0 text-zinc-950 dark:text-zinc-50" />
-          GX is installed on at least one of your GitHub accounts.
+          TX is installed on at least one of your GitHub accounts.
         </p>
       ) : null}
 
@@ -92,7 +92,7 @@ export function InstallGithubAppStep() {
             className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             <GitHubIcon className="h-3.5 w-3.5" />
-            {installed ? "Manage on GitHub" : "Install GX on GitHub"}
+            {installed ? "Manage on GitHub" : "Install TX on GitHub"}
           </a>
 
           {checked && !installed ? (

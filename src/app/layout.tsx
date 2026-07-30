@@ -29,9 +29,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GX: Simplified Code Review",
+  title: "TX: Simplified Code Review",
   description:
-    "GX is a verification layer for AI-written code. It captures agent sessions, compares changes across multiple models, and uses repo-specific review context. Download for macOS — 1 week free.",
+    "TX is a verification layer for AI-written code. It captures agent sessions, compares changes across multiple models, and uses repo-specific review context. Download for macOS — 1 week free.",
 };
 
 export default function RootLayout({

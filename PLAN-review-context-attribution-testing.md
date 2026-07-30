@@ -4,7 +4,7 @@ Companion to [`PLAN-review-context-attribution.md`](./PLAN-review-context-attrib
 
 **Goal:** Prove (1) no cross-org reads, (2) generators only cite evidence the broker
 actually provided, (3) `REVIEW.md` and the four buckets work behind
-`GX_CONTEXT_BROKER=1`, (4) kill switch restores legacy behavior.
+`TX_CONTEXT_BROKER=1`, (4) kill switch restores legacy behavior.
 
 **Gates:** Phase 0 must be green in staging before enabling the broker in prod.
 PR merge gate = deterministic checks only; ranking-stability eval is nightly.
@@ -71,7 +71,7 @@ Matrix: `{cloud key, gxcs_, GitHub token, no token}` × `{own org, other org, ga
 - `GET /v1/review/context`
 - `POST /v1/summaries/generate` (or whatever summary route)
 - review-plan generate path
-- gx-mention handler path
+- tx-mention handler path
 - `POST /v1/index/chunks`
 
 **Pass criteria:** every “other/garbage” cell is 401/403; own-org member cells 200 (or business 4xx, never other-tenant data); cloud key without org = 401.
@@ -93,7 +93,7 @@ Check in `server/test/security/org-isolation-matrix.test.ts` (new). Paste the ta
 
 | # | Case | Expect | Status |
 |---|---|---|---|
-| B1 | `GX_CONTEXT_BROKER` unset | Empty buckets/manifest | ✓ |
+| B1 | `TX_CONTEXT_BROKER` unset | Empty buckets/manifest | ✓ |
 | B2 | Flag on + seeded kinds | Buckets by `source_kind`; citation ids `A/C/P/D` | ✓ partial |
 | B3 | Per-bucket failure | That bucket `provided: 0`; others OK | **Add** |
 | B4 | Char / top-k caps | Enforced | **Add** |
@@ -145,7 +145,7 @@ Prefer snapshot tests under `server/test/` for `buildPRSummaryUserPrompt` /
 |---|---|---|
 | E1 | Generate summary | Prompt contained broker sections when flag on |
 | E2 | Generate review plan | Same + validate succeeds |
-| E3 | `@gx` mention | Indexed section ≠ `(none)` when snippets present |
+| E3 | `@tx` mention | Indexed section ≠ `(none)` when snippets present |
 | E4 | `GET /v1/review/context` | `indexSnippets` from broker when flag on |
 | E5 | Latency | Summary+plan p95 +≤2s vs baseline with broker; broker overlaps Postgres load |
 
@@ -213,7 +213,7 @@ On PRs touching `llm/prompts/`, `review-plan/`, `summary/`, `context/`:
 |---|---|
 | Dev | Unit + mock provider + fake tpuf |
 | Staging | Red-team matrix + real tpuf; spot-check 5 plans |
-| Prod internal (`GX_CONTEXT_BROKER=1`) | ≥1 week: `AttributionClamped` → ~0, broker p95, 10 hand reviews |
+| Prod internal (`TX_CONTEXT_BROKER=1`) | ≥1 week: `AttributionClamped` → ~0, broker p95, 10 hand reviews |
 | GA | Kill switch verified (unset flag → legacy) |
 
 ---
@@ -229,7 +229,7 @@ Use an org you belong to and a second org you do not.
 5. **Broker on:** Generate plan + summary; attribution bar has no 0% slices; Sources footer matches index counts.  
 6. **Broker off:** Unset flag; regenerate; no crash; indexed sections empty/legacy.  
 7. **Chunks:** `POST /v1/index/chunks` with `code_file` for an installed repo → later broker codebase hits improve. Reject `code_review_summary`.  
-8. **@gx:** Comment on PR with index seeded → reply cites indexed context (not `(none)`).
+8. **@tx:** Comment on PR with index seeded → reply cites indexed context (not `(none)`).
 
 ---
 
@@ -247,6 +247,6 @@ Use an org you belong to and a second org you do not.
 
 ## 8. Out of scope for this plan
 
-- gx CLI repo change (client writing `/v1/index/chunks`) — separate test plan in `~/git/gx`
+- tx CLI repo change (client writing `/v1/index/chunks`) — separate test plan in `~/git/totality`
 - Per-user GitHub repo ACLs within an org
 - Measured attribution as default (until nightly green)

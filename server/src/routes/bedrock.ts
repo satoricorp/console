@@ -24,7 +24,7 @@ import { logTiming, timingNow } from "../timing";
 /**
  * POST /gx/bedrock/fight — the transport the CLI's review fight runs over.
  *
- * GX holds the AWS credentials, so end users never need an AWS account. This is
+ * TX holds the AWS credentials, so end users never need an AWS account. This is
  * a thin passthrough to Bedrock Converse: retrieval, brief construction, the
  * two-reviewer fan-out and the judge all stay in the CLI (internal/codereview).
  * Nothing here knows what a review is — it takes messages, calls one model, and
@@ -41,7 +41,7 @@ import { logTiming, timingNow } from "../timing";
 export const bedrockRoutes = new Hono<AppEnv>();
 
 /**
- * The models this endpoint will spend GX's Bedrock budget on. It is NOT an open
+ * The models this endpoint will spend TX's Bedrock budget on. It is NOT an open
  * Bedrock proxy: any authenticated caller can reach it, so an unconstrained
  * `modelId` would let one hand a review-priced request to whatever the most
  * expensive model in the account happens to be.
@@ -97,18 +97,18 @@ function positiveEnvInt(name: string, fallback: number): number {
 }
 
 export function maxRequestBytes(): number {
-  return positiveEnvInt("GX_CLOUD_BEDROCK_MAX_BODY_BYTES", defaultMaxRequestBytes);
+  return positiveEnvInt("TX_CLOUD_BEDROCK_MAX_BODY_BYTES", defaultMaxRequestBytes);
 }
 
 function requestTimeoutMs(): number {
-  return positiveEnvInt("GX_CLOUD_BEDROCK_TIMEOUT_MS", defaultTimeoutMs);
+  return positiveEnvInt("TX_CLOUD_BEDROCK_TIMEOUT_MS", defaultTimeoutMs);
 }
 
 bedrockRoutes.use("*", requireAuth);
 
 // Cloud AI is a paid feature (with a free-trial window). Same gate as
 // /gx/openai — past-trial free orgs get a clean 402 the CLI turns into an
-// upgrade hint instead of burning tokens on GX's account.
+// upgrade hint instead of burning tokens on TX's account.
 bedrockRoutes.use("*", async (c, next) => {
   const auth = c.get("auth");
   let quota;
@@ -119,7 +119,7 @@ bedrockRoutes.use("*", async (c, next) => {
       return c.json(
         {
           error: "entitlement_unavailable",
-          message: "GX entitlement service is unavailable. Please retry.",
+          message: "TX entitlement service is unavailable. Please retry.",
         },
         503,
       );
@@ -132,7 +132,7 @@ bedrockRoutes.use("*", async (c, next) => {
         error: "payment_required",
         reason: quota.reason ?? "trial_expired",
         message:
-          "GX free trial has ended for this org. Upgrade to keep using GX Cloud AI, or set your own model key with `gx set key`.",
+          "TX free trial has ended for this org. Upgrade to keep using TX Cloud AI, or set your own model key with `tx set key`.",
         upgrade_url: quota.upgradeUrl,
         trial_ends_at: quota.trialEndsAt ?? null,
       },
@@ -390,7 +390,7 @@ export function describeBedrockFailure(
     return {
       status: 502,
       code: "model_access_denied",
-      message: `Bedrock model "${model}" is not enabled for GX's AWS account in ${region}. Request access in the Bedrock console.`,
+      message: `Bedrock model "${model}" is not enabled for TX's AWS account in ${region}. Request access in the Bedrock console.`,
       detail,
     };
   }

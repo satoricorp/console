@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
-import { gxApiRequest } from "@/lib/gx-api-server";
+import { txApiRequest } from "@/lib/tx-api-server";
 
 async function requireViewerId(): Promise<string | null> {
   const viewer = await fetchAuthQuery(api.profile.getViewer, {});
@@ -18,7 +18,7 @@ export async function GET(
   }
 
   const { bookmarkId } = await context.params;
-  const upstream = await gxApiRequest(viewerId, `/v1/reviews/${bookmarkId}`);
+  const upstream = await txApiRequest(viewerId, `/v1/reviews/${bookmarkId}`);
   const body = await upstream.text();
   return new NextResponse(body, {
     status: upstream.status,

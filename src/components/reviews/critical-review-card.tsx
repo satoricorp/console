@@ -139,7 +139,7 @@ export function CriticalReviewSection({
                   className="diff"
                   style={
                     change.anchorConfidence === "exact"
-                      ? { boxShadow: "inset 3px 0 0 var(--gx-accent)" }
+                      ? { boxShadow: "inset 3px 0 0 var(--tx-accent)" }
                       : undefined
                   }
                 >

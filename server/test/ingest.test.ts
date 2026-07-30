@@ -31,7 +31,7 @@ describeDb("ingest routes", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        repoRoot: "/Users/joe/git/gx",
+        repoRoot: "/Users/joe/git/tx",
         refRange: "main..HEAD",
         headCommit: "deadbeef",
         hunkLinks: [

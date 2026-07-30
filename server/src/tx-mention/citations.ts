@@ -1,9 +1,9 @@
 import type { GitBlameContext } from "../github/git-blame";
 import { githubPullFileLineUrl } from "../github/line-links";
-import type { GitHubPrFileContext, RecentComment } from "../llm/prompts/gx-chat";
+import type { GitHubPrFileContext, RecentComment } from "../llm/prompts/tx-chat";
 import type { ExtractContext } from "../summary/generate";
 
-export type GxCitationKind =
+export type TxCitationKind =
   | "published_revision"
   | "hunk_link"
   | "session_event"
@@ -11,9 +11,9 @@ export type GxCitationKind =
   | "github_pr_file"
   | "git_blame";
 
-export type GxCitation = {
+export type TxCitation = {
   id: string;
-  kind: GxCitationKind;
+  kind: TxCitationKind;
   label: string;
   text: string;
   file?: string;
@@ -22,23 +22,23 @@ export type GxCitation = {
   url?: string;
 };
 
-export type GxCitationContext = {
-  citations: GxCitation[];
+export type TxCitationContext = {
+  citations: TxCitation[];
   promptText: string;
 };
 
-export function buildGxCitationContext(input: {
+export function buildTxCitationContext(input: {
   latestSummary: string | null;
   context: ExtractContext | null;
   githubPrFiles: GitHubPrFileContext[];
   gitBlameContext: GitBlameContext | null;
   recentComments: RecentComment[];
-}): GxCitationContext {
+}): TxCitationContext {
   void input.latestSummary;
   void input.recentComments;
 
-  const citations: GxCitation[] = [];
-  const push = (citation: Omit<GxCitation, "id">) => {
+  const citations: TxCitation[] = [];
+  const push = (citation: Omit<TxCitation, "id">) => {
     citations.push({ ...citation, id: `S${citations.length + 1}` });
   };
 
@@ -144,7 +144,7 @@ export function buildGxCitationContext(input: {
   };
 }
 
-export function parseGxChatModelReply(text: string): { answer: string; citations: string[] } | null {
+export function parseTxChatModelReply(text: string): { answer: string; citations: string[] } | null {
   try {
     const decoded = JSON.parse(text) as unknown;
     if (!isRecord(decoded) || typeof decoded.answer !== "string") {
@@ -165,7 +165,7 @@ export function inlineCitationIds(text: string): string[] {
   return [...text.matchAll(/\[(S\d+)\]/g)].map((match) => match[1]);
 }
 
-export function validCitationIds(ids: string[], citations: GxCitation[]): string[] {
+export function validCitationIds(ids: string[], citations: TxCitation[]): string[] {
   const available = new Set(citations.map((citation) => citation.id));
   const seen = new Set<string>();
   const out: string[] = [];
@@ -179,12 +179,12 @@ export function validCitationIds(ids: string[], citations: GxCitation[]): string
   return out;
 }
 
-export function formatGxCitedReply(answer: string, citationIds: string[], citations: GxCitation[]): string {
+export function formatTxCitedReply(answer: string, citationIds: string[], citations: TxCitation[]): string {
   const valid = validCitationIds(citationIds, citations);
   const validSet = new Set(valid);
   let cleanAnswer = answer.replace(/\s*\[(S\d+)\]/g, (full, id: string) => validSet.has(id) ? full : "");
   cleanAnswer = cleanAnswer.replace(/\s+/g, " ").trim();
-  const prefixed = /^gx:/i.test(cleanAnswer) ? cleanAnswer : `GX: ${cleanAnswer}`;
+  const prefixed = /^tx:/i.test(cleanAnswer) ? cleanAnswer : `TX: ${cleanAnswer}`;
   if (valid.length === 0) {
     return prefixed;
   }
@@ -198,7 +198,7 @@ export function formatGxCitedReply(answer: string, citationIds: string[], citati
   return `${prefixed}\n\nSources: ${sourceText}`;
 }
 
-function formatCitationPrompt(citations: GxCitation[]): string {
+function formatCitationPrompt(citations: TxCitation[]): string {
   if (citations.length === 0) {
     return "Available sources:\n(none)";
   }
@@ -215,7 +215,7 @@ function formatCitationPrompt(citations: GxCitation[]): string {
   return lines.join("\n");
 }
 
-function idDescription(citation: GxCitation): string {
+function idDescription(citation: TxCitation): string {
   const target = citation.file ? formatFileTarget(citation) : "evidence";
   switch (citation.kind) {
     case "published_revision":
@@ -233,7 +233,7 @@ function idDescription(citation: GxCitation): string {
   }
 }
 
-function formatFileTarget(citation: GxCitation): string {
+function formatFileTarget(citation: TxCitation): string {
   const range =
     typeof citation.lineStart === "number" && typeof citation.lineEnd === "number"
       ? `:${citation.lineStart}-${citation.lineEnd}`

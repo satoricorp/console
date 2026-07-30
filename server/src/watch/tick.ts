@@ -8,7 +8,7 @@ import { isPublicRepo, listOpenPulls } from "./github";
  * One poll tick for the OSS "watch" rail. Convex's cron calls the server route
  * that invokes this with the operator's enabled watchlist. For each repo we look
  * at open PRs and, for any whose head SHA we haven't already summarized, generate
- * a sessionless summary and post it as the GX bot user — editing the existing
+ * a sessionless summary and post it as the TX bot user — editing the existing
  * comment in place if the PR was updated since we last posted.
  *
  * Everything is best-effort and per-PR isolated: one repo or PR failing must not
@@ -35,9 +35,9 @@ type WatchPostRow = {
 };
 
 export function watchBotToken(): string {
-  const token = process.env.GX_WATCH_GITHUB_TOKEN?.trim();
+  const token = process.env.TX_WATCH_GITHUB_TOKEN?.trim();
   if (!token) {
-    throw new Error("GX_WATCH_GITHUB_TOKEN is not set");
+    throw new Error("TX_WATCH_GITHUB_TOKEN is not set");
   }
   return token;
 }

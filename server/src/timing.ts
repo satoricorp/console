@@ -14,7 +14,7 @@ export function logTiming(
   if (!debugTimingEnabled()) {
     return;
   }
-  console.info("[gx timing]", {
+  console.info("[tx timing]", {
     scope: "api",
     action,
     elapsedMs: Math.round((timingNow() - startedAt) * 100) / 100,

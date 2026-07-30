@@ -6,8 +6,8 @@ import { LOGO_VARIANTS } from "./constants";
 const { widthRem, heightRem } = LOGO_VARIANTS.header;
 const { widthRem: heroWidthRem, heightRem: heroHeightRem } = LOGO_VARIANTS.hero;
 
-export const GxLogo = dynamic(
-  () => import("./gx-logo").then((mod) => mod.GxLogo),
+export const TxLogo = dynamic(
+  () => import("./tx-logo").then((mod) => mod.TxLogo),
   {
     ssr: false,
     loading: () => (
@@ -20,9 +20,9 @@ export const GxLogo = dynamic(
   },
 );
 
-/** Hero GX blender / 3D chrome transition — preserved for reuse. */
-export const GxBlenderHero = dynamic(
-  () => import("./gx-blender-hero").then((mod) => mod.GxBlenderHero),
+/** Hero TX blender / 3D chrome transition — preserved for reuse. */
+export const TxBlenderHero = dynamic(
+  () => import("./tx-blender-hero").then((mod) => mod.TxBlenderHero),
   {
     ssr: false,
     loading: () => (

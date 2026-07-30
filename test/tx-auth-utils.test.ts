@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { betterAuthUserIdFromCreateResult } from "../convex/gxAuthUtils";
+import { betterAuthUserIdFromCreateResult } from "../convex/txAuthUtils";
 
 describe("betterAuthUserIdFromCreateResult", () => {
   test("uses the Convex document id returned by the Better Auth adapter", () => {

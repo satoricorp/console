@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** Xer0 "gx" rendered smaller than the surrounding phrase. */
-const GX_SCALE = 0.76;
+/** Xer0 "tx" rendered smaller than the surrounding phrase. */
+const TX_SCALE = 0.76;
 /**
- * Bottom-align visible gx ink with the suffix word's letter bottoms.
+ * Bottom-align visible tx ink with the suffix word's letter bottoms.
  * Positive = down. Viewport max-ink sample vs suffix: 0.04em → delta 0.
  */
-const GX_BOTTOM_NUDGE = "0.04em";
+const TX_BOTTOM_NUDGE = "0.04em";
 /** Extra gap so Xer0 sidebearings don't crowd "init". */
-const GX_GAP_COMPENSATION = "0.04em";
+const TX_GAP_COMPENSATION = "0.04em";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -46,23 +46,23 @@ type Phase = {
  * Scroll story:
  * 1. Fade in "git init"
  * 2. Fade in description A (git)
- * 3. Crossfade morph → "gx init" + description B
+ * 3. Crossfade morph → "tx init" + description B
  * 4. Rise + hold
  */
 function progressToPhase(progress: number): Phase {
   return {
     enter: remap(progress, 0, 0.08),
     copy: remap(progress, 0.14, 0.28),
-    // Shared crossfade for git↔gx and description A↔B
+    // Shared crossfade for git↔tx and description A↔B
     morph: remap(progress, 0.38, 0.52),
     rise: remap(progress, 0.58, 0.72),
   };
 }
 
-export function GitToGxSection() {
+export function GitToTxSection() {
   const trackRef = useRef<HTMLElement>(null);
   const gitMeasureRef = useRef<HTMLSpanElement>(null);
-  const gxMeasureRef = useRef<HTMLSpanElement>(null);
+  const txMeasureRef = useRef<HTMLSpanElement>(null);
   const [phase, setPhase] = useState<Phase>({
     enter: 0,
     copy: 0,
@@ -71,7 +71,7 @@ export function GitToGxSection() {
   });
   const [reducedMotion, setReducedMotion] = useState(false);
   const [gitWidth, setGitWidth] = useState<number | null>(null);
-  const [gxWidth, setGxWidth] = useState<number | null>(null);
+  const [txWidth, setTxWidth] = useState<number | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -124,20 +124,20 @@ export function GitToGxSection() {
   // Measure both prefixes so the slot can lerp and the phrase recenters.
   useEffect(() => {
     const gitEl = gitMeasureRef.current;
-    const gxEl = gxMeasureRef.current;
-    if (!gitEl || !gxEl) return;
+    const txEl = txMeasureRef.current;
+    if (!gitEl || !txEl) return;
 
     const sync = () => {
       const git = gitEl.getBoundingClientRect().width;
-      const gx = gxEl.getBoundingClientRect().width;
+      const tx = txEl.getBoundingClientRect().width;
       if (git > 0) setGitWidth(git);
-      if (gx > 0) setGxWidth(gx);
+      if (tx > 0) setTxWidth(tx);
     };
 
     sync();
     const ro = new ResizeObserver(sync);
     ro.observe(gitEl);
-    ro.observe(gxEl);
+    ro.observe(txEl);
     void document.fonts.ready.then(sync);
 
     return () => ro.disconnect();
@@ -147,24 +147,24 @@ export function GitToGxSection() {
   const riseY = -phase.rise * 2;
   const headlineOpacity = reducedMotion ? 1 : phase.enter;
   const gitOpacity = reducedMotion ? 0 : 1 - phase.morph;
-  const gxOpacity = reducedMotion ? 1 : phase.morph;
-  // Desc A with git; crossfade to desc B with gx on the same morph curve
+  const txOpacity = reducedMotion ? 1 : phase.morph;
+  // Desc A with git; crossfade to desc B with tx on the same morph curve
   const descGitOpacity = reducedMotion
     ? 0
     : phase.copy * (1 - phase.morph);
-  const descGxOpacity = reducedMotion ? 1 : phase.copy * phase.morph;
+  const descTxOpacity = reducedMotion ? 1 : phase.copy * phase.morph;
 
-  // Lerp prefix width git → gx so the centered phrase recenters for both states.
+  // Lerp prefix width git → tx so the centered phrase recenters for both states.
   const prefixWidth =
-    gitWidth != null && gxWidth != null
-      ? lerp(gitWidth, gxWidth, reducedMotion ? 1 : phase.morph)
+    gitWidth != null && txWidth != null
+      ? lerp(gitWidth, txWidth, reducedMotion ? 1 : phase.morph)
       : gitWidth;
 
   return (
     <section
       ref={trackRef}
-      id="git-to-gx"
-      aria-label="From git init to gx init"
+      id="git-to-tx"
+      aria-label="From git init to tx init"
       className={cn(
         "relative",
         reducedMotion ? "min-h-[70vh]" : "h-[640vh]",
@@ -212,11 +212,11 @@ export function GitToGxSection() {
                       git
                     </span>
                     <span
-                      ref={gxMeasureRef}
+                      ref={txMeasureRef}
                       className="inline-block font-[family-name:var(--font-xer0)] leading-none"
-                      style={{ fontSize: `${GX_SCALE}em` }}
+                      style={{ fontSize: `${TX_SCALE}em` }}
                     >
-                      gx
+                      tx
                     </span>
                   </span>
 
@@ -254,23 +254,23 @@ export function GitToGxSection() {
                       git
                     </span>
                     <span
-                      data-align="gx"
+                      data-align="tx"
                       className="absolute right-0 bottom-0 font-[family-name:var(--font-xer0)] leading-none"
                       style={{
-                        fontSize: `${GX_SCALE}em`,
-                        marginRight: GX_GAP_COMPENSATION,
-                        opacity: gxOpacity,
+                        fontSize: `${TX_SCALE}em`,
+                        marginRight: TX_GAP_COMPENSATION,
+                        opacity: txOpacity,
                         filter:
                           reducedMotion || phase.morph === 1
                             ? undefined
                             : `blur(${(1 - phase.morph) * 6}px)`,
                         // Bottom edge locked to the suffix's line box bottom.
                         transform: reducedMotion
-                          ? `translateY(${GX_BOTTOM_NUDGE})`
-                          : `translateY(calc(${GX_BOTTOM_NUDGE} + ${(1 - phase.morph) * 8}px))`,
+                          ? `translateY(${TX_BOTTOM_NUDGE})`
+                          : `translateY(calc(${TX_BOTTOM_NUDGE} + ${(1 - phase.morph) * 8}px))`,
                       }}
                     >
-                      gx
+                      tx
                     </span>
                   </span>
                 </span>
@@ -282,7 +282,7 @@ export function GitToGxSection() {
                   init
                 </span>
                 <span className="sr-only">
-                  {phase.morph > 0.5 ? "gx init" : "git init"}
+                  {phase.morph > 0.5 ? "tx init" : "git init"}
                 </span>
               </span>
             </p>
@@ -309,11 +309,11 @@ export function GitToGxSection() {
             </p>
             <p
               className="absolute inset-x-0 top-0 text-center text-sm leading-6 text-zinc-600 will-change-opacity dark:text-zinc-400 sm:text-base"
-              style={{ opacity: descGxOpacity }}
-              aria-hidden={descGxOpacity < 0.5}
+              style={{ opacity: descTxOpacity }}
+              aria-hidden={descTxOpacity < 0.5}
             >
               <span className="font-medium text-[var(--footer-link-hover)]">
-                gx init
+                tx init
               </span>{" "}
               fixes this. Run it once per repository and Git hooks join your
               session and model data with every plain git commit and git push.
