@@ -1,4 +1,4 @@
-ALTER TABLE gx_bookmarks
+ALTER TABLE bookmarks
   ADD COLUMN IF NOT EXISTS github_mergeable BOOLEAN,
   ADD COLUMN IF NOT EXISTS github_mergeable_state TEXT,
   ADD COLUMN IF NOT EXISTS github_pr_state TEXT,

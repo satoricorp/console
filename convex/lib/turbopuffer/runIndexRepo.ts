@@ -187,7 +187,7 @@ export async function runIndexRepo(
     // One request for this batch's files instead of one per file. The blob
     // endpoint cost a request each against an installation's 5000 per hour, so
     // a 422-file repository spent 422 of them on a single index — and that
-    // budget is shared, so exhausting it took PR summaries and @tx replies down
+    // budget is shared, so exhausting it took PR summaries and @gx replies down
     // with it for the rest of the hour.
     const { contents } = await fetchGithubTarball(
       fullName,

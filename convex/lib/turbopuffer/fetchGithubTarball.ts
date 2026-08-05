@@ -12,7 +12,7 @@ import { parseFullName } from "./utils";
  * The blob endpoint costs a request per file against an installation's 5000
  * requests per hour. A 422-file repository spent 422 of them on a single index
  * — and the budget is shared, so exhausting it does not merely slow indexing,
- * it takes PR summaries and @tx replies down with it for the rest of the hour.
+ * it takes PR summaries and @gx replies down with it for the rest of the hour.
  * The tarball is one request for the whole repository.
  *
  * Nothing is buffered whole. The response is gunzipped as it arrives and

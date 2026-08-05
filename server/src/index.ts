@@ -11,7 +11,7 @@ serve(
     port,
   },
   (info) => {
-    console.log(`tx-server listening on :${info.port}`);
+    console.log(`gx-server listening on :${info.port}`);
 
     // Fire and forget: Convex cannot name an index namespace without this
     // mapping, and on a fresh deploy it has none. Failing the sync must not

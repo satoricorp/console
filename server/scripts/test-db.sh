@@ -25,7 +25,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 server_dir="$(cd -- "$script_dir/.." && pwd)"
 
-db_name="${TX_TEST_DB_NAME:-tx_console_test}"
+db_name="${GX_TEST_DB_NAME:-gx_console_test}"
 db_host="${PGHOST:-localhost}"
 db_port="${PGPORT:-5432}"
 db_user="${PGUSER:-$(whoami)}"
@@ -43,7 +43,7 @@ fi
 # would apply the pending 028_drop_porcelain_tables.sql and DROP four populated
 # tables on the first runMigrations() call.
 case "$db_name" in
-  api | postgres | template0 | template1 | tx | tx_cloud | gmail)
+  api | postgres | template0 | template1 | gx | gx_cloud | gmail)
     echo "refusing to use '$db_name': that is a real database, not a scratch one" >&2
     exit 1
     ;;

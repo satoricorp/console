@@ -4,8 +4,8 @@ import { describe, expect, mock, test } from "bun:test";
  * The stale sweep is the one write in the indexer that can destroy data it did
  * not create.
  *
- * `gx-{orgId}-{repo}-v2` is shared: the TX Cloud server writes `push_delta` and
- * `hunk_link` rows into it on every push, and the tx CLI writes session
+ * `gx-{orgId}-{repo}-v2` is shared: the gx Cloud server writes `push_delta` and
+ * `hunk_link` rows into it on every push, and the gx CLI writes session
  * transcripts and review policy. None of those carry the commit id of an index
  * run. The sweep used to delete on `commit_id NotEq` alone, which was correct
  * only while the namespace was private to this indexer — pointed at the shared

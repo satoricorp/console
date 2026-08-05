@@ -29,7 +29,7 @@ function markDeprecated(c: Context<AppEnv>, canonicalPath: string) {
     {
       route: c.req.path,
       canonical: canonicalPath,
-      // The tx CLI sends "tx/<version>"; this is how we tell whether any
+      // The gx CLI sends "gx/<version>"; this is how we tell whether any
       // installed binary still depends on the legacy path.
       user_agent: c.req.header("user-agent") ?? null,
       user_id: auth?.userId ?? null,

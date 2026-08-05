@@ -13,17 +13,17 @@ import { describe } from "bun:test";
  *     a workflow to go green without the database paths having run.
  *   - Locally, the skip is announced once, loudly, with the command to fix it.
  *
- * Escape hatch for a deliberate no-database run: TX_TEST_ALLOW_NO_DB=1.
+ * Escape hatch for a deliberate no-database run: GX_TEST_ALLOW_NO_DB=1.
  */
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
 const RUN_HINT = "bun run test:db  (server/scripts/test-db.sh — provisions a scratch Postgres)";
 
 if (!hasDatabase) {
-  if (process.env.CI && process.env.TX_TEST_ALLOW_NO_DB !== "1") {
+  if (process.env.CI && process.env.GX_TEST_ALLOW_NO_DB !== "1") {
     throw new Error(
       `DATABASE_URL is not set. The database-backed tests cannot silently skip in CI.\n` +
-        `Provide a Postgres service, or set TX_TEST_ALLOW_NO_DB=1 to acknowledge the gap.\n` +
+        `Provide a Postgres service, or set GX_TEST_ALLOW_NO_DB=1 to acknowledge the gap.\n` +
         `Locally: ${RUN_HINT}`,
     );
   }

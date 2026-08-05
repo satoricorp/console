@@ -3,10 +3,10 @@ import { createLLMProvider, createMockProvider, createReviewProviders } from "..
 
 const originalFetch = globalThis.fetch;
 const originalEnv = {
-  TX_OPENAI_API_KEY: process.env.TX_OPENAI_API_KEY,
-  TX_OPENAI_BASE_URL: process.env.TX_OPENAI_BASE_URL,
-  TX_REVIEW_OPENAI_MODEL: process.env.TX_REVIEW_OPENAI_MODEL,
-  TX_REVIEW_MODELS: process.env.TX_REVIEW_MODELS,
+  GX_OPENAI_API_KEY: process.env.GX_OPENAI_API_KEY,
+  GX_OPENAI_BASE_URL: process.env.GX_OPENAI_BASE_URL,
+  GX_REVIEW_OPENAI_MODEL: process.env.GX_REVIEW_OPENAI_MODEL,
+  GX_REVIEW_MODELS: process.env.GX_REVIEW_MODELS,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
@@ -33,9 +33,9 @@ describe("createLLMProvider", () => {
     let requestedURL = "";
     let requestedBody: Record<string, unknown> = {};
 
-    process.env.TX_OPENAI_API_KEY = "test-key";
-    process.env.TX_OPENAI_BASE_URL = "https://api.openai.test";
-    process.env.TX_REVIEW_OPENAI_MODEL = "test-model";
+    process.env.GX_OPENAI_API_KEY = "test-key";
+    process.env.GX_OPENAI_BASE_URL = "https://api.openai.test";
+    process.env.GX_REVIEW_OPENAI_MODEL = "test-model";
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
@@ -67,7 +67,7 @@ describe("createLLMProvider", () => {
   });
 
   test("prefers Bedrock over plain OPENAI_API_KEY when AWS is configured", () => {
-    delete process.env.TX_OPENAI_API_KEY;
+    delete process.env.GX_OPENAI_API_KEY;
     process.env.OPENAI_API_KEY = "embedding-key";
     process.env.AWS_REGION = "us-east-1";
 
@@ -79,9 +79,9 @@ describe("createLLMProvider", () => {
 
 describe("createReviewProviders", () => {
   test("orders OpenAI before Anthropic when both are configured", () => {
-    process.env.TX_OPENAI_API_KEY = "test-openai-key";
+    process.env.GX_OPENAI_API_KEY = "test-openai-key";
     process.env.AWS_REGION = "us-east-1";
-    delete process.env.TX_REVIEW_MODELS;
+    delete process.env.GX_REVIEW_MODELS;
 
     const providers = createReviewProviders();
 
@@ -90,10 +90,10 @@ describe("createReviewProviders", () => {
 });
 
 describe("createMockProvider", () => {
-  test("returns structured cited JSON for tx mention prompts with available sources", async () => {
+  test("returns structured cited JSON for gx mention prompts with available sources", async () => {
     const provider = createMockProvider();
     const result = await provider.complete(
-      "You are TX in a GitHub pull request comment thread.",
+      "You are gx in a GitHub pull request comment thread.",
       "Available sources:\n[S1] published_revision: docs/documentation touched README.md",
     );
 
@@ -103,10 +103,10 @@ describe("createMockProvider", () => {
     });
   });
 
-  test("returns structured no-source JSON for tx mention prompts without sources", async () => {
+  test("returns structured no-source JSON for gx mention prompts without sources", async () => {
     const provider = createMockProvider();
     const result = await provider.complete(
-      "You are TX in a GitHub pull request comment thread.",
+      "You are gx in a GitHub pull request comment thread.",
       "Available sources:\n(none)",
     );
 

@@ -6,7 +6,7 @@ const turboPufferBaseURL = "https://gcp-us-central1.turbopuffer.com";
  *
  * 512 was a Matryoshka truncation of text-embedding-3-small requested at embed
  * time via the API's `dimensions` parameter. Both the model and the width were
- * chosen by measurement: the tx repository was indexed four ways (3883 chunks
+ * chosen by measurement: the gx repository was indexed four ways (3883 chunks
  * each) and scored against a 16-query ground-truth set.
  *
  *   config                  vector r@10  vector MRR  hybrid r@25
@@ -22,7 +22,7 @@ const turboPufferBaseURL = "https://gcp-us-central1.turbopuffer.com";
  * low tens of milliseconds.
  *
  * These values must stay in lockstep with internal/semantic/config.go in the
- * tx CLI: both write into the same namespaces, and TurboPuffer rejects a
+ * gx CLI: both write into the same namespaces, and TurboPuffer rejects a
  * vector whose width differs from the namespace's.
  */
 export const openAIEmbeddingModel = "text-embedding-3-small";
@@ -33,7 +33,7 @@ export const embeddingDimensions = 1536;
  * width). It is part of the namespace name because TurboPuffer fixes vector
  * dimensions and full-text settings per namespace: a schema change has to land
  * in a fresh namespace rather than be rejected by, or silently corrupt, an
- * existing one. Keep in sync with semantic.IndexSchemaVersion in the tx CLI.
+ * existing one. Keep in sync with semantic.IndexSchemaVersion in the gx CLI.
  */
 export const indexSchemaVersion = 2;
 
@@ -51,7 +51,7 @@ export function indexingConfig(): IndexingConfig | null {
     return null;
   }
   const openAIBaseURL = (
-    process.env.TX_OPENAI_BASE_URL?.trim() || defaultOpenAIBaseURL
+    process.env.GX_OPENAI_BASE_URL?.trim() || defaultOpenAIBaseURL
   ).replace(/\/+$/, "");
   return {
     openAIAPIKey,
@@ -64,7 +64,7 @@ export function indexingConfig(): IndexingConfig | null {
 }
 
 /**
- * Namespace for one org's copy of one repository. The tx CLI computes the same
+ * Namespace for one org's copy of one repository. The gx CLI computes the same
  * name (semantic.NamespaceForRepo), so CLI-indexed code and server-indexed
  * diffs land in one searchable namespace instead of two half-empty ones.
  */
@@ -80,7 +80,7 @@ function namespaceSlug(value: string): string {
 }
 
 export function reviewKnowledgeNamespace(): string {
-  return process.env.TX_REVIEW_KNOWLEDGE_NAMESPACE?.trim() || "gx-review-knowledge";
+  return process.env.GX_REVIEW_KNOWLEDGE_NAMESPACE?.trim() || "gx-review-knowledge";
 }
 
 export type EmbeddingProfile = { model: string; dimensions: number };
@@ -112,6 +112,6 @@ export function embeddingProfileForNamespace(namespace?: string): EmbeddingProfi
 }
 
 export function contextBrokerEnabled(): boolean {
-  const flag = process.env.TX_CONTEXT_BROKER?.trim();
+  const flag = process.env.GX_CONTEXT_BROKER?.trim();
   return flag === "1" || flag === "true";
 }

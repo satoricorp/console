@@ -12,7 +12,7 @@ async function completeCliAuth(ctx: ActionCtx, request: Request) {
     github_access_token?: string;
     machine_id?: string;
     machine_name?: string;
-    tx_version?: string;
+    gx_version?: string;
   };
 
   try {
@@ -26,11 +26,11 @@ async function completeCliAuth(ctx: ActionCtx, request: Request) {
   }
 
   try {
-    const result = await ctx.runAction(api.txAuthActions.completeCliAuth, {
+    const result = await ctx.runAction(api.gxAuthActions.completeCliAuth, {
       githubAccessToken: body.github_access_token,
       machineId: body.machine_id,
       machineName: body.machine_name,
-      txVersion: body.tx_version,
+      gxVersion: body.gx_version,
     });
     return Response.json(result);
   } catch (error) {
@@ -55,7 +55,7 @@ async function verifyCliAuth(ctx: ActionCtx, request: Request) {
   }
 
   try {
-    const result = await ctx.runAction(api.txAuthActions.verifyCliSession, {
+    const result = await ctx.runAction(api.gxAuthActions.verifyCliSession, {
       token: body.token,
     });
     if (!result) {
@@ -105,7 +105,7 @@ http.route({
   }),
 });
 
-// Bulk installation -> org upsert, called by the TX Cloud server.
+// Bulk installation -> org upsert, called by the gx Cloud server.
 //
 // Deliveries keep the mapping current but cannot start it: on a fresh deploy
 // the table is empty and nothing fills it until each installation emits an
@@ -116,7 +116,7 @@ http.route({
   path: "/cx/orgs/installations",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const expected = process.env.TX_CLOUD_API_KEY?.trim();
+    const expected = process.env.GX_CLOUD_API_KEY?.trim();
     const authHeader = request.headers.get("Authorization") ?? "";
     const token = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()
@@ -173,9 +173,9 @@ http.route({
     }
 
     const payload = await request.text();
-    // Set by the TX Cloud server when it forwards a delivery: Postgres owns
+    // Set by the gx Cloud server when it forwards a delivery: Postgres owns
     // installation -> org, and re-deriving it here would let the two disagree.
-    const orgId = request.headers.get("x-tx-org-id")?.trim() || undefined;
+    const orgId = request.headers.get("x-gx-org-id")?.trim() || undefined;
 
     try {
       await ctx.runAction(internal.indexingActions.handleGithubWebhook, {
@@ -209,7 +209,7 @@ http.route({
   path: "/cx/trial/entitlement",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const expected = process.env.TX_CLOUD_API_KEY?.trim();
+    const expected = process.env.GX_CLOUD_API_KEY?.trim();
     const authHeader = request.headers.get("Authorization") ?? "";
     const token = authHeader.startsWith("Bearer ")
       ? authHeader.slice("Bearer ".length).trim()

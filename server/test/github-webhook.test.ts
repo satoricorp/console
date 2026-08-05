@@ -8,7 +8,7 @@ import { describeDb } from "./db-gate";
 
 const WEBHOOK_SECRET = "test-webhook-secret";
 const INSTALLATION_ID = 424242;
-const REPO_FULL_NAME = "acme/tx";
+const REPO_FULL_NAME = "acme/gx";
 const PR_NUMBER = 17;
 
 function signPayload(payload: string, secret = WEBHOOK_SECRET): string {
@@ -40,7 +40,7 @@ describeDb("GitHub webhook", () => {
   const originalFetch = globalThis.fetch;
   let convexWebhookStatus = 200;
   const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
-  const originalCloudApiKey = process.env.TX_CLOUD_API_KEY;
+  const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
   let trialEntitlement: {
     status: number;
@@ -66,7 +66,7 @@ describeDb("GitHub webhook", () => {
     process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
     delete process.env.OPENAI_API_KEY;
     process.env.CONVEX_SITE_URL = "https://convex.test";
-    process.env.TX_CLOUD_API_KEY = "test-cloud-api-key";
+    process.env.GX_CLOUD_API_KEY = "test-cloud-api-key";
 
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     process.env.GITHUB_APP_ID = "12345";
@@ -114,7 +114,7 @@ describeDb("GitHub webhook", () => {
       }
 
       // handleTxMention gates rule vetoes on the commenter having write access
-      // (src/tx-mention/handler.ts authorCanVetoRules). Unmocked this fell to
+      // (src/gx-mention/handler.ts authorCanVetoRules). Unmocked this fell to
       // the 404 default, so the veto was silently denied and no rule retired.
       if (url.match(/\/collaborators\/[^/]+\/permission$/)) {
         return new Response(JSON.stringify({ permission: "write" }), {
@@ -142,21 +142,21 @@ describeDb("GitHub webhook", () => {
 
       if (url.includes("/issues/") && url.includes("/comments")) {
         return new Response(
-          JSON.stringify({ id: 9001, html_url: "https://github.com/acme/tx/pull/17#issuecomment-9001" }),
+          JSON.stringify({ id: 9001, html_url: "https://github.com/acme/gx/pull/17#issuecomment-9001" }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         );
       }
 
       if (url.includes("/pulls/comments/") && url.endsWith("/replies")) {
         return new Response(
-          JSON.stringify({ id: 9002, html_url: "https://github.com/acme/tx/pull/17#discussion_r9002" }),
+          JSON.stringify({ id: 9002, html_url: "https://github.com/acme/gx/pull/17#discussion_r9002" }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         );
       }
 
       if (url.match(/\/pulls\/\d+\/comments\/\d+\/replies$/)) {
         return new Response(
-          JSON.stringify({ id: 9002, html_url: "https://github.com/acme/tx/pull/17#discussion_r9002" }),
+          JSON.stringify({ id: 9002, html_url: "https://github.com/acme/gx/pull/17#discussion_r9002" }),
           { status: 201, headers: { "Content-Type": "application/json" } },
         );
       }
@@ -197,7 +197,7 @@ describeDb("GitHub webhook", () => {
         github_repo_id, installation_id, full_name, owner_login, name,
         access_state, updated_at_ms, added_at_ms
       ) VALUES (
-        999001, ${INSTALLATION_ID}, ${REPO_FULL_NAME}, 'acme', 'tx',
+        999001, ${INSTALLATION_ID}, ${REPO_FULL_NAME}, 'acme', 'gx',
         'installed', ${now}, ${now}
       )
       ON CONFLICT (github_repo_id) DO NOTHING
@@ -205,7 +205,7 @@ describeDb("GitHub webhook", () => {
 
     const [event] = await db<{ id: string }[]>`
       INSERT INTO pr_events (
-        created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
       ) VALUES (
         ${now},
         '0.1.0-test',
@@ -216,7 +216,7 @@ describeDb("GitHub webhook", () => {
         })}::jsonb,
         ${orgId},
         'webhook-test-user',
-        '/Users/joe/git/tx'
+        '/Users/joe/git/gx'
       )
       RETURNING id
     `;
@@ -231,7 +231,7 @@ describeDb("GitHub webhook", () => {
         ${REPO_FULL_NAME},
         'feat/webhook',
         ${PR_NUMBER},
-        'https://github.com/acme/tx/pull/17',
+        'https://github.com/acme/gx/pull/17',
         ${now},
         ${now},
         ${orgId},
@@ -305,9 +305,9 @@ describeDb("GitHub webhook", () => {
       process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
     }
     if (originalCloudApiKey === undefined) {
-      delete process.env.TX_CLOUD_API_KEY;
+      delete process.env.GX_CLOUD_API_KEY;
     } else {
-      process.env.TX_CLOUD_API_KEY = originalCloudApiKey;
+      process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
     }
   });
 
@@ -330,7 +330,7 @@ describeDb("GitHub webhook", () => {
         {
           id: 999001,
           full_name: REPO_FULL_NAME,
-          name: "tx",
+          name: "gx",
           private: true,
           default_branch: "main",
           owner: { login: "acme" },
@@ -387,7 +387,7 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
@@ -411,14 +411,14 @@ describeDb("GitHub webhook", () => {
     expect(
       fetchCalls.some(
         (c) =>
-          c.url.match(/\/repos\/acme\/tx\/pulls\/17$/) &&
+          c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) &&
           (c.init?.method ?? "GET") === "GET",
       ),
     ).toBe(true);
     expect(
       fetchCalls.some(
         (c) =>
-          c.url.match(/\/repos\/acme\/tx\/pulls\/17$/) && c.init?.method === "PATCH",
+          c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) && c.init?.method === "PATCH",
       ),
     ).toBe(true);
     expect(
@@ -429,7 +429,7 @@ describeDb("GitHub webhook", () => {
 
     const patchCall = fetchCalls.find(
       (c) =>
-        c.url.match(/\/repos\/acme\/tx\/pulls\/17$/) && c.init?.method === "PATCH",
+        c.url.match(/\/repos\/acme\/gx\/pulls\/17$/) && c.init?.method === "PATCH",
     );
     const patchBody = JSON.parse(String(patchCall?.init?.body ?? "{}")) as {
       body?: string;
@@ -462,7 +462,7 @@ describeDb("GitHub webhook", () => {
 
     const comments = await db<{ author: string; github_comment_id: number | null }[]>`
       SELECT author, github_comment_id FROM pr_comments
-      WHERE org_id = ${orgId} AND bookmark_id = ${bookmarkId} AND author = 'tx'
+      WHERE org_id = ${orgId} AND bookmark_id = ${bookmarkId} AND author = 'gx'
       ORDER BY created_at_ms DESC
       LIMIT 1
     `;
@@ -470,7 +470,7 @@ describeDb("GitHub webhook", () => {
     expect(comments[0]?.github_comment_id).toBeNull();
   });
 
-  test("pull_request without a TX event waits without evaluating quota", async () => {
+  test("pull_request without an gx event waits without evaluating quota", async () => {
     const db = getSql();
     const prNumber = PR_NUMBER + 1000;
     const branchName = `feat/missing-event-${prNumber}`;
@@ -490,12 +490,12 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
         number: prNumber,
-        title: "Wait for TX publish",
+        title: "Wait for gx publish",
         html_url: `https://github.com/${REPO_FULL_NAME}/pull/${prNumber}`,
         head: { ref: branchName, sha: "missing-event-head" },
         base: { ref: "main", sha: "def456" },
@@ -549,7 +549,7 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
@@ -616,12 +616,12 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ body: string; is_tx_mention: boolean }[]>`
-      SELECT body, is_tx_mention FROM pr_comments
+    const comments = await db<{ body: string; is_gx_mention: boolean }[]>`
+      SELECT body, is_gx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
     `;
     expect(comments.length).toBe(1);
-    expect(comments[0]?.is_tx_mention).toBe(false);
+    expect(comments[0]?.is_gx_mention).toBe(false);
 
     const decisions = await db<{ action: string }[]>`
       SELECT action FROM decisions
@@ -641,7 +641,7 @@ describeDb("GitHub webhook", () => {
     expect(rules[0]?.rule_text).toContain("use var");
   });
 
-  test("@tx review comment triggers handler and posts threaded reply", async () => {
+  test("@gx review comment triggers handler and posts threaded reply", async () => {
     const reviewCommentId = 55503 + Math.floor(Math.random() * 100000);
     const res = await postWebhook("pull_request_review_comment", {
       action: "created",
@@ -655,7 +655,7 @@ describeDb("GitHub webhook", () => {
       comment: {
         id: reviewCommentId,
         user: { login: "alice" },
-        body: "@tx explain this webhook handler change",
+        body: "@gx explain this webhook handler change",
         path: "server/src/github/webhook.ts",
         line: 12,
       },
@@ -664,11 +664,11 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ is_tx_mention: boolean }[]>`
-      SELECT is_tx_mention FROM pr_comments
+    const comments = await db<{ is_gx_mention: boolean }[]>`
+      SELECT is_gx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
     `;
-    expect(comments[0]?.is_tx_mention).toBe(true);
+    expect(comments[0]?.is_gx_mention).toBe(true);
     expect(
       fetchCalls.some((c) =>
         c.url.includes(`/pulls/${PR_NUMBER}/comments/${reviewCommentId}/replies`),
@@ -679,7 +679,7 @@ describeDb("GitHub webhook", () => {
     );
   });
 
-  test("@tx issue comment triggers handler and posts reply", async () => {
+  test("@gx issue comment triggers handler and posts reply", async () => {
     const issueCommentId = 55502 + Math.floor(Math.random() * 100000);
     const [rule] = await getSql()<{ id: string }[]>`
       INSERT INTO rules (
@@ -703,18 +703,18 @@ describeDb("GitHub webhook", () => {
       comment: {
         id: issueCommentId,
         user: { login: "alice" },
-        body: "@tx please skip rule never use var",
+        body: "@gx please skip rule never use var",
       },
     });
 
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ is_tx_mention: boolean }[]>`
-      SELECT is_tx_mention FROM pr_comments
+    const comments = await db<{ is_gx_mention: boolean }[]>`
+      SELECT is_gx_mention FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${issueCommentId}
     `;
-    expect(comments[0]?.is_tx_mention).toBe(true);
+    expect(comments[0]?.is_gx_mention).toBe(true);
     expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(true);
 
     const [updatedRule] = await db<{ status: string }[]>`
@@ -738,7 +738,7 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
@@ -774,7 +774,7 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
@@ -830,7 +830,7 @@ describeDb("GitHub webhook", () => {
       repository: {
         id: 999001,
         full_name: REPO_FULL_NAME,
-        name: "tx",
+        name: "gx",
         owner: { login: "acme" },
       },
       pull_request: {
@@ -907,7 +907,7 @@ describeDb("GitHub webhook", () => {
     expect(headers["X-Hub-Signature-256"]).toBe(signPayload(payload));
     // Convex writes gx-{orgId}-{repo}; without this it cannot name a namespace
     // and drops the delivery.
-    expect(headers["X-TX-Org-Id"]).toBe(orgId);
+    expect(headers["X-gx-Org-Id"]).toBe(orgId);
   });
 
   // Convex has no org table of its own — it learns installation -> org from
@@ -934,7 +934,7 @@ describeDb("GitHub webhook", () => {
       }
       const headers = forwarded.init?.headers as Record<string, string>;
       expect(headers["X-GitHub-Event"]).toBe(event);
-      expect(headers["X-TX-Org-Id"]).toBe(orgId);
+      expect(headers["X-gx-Org-Id"]).toBe(orgId);
     }
   });
 
@@ -960,7 +960,7 @@ describeDb("GitHub webhook", () => {
       throw new Error("push for an unknown installation was not forwarded");
     }
     const headers = forwarded.init?.headers as Record<string, string>;
-    expect(headers["X-TX-Org-Id"]).toBeUndefined();
+    expect(headers["X-gx-Org-Id"]).toBeUndefined();
   });
 
   test("a failing Convex forward does not fail the delivery back to GitHub", async () => {

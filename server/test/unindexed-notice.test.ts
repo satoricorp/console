@@ -16,7 +16,7 @@ describe("unindexed-repository notice", () => {
     expect(body).toContain("https://gx.run/repositories");
     // The website, not the hidden maintenance command that fills one
     // developer's namespace from one developer's checkout.
-    expect(body).not.toContain("tx index");
+    expect(body).not.toContain("gx index");
   });
 
   test("stays out of the way when the summary did see the source", () => {

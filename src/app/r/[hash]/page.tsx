@@ -10,13 +10,13 @@ export async function generateMetadata({
   const { hash } = await params;
   const short = hash.slice(0, 12);
   return {
-    title: `Revision ${short} — TX`,
+    title: `Revision ${short} — gx`,
     description:
-      "A TX revision: the commit, its identity, and the recorded context behind it.",
+      "An gx revision: the commit, its identity, and the recorded context behind it.",
   };
 }
 
-// Revision permalinks are stamped into commit trailers (`TX: https://gx.run/r/<id>`).
+// Revision permalinks are stamped into commit trailers (`gx: https://gx.run/r/<id>`).
 // The console does not render per-revision pages right now — review context
 // surfaces in the PR Summary on the pull request — so this page just explains
 // what the identifier is.
@@ -33,13 +33,13 @@ export default async function RevisionPage({
         aria-hidden
       />
       <h1 className="mt-4 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-        TX revision
+        gx revision
       </h1>
       <p className="mt-2 font-mono text-sm text-neutral-500 dark:text-neutral-400">
         {hash}
       </p>
       <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-300">
-        This identifier comes from a commit&apos;s <code>TX:</code> trailer. It links
+        This identifier comes from a commit&apos;s <code>gx:</code> trailer. It links
         the commit to the coding session that produced it. The recorded context
         appears in the PR Summary on the pull request that includes this commit.
       </p>
@@ -48,7 +48,7 @@ export default async function RevisionPage({
           href="/docs/how-it-works"
           className="text-neutral-900 underline underline-offset-4 dark:text-neutral-100"
         >
-          How TX records revisions
+          How gx records revisions
         </Link>
         <Link
           href="/"

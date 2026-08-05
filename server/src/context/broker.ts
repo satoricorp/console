@@ -202,7 +202,7 @@ function clip(text: string, maxChars: number): string {
  * The cap lives here rather than in searchIndex because a fused RRF query
  * answers with one leg per rank_by and TurboPuffer applies `limit` per leg: a
  * three-leg search returns up to three times what the caller asked for. On the
- * live satoricorp/tx namespace a previous-prs query with limit 8 came back with
+ * live satoricorp/gx namespace a previous-prs query with limit 8 came back with
  * 13 rows and every one was served. searchIndex has a second caller
  * (searchCodeReviewHistory) that post-filters by source kind in JavaScript and
  * structurally depends on that over-return, so capping there would starve
@@ -297,7 +297,7 @@ const TRUNK_BRANCH_NAMES = new Set([
  * Getting this wrong in the "everything is a topic branch" direction is what
  * made the first cut of this rule wrong. Comparing branch strings alone
  * excluded every row whose `branch_name` equalled the branch under review, and
- * in the live satoricorp/tx namespace 23 of the 25 prior-PR rows carry
+ * in the live satoricorp/gx namespace 23 of the 25 prior-PR rows carry
  * `branch_name = "main"` — so a repository whose changes are pushed straight
  * from its default branch (which is this project's own workflow) lost 100% of
  * its prior-PR history no matter how well the files overlapped.
@@ -370,7 +370,7 @@ function textNamesChangedFile(
  *    without a file — its text names one verbatim.
  *
  * Rule 2 is file overlap rather than a similarity threshold because the scores
- * do not separate the two populations. Measured against the live satoricorp/tx
+ * do not separate the two populations. Measured against the live satoricorp/gx
  * namespace for PR #112 (`internal/cli/doctor.go`,
  * `internal/cli/doctor_code_index_test.go`), the identical indexed row scored
  * cosine distance 0.2895 when the query carried the changed-file list and
