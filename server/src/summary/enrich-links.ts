@@ -15,7 +15,7 @@ import {
  * context rows are indexed with a branch and a head SHA and no PR number at
  * all, so any other N in a summary came from the model, not from a source.
  *
- * Linking one anyway is how satoricorp/tx#112 came to cite "PR #1" and "PR #2":
+ * Linking one anyway is how satoricorp/gx#112 came to cite "PR #1" and "PR #2":
  * the context snippets are labelled [P1] and [P2], the prompt asked for
  * attributions of the form `PR #N`, and this enricher resolved the result to
  * github.com/satoricorp/gx/pull/1 and /pull/2 — two real, unrelated pull

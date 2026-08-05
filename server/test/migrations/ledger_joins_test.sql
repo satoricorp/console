@@ -24,7 +24,7 @@ BEGIN
 
   -- Seed pr_event + bookmark
   INSERT INTO pr_events (
-    created_at_ms, tx_version, head_commit_id, payload, org_id, user_id
+    created_at_ms, gx_version, head_commit_id, payload, org_id, user_id
   ) VALUES (
     1700000000000, '0.1.0', 'abc123', '{}'::jsonb, v_org_id, 'test-user'
   ) RETURNING id INTO v_event_id;
@@ -37,7 +37,7 @@ BEGIN
 
   -- Seed ledger facts
   INSERT INTO pr_comments (
-    org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
+    org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
   ) VALUES (
     v_org_id, v_bookmark_id, 42, 'reviewer1', 'Please add tests', true, 1700000001000
   ) RETURNING id INTO v_comment_id;

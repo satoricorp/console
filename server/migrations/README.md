@@ -1,23 +1,23 @@
 # Server migrations (WP-4)
 
-Forward-only Postgres migrations for the consolidated GX server. The original API migrations `001`-`012` now live here with the rest of the server schema.
+Forward-only Postgres migrations for the consolidated gx server. The original API migrations `001`-`012` now live here with the rest of the server schema.
 
 ## Apply order
 
-1. `001_gx_pr_events.sql`
-2. `002_user_session_columns.sql`
-3. `003_gx_bookmarks.sql`
-4. `004_gx_change_reviews.sql`
-5. `005_gx_pr_id_upsert.sql`
-6. `006_gx_pr_event_payloads.sql`
-7. `007_gx_review_usage.sql`
-8. `008_semantic_index_status.sql`
-9. `009_github_status.sql`
-10. `010_gx_conflict_checks.sql`
-11. `011_github_app_installations.sql`
-12. `012_bookmark_app_summaries.sql`
+1. `server/migrations/001_pr_events.sql`
+2. `server/migrations/002_user_session_columns.sql`
+3. `server/migrations/003_bookmarks.sql`
+4. `server/migrations/004_change_reviews.sql`
+5. `server/migrations/005_pr_id_upsert.sql`
+6. `server/migrations/006_pr_event_payloads.sql`
+7. `server/migrations/007_review_usage.sql`
+8. `server/migrations/008_semantic_index_status.sql`
+9. `server/migrations/009_github_status.sql`
+10. `server/migrations/010_conflict_checks.sql`
+11. `server/migrations/011_github_app_installations.sql`
+12. `server/migrations/012_bookmark_app_summaries.sql`
 13. `server/migrations/013_orgs_and_ledger.sql`
-14. `server/migrations/014_rename_gx_prefix.sql`
+14. `server/migrations/014_orgs_backfill.sql`
 15. `server/migrations/015_flatten_conflict_checks.sql`
 16. `server/migrations/016_flatten_ci_details.sql`
 17. `server/migrations/017_git_blame_context.sql`
@@ -27,6 +27,11 @@ Forward-only Postgres migrations for the consolidated GX server. The original AP
 21. `server/migrations/021_reported_logs_identity.sql`
 22. `server/migrations/022_review_plans.sql`
 23. `server/migrations/023_github_post_skips.sql`
+24. `server/migrations/024_org_members.sql`
+25. `server/migrations/025_bookmark_archived.sql`
+26. `server/migrations/026_watch_posts.sql`
+27. `server/migrations/027_publish_schema_version.sql`
+28. `server/migrations/028_drop_porcelain_tables.sql`
 
 ### Applying the chain
 
@@ -59,21 +64,11 @@ then adds the constraint; do not re-add the index to a test.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/test/migrations/ledger_joins_test.sql
 ```
 
-## Rename map (014)
+## Table inventory
 
-| Old table | New table |
-|-----------|-----------|
-| `gx_pr_events` | `pr_events` |
-| `gx_pr_event_payloads` | `pr_event_payloads` |
-| `gx_bookmarks` | `bookmarks` |
-| `gx_change_reviews` | `change_reviews` |
-| `gx_review_usage` | `review_usage` |
-| `gx_conflict_checks` | `conflict_checks` |
-| `gx_issues` | `issues` |
-| `github_app_installations` | *(unchanged)* |
-| `github_app_repositories` | *(unchanged)* |
+Created in 001–012: `pr_events`, `pr_event_payloads`, `bookmarks`, `change_reviews`, `review_usage`, `conflict_checks`, `issues`, `github_app_installations`, `github_app_repositories`.
 
-New tables in 013 (no `gx_` prefix): `orgs`, `pr_comments`, `decisions`, `rules`, `outcomes`, `hunk_links`, `summaries`, `summary_events`, `sessions_raw`, `session_events`.
+Added in 013: `orgs`, `pr_comments`, `decisions`, `rules`, `outcomes`, `hunk_links`, `summaries`, `summary_events`, `sessions_raw`, `session_events`.
 
 Child tables in 015–016: `conflict_files`, `conflict_check_diagnostics`, `bookmark_ci_checks`.
 

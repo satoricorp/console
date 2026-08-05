@@ -83,7 +83,7 @@ describe("PR summary prompt: prior-PR citations", () => {
         indexSnippets: [
           {
             id: "P1",
-            text: "TX published revision diff.",
+            text: "gx published revision diff.",
             bucket: "previous-prs",
             sourceKind: "published_revision_diff",
             file: "internal/codereview/judge.go",

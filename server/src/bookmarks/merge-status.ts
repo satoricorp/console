@@ -16,7 +16,7 @@ const githubHeaders = (token?: string | null) => ({
   Accept: "application/vnd.github+json",
   ...(token ? { Authorization: `Bearer ${token}` } : {}),
   "X-GitHub-Api-Version": "2022-11-28",
-  "User-Agent": "tx-cloud",
+  "User-Agent": "gx-cloud",
 });
 
 /** Parse a PR number from a GitHub pull request URL. */

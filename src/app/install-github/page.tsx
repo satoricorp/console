@@ -11,7 +11,7 @@ export default function InstallGithubPage() {
             Install on GitHub
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            One click opens GitHub so you can install the TX app on your account
+            One click opens GitHub so you can install the gx app on your account
             or organization.
           </p>
         </div>

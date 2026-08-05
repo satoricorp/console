@@ -10,7 +10,7 @@ describe("Convex HTTP route ownership", () => {
     expect(httpSource).toContain('path: "/cx/stripe/webhook"');
   });
 
-  test("does not expose legacy tx or CLI token routes", () => {
+  test("does not expose legacy gx or CLI token routes", () => {
     expect(httpSource).not.toContain('path: "/gx/auth/');
     expect(httpSource).not.toContain('path: "/gx/pr"');
     expect(httpSource).not.toContain('path: "/cx/auth/revoke"');

@@ -7,19 +7,19 @@ const FEATURES = [
       "Know exactly where your review context comes from with attribution, whether it's from a coding session, your codebase, an independent resource (e.g. OWASP top ten), or previous PRs.",
   },
   {
-    title: "Chat with TX",
+    title: "Chat with gx",
     detail: "Use ",
-    highlight: "@tx in GitHub",
+    highlight: "@gx in GitHub",
     detailAfter: " to ask questions about the pull request.",
   },
   {
     title: "CLI & MCP",
-    detail: "Start using TX through the TX MCP and the CLI today.",
+    detail: "Start using gx through the gx MCP and the CLI today.",
   },
   {
     title: "/review",
     detail: "Use ",
-    highlight: "tx review",
+    highlight: "gx review",
     detailAfter:
       " in your agents to find issues with your current session and fix them before they ever make it to a PR.",
   },
@@ -28,7 +28,7 @@ const FEATURES = [
     detail: "Add a ",
     highlight: "REVIEW.md",
     detailAfter:
-      " at the root of your project. Include URLs to additional resources you want TX to use during review, specific instructions about your codebase to customize your review.",
+      " at the root of your project. Include URLs to additional resources you want gx to use during review, specific instructions about your codebase to customize your review.",
   },
 ] as const;
 

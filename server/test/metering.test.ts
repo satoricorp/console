@@ -25,7 +25,7 @@ async function seedBookmark(
 ) {
   const [event] = await db<{ id: string }[]>`
     INSERT INTO pr_events (
-      created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+      created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
     ) VALUES (
       ${atMs},
       '0.1.0-test',
@@ -33,7 +33,7 @@ async function seedBookmark(
       ${JSON.stringify({ refRange: "main..HEAD", intentCandidates: [`quota test ${suffix}`] })}::jsonb,
       ${orgId},
       ${meteringUserId},
-      '/Users/joe/git/tx'
+      '/Users/joe/git/gx'
     )
     RETURNING id
   `;
@@ -137,9 +137,9 @@ describeDb("PR Summary metering", () => {
     );
     const originalFetch = globalThis.fetch;
     const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
-    const originalCloudApiKey = process.env.TX_CLOUD_API_KEY;
+    const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
     process.env.CONVEX_SITE_URL = "https://convex.test";
-    process.env.TX_CLOUD_API_KEY = "wrong-key";
+    process.env.GX_CLOUD_API_KEY = "wrong-key";
     globalThis.fetch = (async () =>
       new Response("Unauthorized", { status: 401 })) as unknown as typeof fetch;
 
@@ -160,9 +160,9 @@ describeDb("PR Summary metering", () => {
         process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
       }
       if (originalCloudApiKey === undefined) {
-        delete process.env.TX_CLOUD_API_KEY;
+        delete process.env.GX_CLOUD_API_KEY;
       } else {
-        process.env.TX_CLOUD_API_KEY = originalCloudApiKey;
+        process.env.GX_CLOUD_API_KEY = originalCloudApiKey;
       }
     }
   });

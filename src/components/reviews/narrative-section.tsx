@@ -1,11 +1,11 @@
 import type { ReviewPlan } from "@/lib/reviews-client";
 
 const SOURCE_STYLE: Record<string, { label: string; color: string }> = {
-  "agent-sessions": { label: "agent sessions", color: "var(--tx-agent-fill)" },
-  codebase: { label: "codebase", color: "var(--tx-src-codebase)" },
-  "previous-prs": { label: "previous PRs", color: "var(--tx-src-prs)" },
-  docs: { label: "independent docs", color: "var(--tx-src-docs)" },
-  "pr-payload": { label: "PR payload", color: "var(--tx-faint)" },
+  "agent-sessions": { label: "agent sessions", color: "var(--gx-agent-fill)" },
+  codebase: { label: "codebase", color: "var(--gx-src-codebase)" },
+  "previous-prs": { label: "previous PRs", color: "var(--gx-src-prs)" },
+  docs: { label: "independent docs", color: "var(--gx-src-docs)" },
+  "pr-payload": { label: "PR payload", color: "var(--gx-faint)" },
 };
 
 export function NarrativeSection({ plan }: { plan: ReviewPlan }) {
@@ -77,7 +77,7 @@ export function NarrativeSection({ plan }: { plan: ReviewPlan }) {
                   style={{
                     width: `${Math.max(src.pct, 0)}%`,
                     background:
-                      SOURCE_STYLE[src.source]?.color ?? "var(--tx-faint)",
+                      SOURCE_STYLE[src.source]?.color ?? "var(--gx-faint)",
                   }}
                 />
               ))}
@@ -88,7 +88,7 @@ export function NarrativeSection({ plan }: { plan: ReviewPlan }) {
                   className="swatch"
                   style={{
                     background:
-                      SOURCE_STYLE[src.source]?.color ?? "var(--tx-faint)",
+                      SOURCE_STYLE[src.source]?.color ?? "var(--gx-faint)",
                   }}
                 />
                 {SOURCE_STYLE[src.source]?.label ?? src.source}{" "}

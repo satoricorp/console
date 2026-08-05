@@ -9,7 +9,7 @@ const DEMO_PLAN: ReviewPlan = {
   schemaVersion: 1,
   narrative: {
     summary:
-      "Gives the desktop app a real backend. Cloud auth and review data move to a TX-owned Convex deployment, and the desktop review screens stop reading local fixtures and start querying live bookmark and session data. The task was scoped to wiring existing screens to live data; the Convex backend was added along the way once the screens needed reactive queries.",
+      "Gives the desktop app a real backend. Cloud auth and review data move to an gx-owned Convex deployment, and the desktop review screens stop reading local fixtures and start querying live bookmark and session data. The task was scoped to wiring existing screens to live data; the Convex backend was added along the way once the screens needed reactive queries.",
     summaryTeaser: "Gives the desktop app a real backend.",
     why: "Session tokens are now minted server-side and stored hashed, instead of raw tokens living only in the OS keychain — the agent chose this after hitting CORS limits calling the API directly from the renderer. Reactive Convex queries replace polling so merge status updates without a refresh cycle, and the fixture store is deleted rather than kept as a fallback to avoid a second data path drifting.",
     whyTeaser:
@@ -21,7 +21,7 @@ const DEMO_PLAN: ReviewPlan = {
       { source: "docs", pct: 8 },
     ],
     selfReportQuote:
-      "Wire the desktop review screens to live TX API data sources, replacing the fixture-backed stores. Keep the auth token flow working end-to-end.",
+      "Wire the desktop review screens to live gx API data sources, replacing the fixture-backed stores. Keep the auth token flow working end-to-end.",
   },
   notableChanges: [
     {
@@ -84,8 +84,8 @@ const DEMO_PLAN: ReviewPlan = {
   revisions: [
     {
       changeId: "demo_rev_1",
-      branchName: "tx/add-tx-owned-convex-backend",
-      title: "Add TX-owned Convex backend",
+      branchName: "gx/add-gx-owned-convex-backend",
+      title: "Add gx-owned Convex backend",
     },
   ],
 };
@@ -129,10 +129,10 @@ export const DEMO_REVIEW: ReviewResponse = (() => {
       id: "bm_demo",
       orgId: "org_demo",
       userId: "user_demo",
-      repoFullName: "satoricorp/tx",
-      branchName: "tx/add-tx-owned-convex-backend",
+      repoFullName: "satoricorp/gx",
+      branchName: "gx/add-gx-owned-convex-backend",
       title:
-        "Add TX-owned Convex backend for cloud auth and wire desktop review screens to live data",
+        "Add gx-owned Convex backend for cloud auth and wire desktop review screens to live data",
       revision: 2,
       headCommitId: "1ddbfdb0123456789abcdef0123456789abcdef0",
       remoteHeadSha: "1ddbfdb0123456789abcdef0123456789abcdef0",
@@ -213,8 +213,8 @@ export const DEMO_REVIEW: ReviewResponse = (() => {
     summary: null,
     activity: [],
     publishContext: {
-      repoFullName: "satoricorp/tx",
-      headBranch: "tx/add-tx-owned-convex-backend",
+      repoFullName: "satoricorp/gx",
+      headBranch: "gx/add-gx-owned-convex-backend",
       baseBranch: "main",
       localHeadSha: "1ddbfdb0123456789abcdef0123456789abcdef0",
       pullRequestNumber: 72,
@@ -289,7 +289,7 @@ const DEMO_REVIEW_SPECS: DemoReviewSpec[] = [
   },
   {
     id: "demo-review-cache",
-    repo: "acme/tx",
+    repo: "acme/gx",
     branch: "perf/review-plan-cache",
     title: "Cache review plans by surviving diff",
     summary:
@@ -305,7 +305,7 @@ const DEMO_REVIEW_SPECS: DemoReviewSpec[] = [
   },
   {
     id: "demo-stack-publish",
-    repo: "acme/tx",
+    repo: "acme/gx",
     branch: "feat/stack-publish",
     title: "Publish stacked revisions in dependency order",
     summary:
@@ -321,7 +321,7 @@ const DEMO_REVIEW_SPECS: DemoReviewSpec[] = [
   },
   {
     id: "demo-review-comments",
-    repo: "acme/tx",
+    repo: "acme/gx",
     branch: "feat/review-comments",
     title: "Attach reviewer comments to revision anchors",
     summary:
@@ -337,7 +337,7 @@ const DEMO_REVIEW_SPECS: DemoReviewSpec[] = [
   },
   {
     id: "demo-cli-output",
-    repo: "acme/tx",
+    repo: "acme/gx",
     branch: "chore/quiet-publish-output",
     title: "Make publish output concise in interactive terminals",
     summary:
@@ -422,12 +422,12 @@ const DEMO_DIFFS: Record<string, DemoDiffSpec[]> = {
         "  return nextToken;",
       ],
       after: [
-        "  return await db.transaction(async (tx) => {",
-        "    const current = await tx.sessions.lock(currentSessionId);",
+        "  return await db.transaction(async (gx) => {",
+        "    const current = await gx.sessions.lock(currentSessionId);",
         '    if (!current || current.revokedAt) throw new Error("Session revoked");',
         "    const nextToken = await mintSessionToken();",
-        "    await tx.sessions.insert({ userId, tokenHash: hash(nextToken) });",
-        "    await tx.sessions.patch(currentSessionId, { revokedAt: Date.now() });",
+        "    await gx.sessions.insert({ userId, tokenHash: hash(nextToken) });",
+        "    await gx.sessions.patch(currentSessionId, { revokedAt: Date.now() });",
         "    return nextToken;",
         "  });",
       ],

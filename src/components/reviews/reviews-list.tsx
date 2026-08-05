@@ -53,12 +53,12 @@ function displayTitle(bookmark: ReviewListItem) {
   return title;
 }
 
-/** True when TX published evidence for this bookmark (not webhook-only junk). */
+/** True when gx published evidence for this bookmark (not webhook-only junk). */
 export function isTxSupportedReview(bookmark: ReviewListItem) {
   return Boolean(bookmark.latest_event_id);
 }
 
-/** Reviews where TX has nothing useful to show in the main list. */
+/** Reviews where gx has nothing useful to show in the main list. */
 export function isNoDataReview(bookmark: ReviewListItem) {
   if (!isTxSupportedReview(bookmark)) {
     return true;
@@ -240,7 +240,7 @@ export function ReviewsList({
     filter === "archived"
       ? "No archived reviews."
       : noData.length > 0
-        ? "No reviews with TX data yet."
+        ? "No reviews with gx data yet."
         : filter === "open"
           ? "No open reviews."
           : `No ${filter} reviews.`;
@@ -385,7 +385,7 @@ export function ReviewsList({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-[12px] text-zinc-600 transition-colors hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-50 [&::-webkit-details-marker]:hidden">
             <span>
               Hid {noData.length} review{noData.length === 1 ? "" : "s"} without
-              TX publish data
+              gx publish data
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
           </summary>

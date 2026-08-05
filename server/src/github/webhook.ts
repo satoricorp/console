@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type postgres from "postgres";
 import { getSql } from "../db";
 import { adoptLatestEventFromBranchSibling, findOrCreateBookmark } from "../bookmarks/adoption";
-import { containsTxMention } from "../tx-mention/handler";
+import { containsTxMention } from "../gx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
 import { QuotaExceededError } from "../metering/quota";
 import { detectOutcomeStub } from "../outcomes/stub";
@@ -303,12 +303,12 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
   const now = Date.now();
   await db`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
     ) VALUES (
       ${orgId},
       ${bookmark.id},
       ${null},
-      'tx',
+      'gx',
       ${postedBody},
       false,
       ${now}
@@ -447,7 +447,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
 
   const [comment] = await db<{ id: string }[]>`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
     ) VALUES (
       ${orgId},
       ${bookmark.id},
@@ -608,7 +608,7 @@ function shouldProcessCommentWebhook(action: string): boolean {
 function isGithubBot(login?: string | null): boolean {
   const normalized = (login ?? "").trim().toLowerCase();
   if (!normalized) return false;
-  return normalized.endsWith("[bot]") || normalized === "tx";
+  return normalized.endsWith("[bot]") || normalized === "gx";
 }
 
 async function distinctIdForWebhook(

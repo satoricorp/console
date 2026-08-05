@@ -5,7 +5,7 @@ import {
   getDemoReview,
 } from "./demo-review";
 
-describe("TX reviews demo data", () => {
+describe("gx reviews demo data", () => {
   test("includes ten reviews across three repositories", () => {
     expect(DEMO_REVIEW_LIST).toHaveLength(10);
     expect(new Set(DEMO_REVIEW_LIST.map((review) => review.repo_full_name)).size).toBe(

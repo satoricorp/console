@@ -27,7 +27,7 @@ function resolveCloudApiKey(
   userIdHeader: string | undefined,
   orgIdHeader: string | undefined,
 ): AuthContext | null {
-  const expected = process.env.TX_CLOUD_API_KEY?.trim();
+  const expected = process.env.GX_CLOUD_API_KEY?.trim();
   const userId = userIdHeader?.trim() || "local-user";
   if (!expected || token !== expected) {
     return null;
@@ -37,9 +37,9 @@ function resolveCloudApiKey(
 
 export function localDevAuthEnabled(): boolean {
   const enabled =
-    process.env.NODE_ENV !== "production" && !process.env.TX_CLOUD_API_KEY?.trim();
-  if (process.env.NODE_ENV === "production" && !process.env.TX_CLOUD_API_KEY?.trim()) {
-    console.error("local-dev auth path asserted inactive in production (no TX_CLOUD_API_KEY)");
+    process.env.NODE_ENV !== "production" && !process.env.GX_CLOUD_API_KEY?.trim();
+  if (process.env.NODE_ENV === "production" && !process.env.GX_CLOUD_API_KEY?.trim()) {
+    console.error("local-dev auth path asserted inactive in production (no GX_CLOUD_API_KEY)");
   }
   return enabled;
 }
@@ -103,7 +103,7 @@ async function resolveCliSessionToken(
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "tx-cloud",
+        "User-Agent": "gx-cloud",
       },
       body: JSON.stringify({ token }),
     });
@@ -123,7 +123,7 @@ async function resolveCliSessionToken(
   return {
     orgId: orgIdHeader?.trim() || "",
     userId: session.user_id,
-    tokenLabel: session.github_login ? `tx-cli:${session.github_login}` : "tx-cli",
+    tokenLabel: session.github_login ? `gx-cli:${session.github_login}` : "gx-cli",
     githubUserId: session.github_user_id,
     githubUserLogin: session.github_login,
     sessionId: session.session_id,
@@ -147,7 +147,7 @@ async function resolveGitHubToken(
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
-        "User-Agent": "tx-cloud",
+        "User-Agent": "gx-cloud",
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });
@@ -223,7 +223,7 @@ async function enforceOrgMembership(
 ): Promise<{ auth: AuthContext } | { status: 401 | 403; error: string }> {
   if (isTrustedInfraAuth(auth)) {
     if (auth.tokenLabel === "cloud-api-key") {
-      // Console BFF sends TX_CLOUD_API_KEY + X-User-Id without X-Org-Id.
+      // Console BFF sends GX_CLOUD_API_KEY + X-User-Id without X-Org-Id.
       // Use a stable placeholder so auth does not require a DB round-trip;
       // review/bookmark routes still match on bookmark.user_id = auth.userId.
       const withOrg = auth.orgId
@@ -260,7 +260,7 @@ async function enforceOrgMembership(
     if (!resolved) {
       return {
         status: 403,
-        error: "Install the TX GitHub App to continue",
+        error: "Install the gx GitHub App to continue",
       };
     }
     orgId = resolved;

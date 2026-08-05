@@ -4,8 +4,8 @@ import { LegalPage } from "@/components/legal-page";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_URL } from "@/lib/site-links";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TX",
-  description: "Privacy Policy for TX by Satori Engineering Co.",
+  title: "Privacy Policy — gx",
+  description: "Privacy Policy for gx by Satori Engineering Co.",
 };
 
 export default function PrivacyPage() {
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         <p>
           This Privacy Policy explains how Satori Engineering Co. (“Satori,”
           “we,” “us,” or “our”) collects, uses, and shares information when you
-          use TX and related websites, apps, and services (the “Service”). By
+          use gx and related websites, apps, and services (the “Service”). By
           using the Service, you agree to this policy.
         </p>
       </section>
