@@ -32,6 +32,7 @@ Forward-only Postgres migrations for the consolidated gx server. The original AP
 26. `server/migrations/026_watch_posts.sql`
 27. `server/migrations/027_publish_schema_version.sql`
 28. `server/migrations/028_drop_porcelain_tables.sql`
+29. `server/migrations/029_review_client_surface.sql`
 
 ### Applying the chain
 
