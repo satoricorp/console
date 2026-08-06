@@ -11,6 +11,10 @@ import {
   QuotaExceededError,
   recordPrSummaryUsage,
 } from "../metering/quota";
+import {
+  recordSummaryGeneration,
+  summaryGenerationSource,
+} from "../metering/summary-generations";
 import { capture, Events } from "../telemetry/posthog";
 import { publishRevisions } from "../publish/revisions";
 import {
@@ -564,6 +568,17 @@ export async function generateSummary(
     userId: input.userId ?? "system",
     bookmarkId: target.bookmarkId,
     eventId: target.eventId,
+  });
+
+  await recordSummaryGeneration(db, {
+    orgId: input.orgId,
+    userId: input.userId ?? null,
+    bookmarkId: target.bookmarkId,
+    summaryId: summary.id,
+    source: summaryGenerationSource(input.quotaSkipSource),
+    model: completion.model,
+    inputTokens: completion.usage?.inputTokens ?? null,
+    outputTokens: completion.usage?.outputTokens ?? null,
   });
 
   capture(
