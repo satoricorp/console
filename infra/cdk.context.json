@@ -12,5 +12,9 @@
     "us-east-1d",
     "us-east-1e",
     "us-east-1f"
-  ]
+  ],
+  "hosted-zone:account=088950452464:domainName=gx.run:region=us-east-1": {
+    "Id": "/hostedzone/Z06122651MC3Q531FG33Z",
+    "Name": "gx.run."
+  }
 }

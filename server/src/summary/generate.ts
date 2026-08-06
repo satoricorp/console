@@ -5,6 +5,7 @@ import {
   recordGithubPostSkip,
   type GithubPostSkipSource,
 } from "../metering/github-post-skips";
+import { recordLLMUsage } from "../metering/llm-usage";
 import {
   checkPrSummaryQuota,
   QuotaExceededError,
@@ -509,6 +510,18 @@ export async function generateSummary(
     buildPRSummaryUserPrompt(ctx),
   );
 
+  // Metered before validation: the tokens are spent even if the summary is
+  // rejected below.
+  if (completion.usage) {
+    recordLLMUsage(db, {
+      orgId: input.orgId,
+      userId: input.userId ?? "system",
+      endpoint: "summary.generate",
+      model: completion.model,
+      usage: completion.usage,
+    });
+  }
+
   const validation = validateSummary(completion.text);
   if (!validation.ok) {
     assertValidSummary(completion.text);
@@ -564,6 +577,8 @@ export async function generateSummary(
     summaryId: summary.id,
     source: summaryGenerationSource(input.quotaSkipSource),
     model: completion.model,
+    inputTokens: completion.usage?.inputTokens ?? null,
+    outputTokens: completion.usage?.outputTokens ?? null,
   });
 
   capture(

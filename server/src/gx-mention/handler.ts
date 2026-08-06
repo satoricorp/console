@@ -3,6 +3,7 @@ import { getInstallationAccessToken } from "../github/app";
 import { loadGitBlameContext, parsePatchHunks, type GitBlameContext } from "../github/git-blame";
 import { githubPullFileLineUrl } from "../github/line-links";
 import { createReviewProviders } from "../llm/provider";
+import { recordLLMUsage } from "../metering/llm-usage";
 import {
   buildTxChatUserPrompt,
   GX_CHAT_SYSTEM_PROMPT,
@@ -176,6 +177,8 @@ export async function handleTxMention(
     recentComments,
   });
   const chat = await generateTxChatReply({
+    db,
+    orgId: input.orgId,
     author: input.author,
     question,
     latestSummary: latestSummary?.content ?? null,
@@ -353,6 +356,8 @@ export function shouldLoadGitHubPrFiles(context: ExtractContext | null): boolean
 }
 
 async function generateTxChatReply(input: {
+  db: postgres.Sql;
+  orgId: string;
   author: string;
   question: string;
   latestSummary: string | null;
@@ -372,6 +377,18 @@ async function generateTxChatReply(input: {
   for (const provider of providers) {
     try {
       const completion = await provider.complete(GX_CHAT_SYSTEM_PROMPT, userPrompt);
+      if (completion.usage) {
+        recordLLMUsage(input.db, {
+          orgId: input.orgId,
+          // Mentions arrive via the GitHub webhook, so the only identity is
+          // the commenter's login — namespaced to keep it distinct from the
+          // gx user-id space.
+          userId: `github-login:${input.author}`,
+          endpoint: "gx-mention.chat",
+          model: completion.model,
+          usage: completion.usage,
+        });
+      }
       const structured = parseTxChatModelReply(completion.text);
       const text = structured
         ? formatStructuredChatReply(structured, input.citationContext, provider.name)
