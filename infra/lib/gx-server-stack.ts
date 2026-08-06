@@ -37,10 +37,15 @@ const containerPort = 3201;
  * profile ARN in this region and the underlying foundation model in every region
  * the profile can route to, hence the region-wildcard foundation-model ARN.
  */
-const bedrockInferenceProfileIds = [
+export const bedrockInferenceProfileIds = [
   "us.anthropic.claude-sonnet-4-6",
   "us.anthropic.claude-opus-4-6-v1",
   "us.anthropic.claude-opus-4-5-20251101-v1:0",
+  // The CLI's default first reviewer leg. Added after the drift this file's
+  // comment warned about actually happened: the route allowed Haiku, this list
+  // did not, and every default-configuration review failed in production while
+  // every test passed locally.
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 ];
 
 export class GxServerStack extends Stack {
