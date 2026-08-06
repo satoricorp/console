@@ -39,7 +39,7 @@ export const getOnboardingStatus = query({
     // read-time access check incorrectly cleared connectedRepos.
     const hasCliSession = Boolean(
       await ctx.db
-        .query("txCliSessions")
+        .query("gxCliSessions")
         .withIndex("by_userId", (q) => q.eq("userId", user._id))
         .first(),
     );
@@ -47,7 +47,7 @@ export const getOnboardingStatus = query({
     return {
       hasConnectedRepos,
       connectedCount: connected.length,
-      // Existing users who already connected repos (or used TX) count as done.
+      // Existing users who already connected repos (or used gx) count as done.
       onboardingCompleted:
         Boolean(appState?.onboardingCompletedAt) ||
         hasConnectedRepos ||

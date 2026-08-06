@@ -151,7 +151,7 @@ type PrEventPayload = {
   humanOverrides?: unknown[];
   fileStats?: unknown;
   toolVersions?: Record<string, string>;
-  // tx.pr artifact shape (see PushBundle): schema v2 `revisions`, or the
+  // gx.pr artifact shape (see PushBundle): schema v2 `revisions`, or the
   // legacy v1 stack/change pair. publishRevisions() normalizes both.
   event?: string;
   revisions?: unknown;
@@ -267,7 +267,7 @@ export async function loadExtractContext(
     ORDER BY file, line_start
   `;
   if (hunkRows.length === 0 && event.head_commit_id) {
-    // tx.pr artifact events carry no hunk_links of their own; the capture
+    // gx.pr artifact events carry no hunk_links of their own; the capture
     // extract for the same head commit is a sibling pr_event.
     hunkRows = await db<typeof hunkRows>`
       SELECT hl.file, hl.line_start, hl.line_end, hl.session_id, hl.match_tier,
@@ -313,7 +313,7 @@ export async function loadExtractContext(
 
   // The changed-file list decides which prior PRs may be cited (see
   // scopePreviousPrRows), so it must not depend on capture having produced hunk
-  // links. A tx.pr artifact regularly carries none, and on satoricorp/tx#112 it
+  // links. An gx.pr artifact regularly carries none, and on satoricorp/gx#112 it
   // carried none, which left the broker with an empty file list. The revisions
   // in the bundle always name their files, so union both.
   const changedFiles = [

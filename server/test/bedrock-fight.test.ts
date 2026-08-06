@@ -42,7 +42,7 @@ function awsError(name: string, message: string, httpStatusCode: number): Error 
 
 // ---------------------------------------------------------------------------
 // Pure request/response contract. These must run without a database, because
-// the allowlist is the thing standing between an authenticated caller and TX's
+// the allowlist is the thing standing between an authenticated caller and gx's
 // Bedrock bill — it cannot be a test that silently skips on a laptop.
 // ---------------------------------------------------------------------------
 
@@ -230,7 +230,7 @@ describeDb("POST /gx/bedrock/fight", () => {
   let orgId: string;
   let expiredOrgId: string;
   const originalRegion = process.env.AWS_REGION;
-  const originalMaxBody = process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES;
+  const originalMaxBody = process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES;
 
   const validBody = {
     model: reviewerA,
@@ -263,8 +263,8 @@ describeDb("POST /gx/bedrock/fight", () => {
     setBedrockClientForTesting(null);
     if (originalRegion === undefined) delete process.env.AWS_REGION;
     else process.env.AWS_REGION = originalRegion;
-    if (originalMaxBody === undefined) delete process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES;
-    else process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES = originalMaxBody;
+    if (originalMaxBody === undefined) delete process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES;
+    else process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES = originalMaxBody;
   });
 
   function post(body: unknown, headers: Record<string, string> = authHeaders("local-user", orgId)) {
@@ -299,7 +299,7 @@ describeDb("POST /gx/bedrock/fight", () => {
   });
 
   test("rejects an oversized body", async () => {
-    process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES = "1024";
+    process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES = "1024";
     try {
       const response = await post({
         ...validBody,
@@ -310,8 +310,8 @@ describeDb("POST /gx/bedrock/fight", () => {
       expect(body.error).toBe("payload_too_large");
       expect(body.limit_bytes).toBe(1024);
     } finally {
-      if (originalMaxBody === undefined) delete process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES;
-      else process.env.TX_CLOUD_BEDROCK_MAX_BODY_BYTES = originalMaxBody;
+      if (originalMaxBody === undefined) delete process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES;
+      else process.env.GX_CLOUD_BEDROCK_MAX_BODY_BYTES = originalMaxBody;
     }
   });
 
@@ -368,9 +368,9 @@ describeDb("POST /gx/bedrock/fight", () => {
     expect(((await response.json()) as { error: string }).error).toBe("payment_required");
   });
 
-  // Live leg. Off by default: it spends real Bedrock tokens on TX's account.
-  //   TX_TEST_LIVE_BEDROCK=1 bun run test:db -- test/bedrock-fight.test.ts
-  const live = process.env.TX_TEST_LIVE_BEDROCK === "1";
+  // Live leg. Off by default: it spends real Bedrock tokens on gx's account.
+  //   GX_TEST_LIVE_BEDROCK=1 bun run test:db -- test/bedrock-fight.test.ts
+  const live = process.env.GX_TEST_LIVE_BEDROCK === "1";
   (live ? test : test.skip)("calls Bedrock for real through the route", async () => {
     setBedrockClientForTesting(null); // rebuild a real client from the ambient AWS config
     const response = await post(validBody);

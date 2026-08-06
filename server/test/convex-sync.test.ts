@@ -17,7 +17,7 @@ describeDb("installation -> org sync", () => {
 
   beforeAll(async () => {
     process.env.CONVEX_SITE_URL = "https://convex.test";
-    process.env.TX_CLOUD_API_KEY = "test-cloud-api-key";
+    process.env.GX_CLOUD_API_KEY = "test-cloud-api-key";
     globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({
         url: typeof input === "string" ? input : input.toString(),

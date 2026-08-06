@@ -71,7 +71,7 @@ export default defineSchema({
     .index("by_fullName", ["fullName"]),
 
   // dead: no readers/writers as of 2026-07-28
-  txDesktopOAuthTickets: defineTable({
+  gxDesktopOAuthTickets: defineTable({
     ticketHash: v.string(),
     state: v.string(),
     githubAccessToken: v.string(),
@@ -80,14 +80,14 @@ export default defineSchema({
     usedAt: v.optional(v.number()),
   }).index("by_ticketHash", ["ticketHash"]),
 
-  txCliSessions: defineTable({
+  gxCliSessions: defineTable({
     tokenHash: v.string(),
     userId: v.string(),
     githubUserId: v.number(),
     githubLogin: v.string(),
     machineId: v.string(),
     machineName: v.string(),
-    txVersion: v.optional(v.string()),
+    gxVersion: v.optional(v.string()),
     createdAt: v.number(),
     expiresAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
@@ -97,7 +97,7 @@ export default defineSchema({
     .index("by_userId", ["userId"]),
 
   // dead: no readers/writers as of 2026-07-28
-  txReviewArtifacts: defineTable({
+  gxReviewArtifacts: defineTable({
     userId: v.string(),
     sessionId: v.optional(v.string()),
     repoFullName: v.optional(v.string()),
@@ -110,7 +110,7 @@ export default defineSchema({
     .index("by_repoFullName", ["repoFullName"]),
 
   // dead: no readers/writers as of 2026-07-28
-  txReviewComments: defineTable({
+  gxReviewComments: defineTable({
     userId: v.string(),
     reviewId: v.optional(v.string()),
     bookmarkId: v.optional(v.string()),
@@ -136,7 +136,7 @@ export default defineSchema({
     .index("by_repoFullName", ["repoFullName"])
     .index("by_userId_createdAt", ["userId", "createdAt"]),
 
-  // orgInstallations maps a GitHub App installation to the TX org that owns it.
+  // orgInstallations maps a GitHub App installation to the gx org that owns it.
   //
   // Postgres is the source of truth: the server resolves this from
   // github_app_installations when a delivery arrives and stamps it on the
@@ -198,8 +198,8 @@ export default defineSchema({
     .index("by_orgId", ["orgId"])
     .index("by_status", ["status"]),
 
-  // OSS "watch" rail: operator-curated public repos that TX summarizes for free,
-  // sessionless, posting as the TX bot user. Rows are written ONLY by the
+  // OSS "watch" rail: operator-curated public repos that gx summarizes for free,
+  // sessionless, posting as the gx bot user. Rows are written ONLY by the
   // internalMutations in watchlist.ts (Convex dashboard / CLI) — never from any
   // client-reachable path. Membership here is the sole gate for the free rail.
   watchedRepos: defineTable({

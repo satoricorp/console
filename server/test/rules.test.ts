@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { classifyReviewComment } from "../src/rules/classifier";
-import { containsTxMention, handleTxMention } from "../src/tx-mention/handler";
+import { containsTxMention, handleTxMention } from "../src/gx-mention/handler";
 import { describeDb } from "./db-gate";
 
 // Unique per process run. bookmarks carries a UNIQUE index on
@@ -33,7 +33,7 @@ describe("classifyReviewComment", () => {
       body: "We should never use var in src/",
       reviewer: "carol",
       reviewState: "commented",
-      repoScope: "acme/tx",
+      repoScope: "acme/gx",
     });
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0]?.strength).toBe("binding");
@@ -46,7 +46,7 @@ describe("classifyReviewComment", () => {
       body: "Prefer to keep handlers thin in server/src/",
       reviewer: "dana",
       reviewState: "commented",
-      repoScope: "acme/tx",
+      repoScope: "acme/gx",
     });
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0]?.strength).toBe("preference");
@@ -73,10 +73,10 @@ describe("classifyReviewComment", () => {
   });
 });
 
-describe("tx mention helpers", () => {
-  test("detects @tx mentions case-insensitively", () => {
-    expect(containsTxMention("@tx please skip rule X")).toBe(true);
-    expect(containsTxMention("@TX override")).toBe(true);
+describe("gx mention helpers", () => {
+  test("detects @gx mentions case-insensitively", () => {
+    expect(containsTxMention("@gx please skip rule X")).toBe(true);
+    expect(containsTxMention("@gx override")).toBe(true);
     expect(containsTxMention("no mention here")).toBe(false);
   });
 });
@@ -97,7 +97,7 @@ describeDb("handleTxMention integration", () => {
     `;
     const [event] = await db<{ id: string }[]>`
       INSERT INTO pr_events (
-        created_at_ms, tx_version, head_commit_id, payload, org_id, user_id
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id
       ) VALUES (
         ${now}, 'test', 'abc123', '{}'::jsonb, ${org.id}, ${rulesUserId}
       )
@@ -107,7 +107,7 @@ describeDb("handleTxMention integration", () => {
       INSERT INTO bookmarks (
         user_id, repo_full_name, branch_name, published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
-        ${rulesUserId}, 'acme/tx', 'feat/rules', ${now}, ${now}, ${org.id}, ${event.id}
+        ${rulesUserId}, 'acme/gx', 'feat/rules', ${now}, ${now}, ${org.id}, ${event.id}
       )
       RETURNING id
     `;
@@ -117,15 +117,15 @@ describeDb("handleTxMention integration", () => {
       RETURNING id
     `;
     const [comment] = await db<{ id: string }[]>`
-      INSERT INTO pr_comments (org_id, bookmark_id, author, body, is_tx_mention, created_at_ms)
-      VALUES (${org.id}, ${bookmark.id}, 'alice', '@tx please skip rule never use var', true, ${now})
+      INSERT INTO pr_comments (org_id, bookmark_id, author, body, is_gx_mention, created_at_ms)
+      VALUES (${org.id}, ${bookmark.id}, 'alice', '@gx please skip rule never use var', true, ${now})
       RETURNING id
     `;
     const [rule] = await db<{ id: string }[]>`
       INSERT INTO rules (
         org_id, repo_scope, rule_text, scope_expr, strength, status, source_comment_id, created_at_ms
       ) VALUES (
-        ${org.id}, 'acme/tx', 'never use var', 'src/', 'binding', 'inferred', ${comment.id}, ${now}
+        ${org.id}, 'acme/gx', 'never use var', 'src/', 'binding', 'inferred', ${comment.id}, ${now}
       )
       RETURNING id
     `;
@@ -135,7 +135,7 @@ describeDb("handleTxMention integration", () => {
       bookmarkId: bookmark.id,
       commentId: comment.id,
       author: "alice",
-      body: "@tx please skip rule never use var",
+      body: "@gx please skip rule never use var",
     });
 
     expect(result.retiredRuleIds).toContain(rule.id);

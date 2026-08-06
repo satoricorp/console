@@ -40,10 +40,10 @@ export const ICON_EXPORT_SIZES = [
   { label: "favicon-16", size: 16, mark: "x" },
   { label: "favicon-32", size: 32, mark: "x" },
   { label: "favicon-48", size: 48, mark: "x" },
-  { label: "apple-touch-icon", size: 180, mark: "tx" },
-  { label: "pwa-192", size: 192, mark: "tx" },
-  { label: "pwa-512", size: 512, mark: "tx" },
-  { label: "app-store", size: 1024, mark: "tx" },
+  { label: "apple-touch-icon", size: 180, mark: "gx" },
+  { label: "pwa-192", size: 192, mark: "gx" },
+  { label: "pwa-512", size: 512, mark: "gx" },
+  { label: "app-store", size: 1024, mark: "gx" },
 ] as const;
 
 export const DESIGN_SECTIONS = [

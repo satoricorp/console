@@ -26,7 +26,7 @@ describeDb("reported logs API", () => {
   test("POST /v1/reported-logs stores a user report", async () => {
     const response = await app.request("/v1/reported-logs", {
       method: "POST",
-      // requireAuth reads X-User-Id / X-Org-Id. The old X-TX-* spelling was
+      // requireAuth reads X-User-Id / X-Org-Id. The old X-gx-* spelling was
       // never read by anything, so auth silently fell through to the local-dev
       // identity and the row was attributed to "local-user".
       headers: {
@@ -34,11 +34,11 @@ describeDb("reported logs API", () => {
         ...authHeaders("user-1", orgId),
       },
       body: JSON.stringify({
-        tx_version: "dev",
+        gx_version: "dev",
         os: "darwin",
         arch: "arm64",
         repo_root: "/repo",
-        repo_full_name: "satoricorp/tx",
+        repo_full_name: "satoricorp/gx",
         cloud_url: "http://localhost:3201",
         error: "publish failed",
         status_error: "status failed",
@@ -65,7 +65,7 @@ describeDb("reported logs API", () => {
 
     expect(row).toMatchObject({
       user_id: "user-1",
-      repo_full_name: "satoricorp/tx",
+      repo_full_name: "satoricorp/gx",
       error: "publish failed",
       status_error: "status failed",
       log_count: 1,

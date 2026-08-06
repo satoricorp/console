@@ -1,15 +1,15 @@
 ---
 title: Pull Requests
-description: Generated PR summaries in the pull request description, and @tx chat inside PR comments.
+description: Generated PR summaries in the pull request description, and @gx chat inside PR comments.
 ---
 
-Totality writes a review summary into your pull request description and answers
-questions when you mention `@tx` in PR comments. See [Getting Started](/docs)
+gx writes a review summary into your pull request description and answers
+questions when you mention `@gx` in PR comments. See [Getting Started](/docs)
 for instructions.
 
 ## PR summaries
 
-Totality appends a summary to your pull request description, with links and
+gx appends a summary to your pull request description, with links and
 attribution for the important changes.
 
 Section Descriptions:
@@ -22,29 +22,29 @@ Section Descriptions:
 | Notable Changes | the changes a reviewer should look at first, each with an `Attribution:` line naming the concrete source: a codebase path, a captured agent session, a prior PR, or docs |
 
 Summaries are generated when the GitHub App sees `pull_request`
-`opened`/`synchronize` for a branch with published Totality context, and after a
+`opened`/`synchronize` for a branch with published gx context, and after a
 publish when a PR already exists. Push again to force a refresh.
 
-## Chat with @tx
+## Chat with @gx
 
-Mention `@tx` in any PR comment:
+Mention `@gx` in any PR comment:
 
 ```text
-@tx which files should I review first?
-@tx explain the auth callback changes
-@tx what is the highest-risk change in this PR?
-@tx are there missing tests?
+@gx which files should I review first?
+@gx explain the auth callback changes
+@gx what is the highest-risk change in this PR?
+@gx are there missing tests?
 ```
 
-Any answer from `@tx` will cite its source (codebase, previous PRs, past
-sessions, etc). `@tx` can answer questions based on outcomes from sessions,
+Any answer from `@gx` will cite its source (codebase, previous PRs, past
+sessions, etc). `@gx` can answer questions based on outcomes from sessions,
 giving your team full transparency into every coding session.
 
 ### Retire a learned rule
 
 ```text
-@tx skip rule never use var
-@tx do not enforce this migration naming rule
+@gx skip rule never use var
+@gx do not enforce this migration naming rule
 ```
 
 When a matching active rule exists, it is retired and the override recorded.

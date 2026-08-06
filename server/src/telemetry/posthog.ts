@@ -12,7 +12,7 @@ export const Events = {
   GitHubCommentPosted: "server.github.comment.posted",
   GitHubWebhook: "server.github.webhook",
   IndexJob: "server.index.job",
-  TxMentionHandled: "server.tx_mention.handled",
+  GxMentionHandled: "server.gx_mention.handled",
   DeprecatedRouteUsed: "server.route.deprecated",
 } as const;
 
@@ -39,12 +39,12 @@ const noopClient: PostHogClient = {
 let defaultClient: PostHogClient | null = null;
 
 function posthogConfigFromEnv(): PostHogConfig | null {
-  const apiKey = (process.env.TX_POSTHOG_KEY ?? "").trim();
+  const apiKey = (process.env.GX_POSTHOG_KEY ?? "").trim();
   if (!apiKey) {
     return null;
   }
   const host = (
-    process.env.TX_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST
+    process.env.GX_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST
   )
     .trim()
     .replace(/\/+$/, "");
@@ -81,7 +81,7 @@ function createClient(config: PostHogConfig): PostHogClient {
   };
 }
 
-/** Returns a PostHog client or no-op when TX_POSTHOG_KEY is unset. */
+/** Returns a PostHog client or no-op when GX_POSTHOG_KEY is unset. */
 export function posthogFromEnv(fetchImpl: typeof fetch = fetch): PostHogClient {
   const config = posthogConfigFromEnv();
   if (!config) {

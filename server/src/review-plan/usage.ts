@@ -167,7 +167,7 @@ function buildSessionHarnessMap(
     const sessionId = entry.session_id?.trim();
     const tool = entry.agent_tool?.trim();
     if (!sessionId || !tool) continue;
-    if (tool === "tx_commit") continue;
+    if (tool === "gx_commit") continue;
     map.set(sessionId, {
       harness: tool,
       model: typeof entry.model_id === "string" ? entry.model_id : undefined,
@@ -178,7 +178,7 @@ function buildSessionHarnessMap(
     if (!sessionId || map.has(sessionId)) continue;
     const heuristic =
       harnessFromCommand(session.command, session.process_name) ||
-      (typeof session.tool === "string" && session.tool !== "tx_commit"
+      (typeof session.tool === "string" && session.tool !== "gx_commit"
         ? session.tool
         : null);
     if (heuristic) {

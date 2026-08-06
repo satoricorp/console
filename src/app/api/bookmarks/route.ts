@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { api } from "../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
-import { txApiRequest } from "@/lib/tx-api-server";
+import { gxApiRequest } from "@/lib/gx-api-server";
 
 const ALLOWED_STATUS = new Set(["open", "merged", "closed", "archived"]);
 
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const params = new URLSearchParams();
   if (mergeStatus) params.set("merge_status", mergeStatus);
   const qs = params.toString();
-  const upstream = await txApiRequest(
+  const upstream = await gxApiRequest(
     viewer.id,
     qs ? `/v1/reviews?${qs}` : "/v1/reviews",
   );

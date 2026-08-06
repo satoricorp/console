@@ -1,15 +1,15 @@
-Version control: plain Git. TX's surface here is **review**, not committing.
+Version control: plain Git. gx's surface here is **review**, not committing.
 
 Default flow:
 - `git add` to stage
 - `git commit -m "…"` — plain Git. Capture is hook-driven: the `prepare-commit-msg` hook stamps
   the trailer and `pre-push` matches sessions, so a plain commit is captured. Do not use
-  `tx commit`.
-- `git push` to publish — the TX pre-push hook captures and uploads. Do not run `tx push` or
-  `tx capture push`; the hook is the only publish path.
+  `gx commit`.
+- `git push` to publish — the gx pre-push hook captures and uploads. Do not run `gx push` or
+  `gx capture push`; the hook is the only publish path.
 - `gh pr create` to open the PR; leave the body for human notes only — do not seed a `## Summary`
-  section. TX Cloud appends the rich PR summary below whatever description is already there.
-- `tx review` (or MCP `tx_review`) to review changes.
+  section. gx Cloud appends the rich PR summary below whatever description is already there.
+- `gx review` (or MCP `gx_review`) to review changes.
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know

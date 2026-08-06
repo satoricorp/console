@@ -1,4 +1,4 @@
-ALTER TABLE gx_bookmarks
+ALTER TABLE bookmarks
   ADD COLUMN IF NOT EXISTS app_stack_count INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS app_file_count INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS app_base_branch TEXT NOT NULL DEFAULT 'main',
@@ -9,8 +9,8 @@ WITH bookmark_payloads AS (
   SELECT
     b.id AS bookmark_id,
     e.payload
-  FROM gx_bookmarks b
-  JOIN gx_pr_events e ON e.id = b.latest_event_id
+  FROM bookmarks b
+  JOIN pr_events e ON e.id = b.latest_event_id
 ),
 payload_entries AS (
   SELECT
@@ -167,7 +167,7 @@ token_summary AS (
   ) AS response(value) ON true
   GROUP BY bp.bookmark_id
 )
-UPDATE gx_bookmarks b
+UPDATE bookmarks b
 SET
   app_stack_count = COALESCE(ss.stack_count, 0),
   app_file_count = COALESCE(fs.file_count, 0),

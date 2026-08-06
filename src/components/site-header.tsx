@@ -8,7 +8,7 @@ import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
 import { GetStartedButton } from "@/components/get-started-button";
 import { GitHubIcon } from "@/components/github-icon";
-import { TxWordmark } from "@/components/tx-wordmark";
+import { GxWordmark } from "@/components/gx-wordmark";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
 import { NavSeparator } from "@/components/nav-separator";
 import { SignInLink } from "@/components/sign-in-link";
@@ -321,7 +321,7 @@ export function SiteHeader() {
       <div className="relative flex w-full items-center gap-2 pl-0.5 pr-5 sm:pr-10">
         <Link
           href="/"
-          aria-label="TX home"
+          aria-label="gx home"
           aria-hidden={!showNavLogo}
           tabIndex={showNavLogo ? undefined : -1}
           className={cn(
@@ -331,7 +331,7 @@ export function SiteHeader() {
               : "pointer-events-none max-w-0 opacity-0",
           )}
         >
-          <TxWordmark size="nav" className="px-3 sm:px-4" />
+          <GxWordmark size="nav" className="px-3 sm:px-4" />
         </Link>
 
         <nav

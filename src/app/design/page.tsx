@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { DesignOverview } from "./design-overview";
 
 export const metadata: Metadata = {
-  title: "TX brand assets",
-  description: "Download TX chrome logos and inspect design reference assets",
+  title: "gx brand assets",
+  description: "Download gx chrome logos and inspect design reference assets",
   robots: { index: false, follow: false },
 };
 

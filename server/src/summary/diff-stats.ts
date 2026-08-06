@@ -4,10 +4,10 @@
  *
  * Nothing upstream reports added/removed lines. `fileStats` on a capture
  * extract is `{excludedFiles: N}` — a count of files left out of capture, with
- * no line information at all — and a tx.pr artifact carries no equivalent. The
+ * no line information at all — and an gx.pr artifact carries no equivalent. The
  * only place a line count could come from was the model, which was shown a
  * patch excerpt truncated at 3000 characters per revision and asked to fill in
- * "+X/-Y lines". On satoricorp/tx#112 that produced "+95/-0" against a real
+ * "+X/-Y lines". On satoricorp/gx#112 that produced "+95/-0" against a real
  * +137/-0: a precise-looking number with no source behind it.
  *
  * These functions count the full patch instead, before any truncation, so the
@@ -53,7 +53,7 @@ const DIFF_GIT_RE = /^diff --git a\/(\S+) b\/(\S+)/;
  * a/file` header from a deleted line whose own content begins with `--`, and
  * skipping every line that starts with `---`/`+++` silently undercounts real
  * patches. Removing three column-0 `-- comment` lines from a SQL migration —
- * this repository has several, `014_rename_gx_prefix.sql` alone has fifteen —
+ * this repository has several, `014_orgs_backfill.sql` alone has fourteen —
  * reported +1/-0 against git's own +1/-4. The same held for added lines whose
  * content starts with `++`. Since the prompt now presents this number as
  * authoritative, a wrong one would be asserted with more confidence than the

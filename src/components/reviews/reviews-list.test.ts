@@ -12,7 +12,7 @@ function item(
   overrides: Partial<ReviewListItem> & Pick<ReviewListItem, "id">,
 ): ReviewListItem {
   return {
-    repo_full_name: "acme/tx",
+    repo_full_name: "acme/gx",
     branch_name: "feat/x",
     title: "Example",
     revision: 1,
@@ -30,7 +30,7 @@ function item(
 }
 
 describe("isTxSupportedReview / isNoDataReview", () => {
-  test("webhook-only shells without latest_event_id are not TX-supported", () => {
+  test("webhook-only shells without latest_event_id are not gx-supported", () => {
     const webhookOnly = item({
       id: "webhook",
       latest_event_id: null,
@@ -42,7 +42,7 @@ describe("isTxSupportedReview / isNoDataReview", () => {
     expect(isNoDataReview(webhookOnly)).toBe(true);
   });
 
-  test("failed empty plans with TX evidence are no-data", () => {
+  test("failed empty plans with gx evidence are no-data", () => {
     const empty = item({
       id: "empty",
       plan_status: "failed",
@@ -64,7 +64,7 @@ describe("isOpenGithubReview", () => {
         item({ id: "closed", merge_status: "closed", github_pr_number: 12 }),
       ),
     ).toBe(false);
-    expect(isOpenGithubReview(item({ id: "tx-only" }))).toBe(false);
+    expect(isOpenGithubReview(item({ id: "gx-only" }))).toBe(false);
   });
 });
 

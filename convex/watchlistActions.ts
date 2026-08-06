@@ -6,20 +6,20 @@ import { internal } from "./_generated/api";
  *
  * Convex owns the schedule (crons.ts) and the list (watchlist.ts). This action
  * is the one-directional bridge to the server, which owns the heavy lifting
- * (fetch PRs → generate summary → post as the TX bot). Running on a Convex cron
+ * (fetch PRs → generate summary → post as the gx bot). Running on a Convex cron
  * means exactly one invocation per tick regardless of how many server replicas
  * exist — no leader election / advisory lock needed.
  *
- * The server route is authenticated with TX_CLOUD_API_KEY, the same shared
+ * The server route is authenticated with GX_CLOUD_API_KEY, the same shared
  * secret the server already uses to call Convex (/cx/trial/entitlement).
  */
 export const runWatchTick = internalAction({
   args: {},
   handler: async (ctx): Promise<void> => {
-    const base = process.env.TX_SERVER_INTERNAL_URL?.trim();
-    const apiKey = process.env.TX_CLOUD_API_KEY?.trim();
+    const base = process.env.GX_SERVER_INTERNAL_URL?.trim();
+    const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
     if (!base || !apiKey) {
-      console.info("watch tick skipped: TX_SERVER_INTERNAL_URL / TX_CLOUD_API_KEY not set");
+      console.info("watch tick skipped: GX_SERVER_INTERNAL_URL / GX_CLOUD_API_KEY not set");
       return;
     }
 
@@ -36,7 +36,7 @@ export const runWatchTick = internalAction({
           Accept: "application/json",
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "User-Agent": "tx-convex-cron",
+          "User-Agent": "gx-convex-cron",
         },
         body: JSON.stringify({ repos }),
       });

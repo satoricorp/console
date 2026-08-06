@@ -1,5 +1,5 @@
 import type postgres from "postgres";
-import { handleTxMention } from "../tx-mention/handler";
+import { handleTxMention } from "../gx-mention/handler";
 import { capture, Events } from "../telemetry/posthog";
 import { getInstallationAccessToken } from "./app";
 import { postIssueComment, postPullRequestReviewReply } from "./comments";
@@ -41,7 +41,7 @@ export async function processTxMention(
   }
 
   capture(
-    Events.TxMentionHandled,
+    Events.GxMentionHandled,
     {
       bookmark_id: input.bookmarkId,
       comment_id: input.commentId,
@@ -75,6 +75,6 @@ export async function processTxMention(
       );
     }
   } catch (error) {
-    console.error("Failed to post @tx reply", { error, commentId: input.commentId });
+    console.error("Failed to post @gx reply", { error, commentId: input.commentId });
   }
 }
