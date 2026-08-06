@@ -173,7 +173,7 @@ describeDb("llm_usage metering", () => {
       headers: {
         ...authHeaders("fight-user", orgId),
         "Content-Type": "application/json",
-        "X-GX-Surface": "cli-review",
+        "X-GX-Client": "cli",
       },
       body: JSON.stringify({
         model: BEDROCK_FIGHT_MODELS[0],
@@ -188,7 +188,7 @@ describeDb("llm_usage metering", () => {
     const row = rows[0];
     expect(row.user_id).toBe("fight-user");
     expect(row.model).toBe(BEDROCK_FIGHT_MODELS[0]);
-    expect(row.surface).toBe("cli-review");
+    expect(row.surface).toBe("cli");
     expect(Number(row.input_tokens)).toBe(1234);
     expect(Number(row.output_tokens)).toBe(56);
     expect(row.cost_usd).not.toBeNull();

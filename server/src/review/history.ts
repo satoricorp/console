@@ -39,6 +39,7 @@ export type CodeReviewHistoryRecordInput = {
   headCommitId?: string;
   sourceKind?: string;
   sourceRef?: string;
+  clientSurface?: string;
   prompt?: string;
   scope?: string;
   mode?: string;
@@ -111,14 +112,14 @@ export async function recordCodeReviewHistory(
     const [run] = await tx<{ id: string }[]>`
       INSERT INTO code_review_history_runs (
         org_id, user_id, repo_root_path, repo_full_name, branch_name, head_commit_id,
-        source_kind, source_ref, prompt, scope, mode, reviewer, finding_count,
-        created_at_ms, payload
+        source_kind, source_ref, client_surface, prompt, scope, mode, reviewer,
+        finding_count, created_at_ms, payload
       ) VALUES (
         ${orgId}, ${userId}, ${nullable(input.repoRootPath)}, ${input.repoFullName},
         ${nullable(input.branchName)}, ${nullable(input.headCommitId)}, ${sourceKind},
-        ${nullable(input.sourceRef)}, ${nullable(input.prompt)}, ${nullable(input.scope)},
-        ${nullable(input.mode)}, ${nullable(input.reviewer)}, ${findings.length}, ${now},
-        ${tx.json(runPayload as postgres.JSONValue)}
+        ${nullable(input.sourceRef)}, ${nullable(input.clientSurface)}, ${nullable(input.prompt)},
+        ${nullable(input.scope)}, ${nullable(input.mode)}, ${nullable(input.reviewer)},
+        ${findings.length}, ${now}, ${tx.json(runPayload as postgres.JSONValue)}
       )
       RETURNING id
     `;

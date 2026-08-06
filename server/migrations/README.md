@@ -32,7 +32,8 @@ Forward-only Postgres migrations for the consolidated gx server. The original AP
 26. `server/migrations/026_watch_posts.sql`
 27. `server/migrations/027_publish_schema_version.sql`
 28. `server/migrations/028_drop_porcelain_tables.sql`
-29. `server/migrations/029_llm_usage.sql`
+29. `server/migrations/029_review_client_surface.sql`
+30. `server/migrations/030_llm_usage.sql`
 
 ### Applying the chain
 
@@ -73,7 +74,7 @@ Added in 013: `orgs`, `pr_comments`, `decisions`, `rules`, `outcomes`, `hunk_lin
 
 Child tables in 015–016: `conflict_files`, `conflict_check_diagnostics`, `bookmark_ci_checks`.
 
-Added in 029: `llm_usage` (append-only per-call token/cost ledger; no FK to `orgs` by design).
+Added in 030: `llm_usage` (append-only per-call token/cost ledger; no FK to `orgs` by design).
 
 ## Org backfill (014)
 
