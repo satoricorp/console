@@ -155,6 +155,24 @@ export class GxServerStack extends Stack {
         memoryLimitMiB: props.environmentName === "production" ? 2048 : 1024,
         desiredCount: props.desiredCount,
         assignPublicIp: false,
+        /**
+         * A review's judge call is a flagship model reading a large brief, and
+         * every layer of that path is already sized for it: the CLI's cloud
+         * client waits 5 minutes (cloud.defaultBedrockTimeout) and
+         * /gx/bedrock/fight bounds its own Bedrock call at the same 300s
+         * (defaultTimeoutMs). The load balancer in between was the one hop
+         * nobody set, so it sat on the ELB default of 60 seconds and cut the
+         * judge off mid-call — the client saw a 504 and an HTML error page
+         * instead of a review, which reads like an outage rather than a
+         * timeout.
+         *
+         * 330s is deliberately just above the 300s the client and the route
+         * allow, not equal to it: whichever timer fires first decides the error
+         * the user gets, and the application's own deadline produces a typed,
+         * actionable failure while the balancer's produces opaque HTML. Kept
+         * strictly greater so the ALB is never the one to answer.
+         */
+        idleTimeout: Duration.seconds(330),
         // Allows `aws ecs execute-command` shells and SSM port forwarding
         // to RDS through the task (scripts/rds.sh).
         enableExecuteCommand: true,
