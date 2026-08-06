@@ -18,12 +18,23 @@ export type IndexSearchResult = {
   attributes: Record<string, unknown>;
 };
 
-export async function embedQueryText(query: string): Promise<number[] | null> {
+/**
+ * One TurboPuffer filter clause: [attribute, operator, value] where the value's
+ * type follows the operator (string for Eq, boolean for Eq on bools, string[]
+ * for In/ContainsAny), or a nested And/Or over clauses.
+ */
+export type IndexFilterClause = [string, string, unknown] | ["And" | "Or", IndexFilterClause[]];
+
+export async function embedQueryText(query: string, namespace?: string): Promise<number[] | null> {
   const cfg = indexingConfig();
   if (!cfg) return null;
   const trimmed = query.trim();
   if (!trimmed) return null;
-  const [vector] = await embedTexts(cfg, [trimmed]);
+  // Namespaces do not all share one vector width — embed with the profile the
+  // target namespace was written with, or the caller's vector is discarded and
+  // re-embedded by searchIndex.
+  const profile = namespace ? embeddingProfileForNamespace(namespace) : undefined;
+  const [vector] = await embedTexts(cfg, [trimmed], profile);
   return vector ?? null;
 }
 
@@ -80,7 +91,7 @@ export async function searchIndex(args: {
   /** Override namespace (e.g. shared knowledge). When set, org/repo filters are not applied unless includeOrgFilter. */
   namespace?: string;
   includeOrgFilter?: boolean;
-  extraFilters?: Array<[string, string, string]>;
+  extraFilters?: IndexFilterClause[];
   /** Precomputed embedding — avoids duplicate OpenAI calls when querying multiple buckets. */
   vector?: number[];
   /**
@@ -122,7 +133,7 @@ export async function searchIndex(args: {
     return [];
   }
 
-  const filterClauses: Array<[string, string, string] | ["Or", Array<[string, string, string]>]> = [];
+  const filterClauses: IndexFilterClause[] = [];
   const useOrgFilter = args.includeOrgFilter ?? !args.namespace;
   if (useOrgFilter) {
     filterClauses.push(["org_id", "Eq", args.orgId]);
@@ -133,7 +144,7 @@ export async function searchIndex(args: {
   } else if (args.sourceKinds && args.sourceKinds.length > 1) {
     filterClauses.push([
       "Or",
-      args.sourceKinds.map((kind) => ["source_kind", "Eq", kind] as [string, string, string]),
+      args.sourceKinds.map((kind) => ["source_kind", "Eq", kind] as IndexFilterClause),
     ]);
   }
   for (const extra of args.extraFilters ?? []) {
