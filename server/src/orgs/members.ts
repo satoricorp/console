@@ -59,6 +59,31 @@ export async function requireOrgMembership(
   return isOrgMember(getSql(), orgId, githubUserId);
 }
 
+/**
+ * Map a GitHub user to their Convex identity within an org. Returns null for
+ * external contributors (no org_members row), unmapped members, and on any
+ * error — attribution is best-effort and must not fail comment ingest.
+ */
+export async function resolveConvexUserIdForGithubUser(
+  db: SqlExecutor,
+  orgId: string,
+  githubUserId: number | null | undefined,
+): Promise<string | null> {
+  if (typeof githubUserId !== "number") return null;
+  try {
+    const [row] = await db<{ convex_user_id: string | null }[]>`
+      SELECT convex_user_id
+      FROM org_members
+      WHERE org_id = ${orgId}::uuid
+        AND github_user_id = ${githubUserId}
+      LIMIT 1
+    `;
+    return row?.convex_user_id?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function upsertOrgMember(
   db: SqlExecutor,
   args: {

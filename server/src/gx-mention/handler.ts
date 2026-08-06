@@ -40,6 +40,8 @@ export type GxMentionInput = {
 
 export type GxMentionResult = {
   reply: string | null;
+  /** LLM behind the winning chat reply; null for veto/fallback replies. */
+  replyModel: string | null;
   vetoedRuleText: string | null;
   retiredRuleIds: string[];
 };
@@ -51,6 +53,7 @@ type LatestSummary = {
 
 type ChatRun = {
   text: string | null;
+  model: string | null;
   score: number;
   error: string | null;
 };
@@ -86,6 +89,7 @@ export async function handleTxMention(
       });
       return {
         reply: `gx: only collaborators with write access can retire rules.`,
+        replyModel: null,
         vetoedRuleText: null,
         retiredRuleIds: [],
       };
@@ -141,6 +145,7 @@ export async function handleTxMention(
 
     return {
       reply,
+      replyModel: null,
       vetoedRuleText: vetoTarget,
       retiredRuleIds,
     };
@@ -170,7 +175,7 @@ export async function handleTxMention(
     gitBlameContext,
     recentComments,
   });
-  const reply = await generateTxChatReply({
+  const chat = await generateTxChatReply({
     author: input.author,
     question,
     latestSummary: latestSummary?.content ?? null,
@@ -200,14 +205,16 @@ export async function handleTxMention(
     bookmarkId: input.bookmarkId,
     commentId: input.commentId,
     author: input.author,
-    replied: Boolean(reply),
+    replied: Boolean(chat.text),
+    model: chat.model,
     githubPrFiles: githubPrFiles.length,
     gitBlameRows: gitBlameContext?.rows.length ?? 0,
     citationCount: citationContext.citations.length,
   });
 
   return {
-    reply,
+    reply: chat.text,
+    replyModel: chat.model,
     vetoedRuleText: null,
     retiredRuleIds,
   };
@@ -354,7 +361,7 @@ async function generateTxChatReply(input: {
   gitBlameContext: GitBlameContext | null;
   recentComments: RecentComment[];
   citationContext: GxCitationContext;
-}): Promise<string> {
+}): Promise<{ text: string; model: string | null }> {
   const providers = createReviewProviders(input.question || input.latestSummary || "gx mention");
   const userPrompt = buildTxChatUserPrompt({
     ...input,
@@ -369,10 +376,11 @@ async function generateTxChatReply(input: {
       const text = structured
         ? formatStructuredChatReply(structured, input.citationContext, provider.name)
         : normalizeChatReply(completion.text);
-      runs.push({ text, score: scoreChatReply(text), error: null });
+      runs.push({ text, model: completion.model, score: scoreChatReply(text), error: null });
     } catch (error) {
       runs.push({
         text: null,
+        model: null,
         score: 0,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -383,13 +391,16 @@ async function generateTxChatReply(input: {
     .filter((run): run is ChatRun & { text: string } => Boolean(run.text))
     .sort((a, b) => b.score - a.score)[0];
   if (best) {
-    return best.text;
+    return { text: best.text, model: best.model };
   }
 
   const failure = runs.find((run) => run.error)?.error;
-  return failure
-    ? `gx: I couldn't answer from the review context (${failure}).`
-    : "gx: I couldn't answer from the available review context.";
+  return {
+    text: failure
+      ? `gx: I couldn't answer from the review context (${failure}).`
+      : "gx: I couldn't answer from the available review context.",
+    model: null,
+  };
 }
 
 function formatStructuredChatReply(
