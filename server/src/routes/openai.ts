@@ -1,5 +1,10 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { getSql } from "../db";
+import {
+  openAIUsageFromResponseBody,
+  recordLLMUsage,
+} from "../metering/llm-usage";
 import {
   checkCloudAIQuota,
   TrialEntitlementUnavailableError,
@@ -144,9 +149,30 @@ async function postOpenAI(path: string, payload: Record<string, unknown>): Promi
 }
 
 async function proxyOpenAIResponse(
+  c: Context<AppEnv>,
+  endpoint: string,
   response: Response,
 ): Promise<Response> {
   const body = await response.text();
+  // Best-effort metering before the bytes go back out. Streaming (SSE) bodies
+  // and error payloads parse to null and record nothing; a metering failure
+  // never fails the proxy request (recordLLMUsage is fire-and-forget).
+  if (response.ok) {
+    const parsed = openAIUsageFromResponseBody(body);
+    if (parsed) {
+      const auth = c.get("auth");
+      recordLLMUsage(getSql(), {
+        orgId: auth.orgId,
+        userId: auth.userId,
+        sessionId: auth.sessionId ?? null,
+        machineId: auth.machineId ?? null,
+        surface: c.req.header("X-GX-Surface") ?? null,
+        endpoint,
+        model: parsed.model,
+        usage: parsed.usage,
+      });
+    }
+  }
   return new Response(body, {
     status: response.status,
     headers: {
@@ -171,7 +197,11 @@ openAIRoutes.post("/chat-completions", async (c) => {
     return c.json({ error: "Invalid chat completion payload" }, 400);
   }
 
-  return proxyOpenAIResponse(await postOpenAI("/chat/completions", payload));
+  return proxyOpenAIResponse(
+    c,
+    "openai.chat-completions",
+    await postOpenAI("/chat/completions", payload),
+  );
 });
 
 openAIRoutes.post("/responses", async (c) => {
@@ -190,5 +220,9 @@ openAIRoutes.post("/responses", async (c) => {
     return c.json({ error: "Invalid responses payload" }, 400);
   }
 
-  return proxyOpenAIResponse(await postOpenAI("/responses", payload));
+  return proxyOpenAIResponse(
+    c,
+    "openai.responses",
+    await postOpenAI("/responses", payload),
+  );
 });
