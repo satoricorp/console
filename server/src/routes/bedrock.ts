@@ -13,6 +13,7 @@ import {
   getBedrockClient,
   SERVER_BEDROCK_ANTHROPIC_MODEL,
 } from "../llm/provider";
+import { recordLLMUsage } from "../metering/llm-usage";
 import {
   checkCloudAIQuota,
   TrialEntitlementUnavailableError,
@@ -577,6 +578,22 @@ bedrockRoutes.post("/fight", async (c) => {
       region,
       inputTokens: response.usage?.inputTokens ?? 0,
       outputTokens: response.usage?.outputTokens ?? 0,
+    });
+    const auth = c.get("auth");
+    recordLLMUsage(getSql(), {
+      orgId: auth.orgId,
+      userId: auth.userId,
+      sessionId: auth.sessionId ?? null,
+      machineId: auth.machineId ?? null,
+      surface: c.req.header("X-GX-Client") ?? null,
+      endpoint: "bedrock.fight",
+      model: request.modelId,
+      usage: {
+        inputTokens: response.usage?.inputTokens ?? 0,
+        outputTokens: response.usage?.outputTokens ?? 0,
+        cacheReadTokens: response.usage?.cacheReadInputTokens,
+        cacheWriteTokens: response.usage?.cacheWriteInputTokens,
+      },
     });
     return c.json(fightResponseBody(request.modelId, response));
   } catch (error) {
