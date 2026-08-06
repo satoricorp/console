@@ -65,6 +65,11 @@ export const BEDROCK_FIGHT_MODELS = [
   "us.anthropic.claude-opus-4-6-v1",
   "us.anthropic.claude-opus-4-5-20251101-v1:0",
   "us.anthropic.claude-sonnet-4-6",
+  // Haiku is the CLI's default first reviewer leg: same recall as the larger
+  // models on our review fixtures at roughly 2.4x their throughput and a fifth
+  // of Opus's price. Without it here the CLI's default configuration fails
+  // closed against this endpoint with model_not_allowed.
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 ] as const;
 
 /** Allowlist = the fight models plus whatever this server already calls itself. */
