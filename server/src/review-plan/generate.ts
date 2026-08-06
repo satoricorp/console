@@ -7,6 +7,7 @@ import {
   REVIEW_PLAN_SYSTEM_PROMPT,
   buildReviewPlanUserPrompt,
 } from "../llm/prompts/review-plan";
+import { recordLLMUsage } from "../metering/llm-usage";
 import { loadReviewPlanContext } from "./context";
 import type { ReviewPlan, UsageBreakdown } from "./types";
 import {
@@ -171,6 +172,16 @@ export async function generateReviewPlan(
           REVIEW_PLAN_SYSTEM_PROMPT,
           userPrompt,
         );
+        // Every provider attempt spends tokens, not just the winning plan.
+        if (completion.usage) {
+          recordLLMUsage(db, {
+            orgId: input.orgId,
+            userId: "system",
+            endpoint: "review-plan.generate",
+            model: completion.model,
+            usage: completion.usage,
+          });
+        }
         const validated = parseAndValidateReviewPlan(completion.text, ctx);
         runs.push({
           provider: provider.name,

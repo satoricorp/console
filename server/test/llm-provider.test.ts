@@ -66,6 +66,50 @@ describe("createLLMProvider", () => {
     });
   });
 
+  test("carries usage through, splitting cached tokens out of input", async () => {
+    process.env.GX_OPENAI_API_KEY = "test-key";
+    process.env.GX_OPENAI_BASE_URL = "https://api.openai.test";
+    process.env.GX_REVIEW_OPENAI_MODEL = "test-model";
+    delete process.env.OPENAI_API_KEY;
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          model: "test-model",
+          output_text: "summary",
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 50,
+            input_tokens_details: { cached_tokens: 400 },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const result = await createLLMProvider().complete("system", "user");
+
+    expect(result.usage).toEqual({
+      inputTokens: 600,
+      outputTokens: 50,
+      cacheReadTokens: 400,
+    });
+  });
+
+  test("leaves usage absent when the response has an empty usage object", async () => {
+    process.env.GX_OPENAI_API_KEY = "test-key";
+    process.env.GX_OPENAI_BASE_URL = "https://api.openai.test";
+    delete process.env.OPENAI_API_KEY;
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ model: "test-model", output_text: "summary", usage: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const result = await createLLMProvider().complete("system", "user");
+    expect(result.usage).toBeUndefined();
+  });
+
   test("prefers Bedrock over plain OPENAI_API_KEY when AWS is configured", () => {
     delete process.env.GX_OPENAI_API_KEY;
     process.env.OPENAI_API_KEY = "embedding-key";
