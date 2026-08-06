@@ -1,6 +1,7 @@
 import type postgres from "postgres";
 import { findOrCreateBookmark } from "../bookmarks/adoption";
 import { containsTxMention } from "../gx-mention/handler";
+import { resolveConvexUserIdForGithubUser } from "../orgs/members";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { resolveOrgIdForInstallation } from "./app";
 import { processTxMention } from "./mention";
@@ -26,6 +27,11 @@ export async function ingestLineComment(
   const body = input.comment.body?.trim() ?? "";
   const author = input.comment.user?.login ?? "unknown";
   const isTx = containsTxMention(body);
+  const userId = await resolveConvexUserIdForGithubUser(
+    db,
+    orgId,
+    input.comment.user?.id,
+  );
 
   if (typeof input.comment.id === "number") {
     const [existing] = await db<{ id: string; bookmark_id: string; author: string }[]>`
@@ -42,6 +48,7 @@ export async function ingestLineComment(
           bookmarkId: existing.bookmark_id,
           commentId: existing.id,
           author: existing.author,
+          userId,
           body,
           file: input.comment.path ?? null,
           line: input.comment.line ?? null,
@@ -78,6 +85,7 @@ export async function ingestLineComment(
       line,
       in_reply_to,
       is_gx_mention,
+      user_id,
       created_at_ms
     ) VALUES (
       ${orgId},
@@ -89,6 +97,7 @@ export async function ingestLineComment(
       ${input.comment.line ?? null},
       ${input.comment.in_reply_to_id ?? null},
       ${isTx},
+      ${userId},
       ${now}
     )
     RETURNING id
@@ -110,6 +119,7 @@ export async function ingestLineComment(
       bookmarkId: bookmark.id,
       commentId: row.id,
       author,
+      userId,
       body,
       file: input.comment.path ?? null,
       line: input.comment.line ?? null,

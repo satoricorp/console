@@ -4,7 +4,8 @@ import { getSql } from "../db";
 import { adoptLatestEventFromBranchSibling, findOrCreateBookmark } from "../bookmarks/adoption";
 import { containsTxMention } from "../gx-mention/handler";
 import { enqueueIndexJob } from "../indexing/jobs";
-import { QuotaExceededError } from "../metering/quota";
+import { looksLikeConvexUserId, QuotaExceededError } from "../metering/quota";
+import { resolveConvexUserIdForGithubUser } from "../orgs/members";
 import { detectOutcomeStub } from "../outcomes/stub";
 import type { ClassifyInput } from "../rules/classifier";
 import { generateSummary } from "../summary/generate";
@@ -331,7 +332,7 @@ async function resolveEventPublisherUserId(
     LIMIT 1
   `;
   const userId = event?.user_id?.trim();
-  if (userId && userId !== "github-webhook" && !userId.startsWith("github:")) {
+  if (looksLikeConvexUserId(userId)) {
     return userId;
   }
   if (typeof event?.github_user_id === "number") {
@@ -443,11 +444,16 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
 
   const body = review.body?.trim() ?? "";
   const author = review.user?.login ?? "unknown";
+  const reviewerUserId = await resolveConvexUserIdForGithubUser(
+    db,
+    orgId,
+    review.user?.id,
+  );
   const now = Date.now();
 
   const [comment] = await db<{ id: string }[]>`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, user_id, created_at_ms
     ) VALUES (
       ${orgId},
       ${bookmark.id},
@@ -455,6 +461,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
       ${author},
       ${body || "(review)"},
       ${containsTxMention(body)},
+      ${reviewerUserId},
       ${now}
     )
     RETURNING id
@@ -483,6 +490,7 @@ async function handlePullRequestReview(db: postgres.Sql, payload: WebhookPayload
       bookmarkId: bookmark.id,
       commentId: comment.id,
       author,
+      userId: reviewerUserId,
       body,
       file: null,
       line: null,
