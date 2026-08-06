@@ -2,8 +2,8 @@
  * GitHub REST helpers for the OSS "watch" rail.
  *
  * The server has no `gh` binary, so these replace the `gh pr view` / `gh pr diff`
- * calls that scripts/outreach.ts uses. Everything reads with the TX bot user's
- * token (TX_WATCH_GITHUB_TOKEN) — a classic `public_repo` PAT or a fine-grained
+ * calls that scripts/outreach.ts uses. Everything reads with the gx bot user's
+ * token (GX_WATCH_GITHUB_TOKEN) — a classic `public_repo` PAT or a fine-grained
  * token with read on the watched repos plus pull-request write for posting.
  */
 
@@ -12,7 +12,7 @@ function headers(token: string, accept = "application/vnd.github+json"): Record<
     Accept: accept,
     Authorization: `Bearer ${token}`,
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "tx-watch",
+    "User-Agent": "gx-watch",
   };
 }
 

@@ -16,10 +16,10 @@ import type postgres from "postgres";
  */
 export async function syncInstallationOrgsToConvex(db: postgres.Sql): Promise<number> {
   const base = process.env.CONVEX_SITE_URL?.trim().replace(/\/+$/, "");
-  const apiKey = process.env.TX_CLOUD_API_KEY?.trim();
+  const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
   if (!base || !apiKey) {
     console.warn(
-      "installation -> org sync skipped: CONVEX_SITE_URL or TX_CLOUD_API_KEY is unset, so Convex cannot resolve an org and will not index",
+      "installation -> org sync skipped: CONVEX_SITE_URL or GX_CLOUD_API_KEY is unset, so Convex cannot resolve an org and will not index",
     );
     return 0;
   }
@@ -49,7 +49,7 @@ export async function syncInstallationOrgsToConvex(db: postgres.Sql): Promise<nu
       Accept: "application/json",
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "User-Agent": "tx-cloud",
+      "User-Agent": "gx-cloud",
     },
     body: JSON.stringify({ installations }),
     signal: AbortSignal.timeout(15000),

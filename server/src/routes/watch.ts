@@ -6,17 +6,17 @@ export const watchRoutes = new Hono();
 
 /** Feature flag — the whole rail stays dormant until this is explicitly on. */
 function watchEnabled(): boolean {
-  const flag = process.env.TX_WATCH_ENABLED?.trim().toLowerCase();
+  const flag = process.env.GX_WATCH_ENABLED?.trim().toLowerCase();
   return flag === "1" || flag === "true";
 }
 
 /**
  * Internal tick endpoint, called only by the Convex cron
- * (convex/watchlistActions.ts). Authenticated with TX_CLOUD_API_KEY — the same
+ * (convex/watchlistActions.ts). Authenticated with GX_CLOUD_API_KEY — the same
  * shared secret the server uses to call Convex — so it is not client-reachable.
  */
 watchRoutes.post("/internal/watch/tick", async (c) => {
-  const expected = process.env.TX_CLOUD_API_KEY?.trim();
+  const expected = process.env.GX_CLOUD_API_KEY?.trim();
   const authHeader = c.req.header("Authorization") ?? "";
   const token = authHeader.startsWith("Bearer ")
     ? authHeader.slice("Bearer ".length).trim()
@@ -31,8 +31,8 @@ watchRoutes.post("/internal/watch/tick", async (c) => {
     return c.json({ ok: true, disabled: true });
   }
 
-  if (!process.env.TX_WATCH_GITHUB_TOKEN?.trim()) {
-    return c.json({ error: "TX_WATCH_GITHUB_TOKEN is not set" }, 500);
+  if (!process.env.GX_WATCH_GITHUB_TOKEN?.trim()) {
+    return c.json({ error: "GX_WATCH_GITHUB_TOKEN is not set" }, 500);
   }
 
   let body: { repos?: WatchRepoInput[] };

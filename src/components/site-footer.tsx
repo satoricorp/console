@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DiscordIcon } from "@/components/discord-icon";
-import { TxLogo } from "@/components/tx-logo";
+import { GxLogo } from "@/components/gx-logo";
 import { GitHubIcon } from "@/components/github-icon";
 import { SatoriLogo } from "@/components/satori-logo";
 import { authClient } from "@/lib/auth-client";
@@ -41,7 +41,7 @@ export function SiteFooter() {
             <p className="max-w-[16rem] text-sm leading-6 text-zinc-600">
               Simplified Code Review
             </p>
-            <TxLogo variant="footer" />
+            <GxLogo variant="footer" />
           </div>
 
           <nav

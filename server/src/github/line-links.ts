@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-/** HTML link matching the former TX CLI `formatPRSummaryLink` for PR bodies. */
+/** HTML link matching the former gx CLI `formatPRSummaryLink` for PR bodies. */
 export function formatPRSummaryLink(text: string, url: string): string {
   const label = text.trim();
   const href = url.trim();

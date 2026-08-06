@@ -19,7 +19,7 @@ export class QuotaExceededError extends Error {
   constructor(result: QuotaCheckResult) {
     super(
       result.reason === "trial_expired"
-        ? "TX free trial has ended"
+        ? "gx free trial has ended"
         : `PR Summary quota exceeded (${result.used}/${result.limit})`,
     );
     this.name = "QuotaExceededError";
@@ -64,7 +64,7 @@ async function fetchTrialEntitlement(
   userId: string,
 ): Promise<TrialEntitlement | null> {
   const base = convexSiteURL();
-  const apiKey = process.env.TX_CLOUD_API_KEY?.trim();
+  const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
   if (!base || !apiKey) {
     return null;
   }
@@ -77,7 +77,7 @@ async function fetchTrialEntitlement(
         Accept: "application/json",
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "User-Agent": "tx-cloud",
+        "User-Agent": "gx-cloud",
       },
       body: JSON.stringify({ user_id: userId }),
     });
@@ -258,14 +258,14 @@ export async function recordPrSummaryUsage(
 export function upgradeMessage(result: QuotaCheckResult): string {
   if (result.reason === "trial_expired") {
     return [
-      "TX free trial has ended for this org.",
+      "gx free trial has ended for this org.",
       "Unlimited reviews during your trial week — upgrade to keep going.",
       `Upgrade: ${result.upgradeUrl}`,
     ].join("\n");
   }
 
   return [
-    "TX PR Summary quota reached for this org.",
+    "gx PR Summary quota reached for this org.",
     `Upgrade: ${result.upgradeUrl}`,
   ].join("\n");
 }

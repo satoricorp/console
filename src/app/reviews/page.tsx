@@ -8,7 +8,7 @@ import { ReviewsEmptyState } from "@/components/reviews/reviews-empty-state";
 import { SignInLink } from "@/components/sign-in-link";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { DEMO_REVIEW_LIST } from "@/lib/demo-review";
-import { txApiJson } from "@/lib/tx-api-server";
+import { gxApiJson } from "@/lib/gx-api-server";
 
 export default async function ReviewsPage({
   searchParams,
@@ -59,14 +59,14 @@ export default async function ReviewsPage({
   let bookmarks: ReviewListItem[] = [];
   let isEmpty = true;
   try {
-    bookmarks = await txApiJson<ReviewListItem[]>(
+    bookmarks = await gxApiJson<ReviewListItem[]>(
       viewer.id,
       "/v1/reviews?merge_status=open&github_pr_only=1",
     );
     if (bookmarks.length > 0) {
       isEmpty = false;
     } else {
-      const any = await txApiJson<ReviewListItem[]>(
+      const any = await gxApiJson<ReviewListItem[]>(
         viewer.id,
         "/v1/reviews?include_archived=1",
       );
@@ -89,7 +89,7 @@ export default async function ReviewsPage({
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
             {isEmpty
-              ? "How to review PRs with TX"
+              ? "How to review PRs with gx"
               : "Published changes, grouped by repository."}
           </p>
         </div>

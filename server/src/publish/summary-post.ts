@@ -33,7 +33,7 @@ export async function postMissingPrSummaryAfterPublish(
     FROM pr_comments
     WHERE org_id = ${input.orgId}
       AND bookmark_id = ${input.bookmark.id}
-      AND author = 'tx'
+      AND author = 'gx'
     LIMIT 1
   `;
   if (existingPostedSummary) {
@@ -147,12 +147,12 @@ export async function postMissingPrSummaryAfterPublish(
 
   await db`
     INSERT INTO pr_comments (
-      org_id, bookmark_id, github_comment_id, author, body, is_tx_mention, created_at_ms
+      org_id, bookmark_id, github_comment_id, author, body, is_gx_mention, created_at_ms
     ) VALUES (
       ${input.orgId},
       ${input.bookmark.id},
       ${null},
-      'tx',
+      'gx',
       ${postedBody},
       false,
       ${Date.now()}

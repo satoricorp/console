@@ -30,7 +30,7 @@ export default function AppleIcon() {
           lineHeight: 1,
         }}
       >
-        TX
+        gx
       </div>
     ),
     {

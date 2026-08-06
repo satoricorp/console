@@ -5,7 +5,7 @@ export function PlanPending() {
         <div className="spinner" aria-hidden="true" />
         <h2>Analyzing this push</h2>
         <p>
-          tx is ranking what needs human review — pattern changes, blast radius,
+          gx is ranking what needs human review — pattern changes, blast radius,
           and architectural decisions. Usually under a minute.
         </p>
       </div>
@@ -37,7 +37,7 @@ export function PlanFallback({
       <div className="notice">
         <span className="mark">!</span>
         <p>
-          tx couldn’t build a review plan for this push.
+          gx couldn’t build a review plan for this push.
           <small>
             Showing the standard summary and full diffs instead.
             {error ? ` (${error})` : ""}{" "}

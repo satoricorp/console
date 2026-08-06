@@ -1,5 +1,5 @@
 -- WP-4: orgs + new org-keyed ledger tables (no queryable JSONB on new tables).
--- FKs reference gx_bookmarks / gx_pr_events; 014 renames preserve FK constraints.
+-- FKs reference bookmarks / pr_events; 014 renames preserve FK constraints.
 
 CREATE TABLE IF NOT EXISTS orgs (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,7 +16,7 @@ CREATE INDEX IF NOT EXISTS orgs_installation_id
 CREATE TABLE IF NOT EXISTS pr_comments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id              UUID NOT NULL REFERENCES orgs(id),
-  bookmark_id         UUID NOT NULL REFERENCES gx_bookmarks(id) ON DELETE CASCADE,
+  bookmark_id         UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
   github_comment_id   BIGINT,
   author              TEXT,
   body                TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS pr_comments_org_bookmark
 CREATE TABLE IF NOT EXISTS decisions (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id              UUID NOT NULL REFERENCES orgs(id),
-  bookmark_id         UUID NOT NULL REFERENCES gx_bookmarks(id) ON DELETE CASCADE,
+  bookmark_id         UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
   reviewer            TEXT NOT NULL,
   action              TEXT NOT NULL CHECK (action IN ('approve', 'request_changes', 'comment')),
   source_comment_id   UUID REFERENCES pr_comments(id) ON DELETE SET NULL,
@@ -76,7 +76,7 @@ CREATE INDEX IF NOT EXISTS rules_org_status
 CREATE TABLE IF NOT EXISTS outcomes (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id              UUID NOT NULL REFERENCES orgs(id),
-  bookmark_id         UUID NOT NULL REFERENCES gx_bookmarks(id) ON DELETE CASCADE,
+  bookmark_id         UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
   kind                TEXT NOT NULL CHECK (kind IN ('revert', 'hotfix', 'incident', 'clean')),
   evidence_sha        TEXT,
   evidence_pr         INTEGER,
@@ -91,11 +91,11 @@ CREATE INDEX IF NOT EXISTS outcomes_org_id
 CREATE INDEX IF NOT EXISTS outcomes_org_bookmark
   ON outcomes (org_id, bookmark_id, detected_at_ms DESC);
 
--- WP-1 hunk matcher output; event_id → pr_events (gx_pr_events until 014 rename)
+-- WP-1 hunk matcher output; event_id → pr_events (pr_events until 014 rename)
 CREATE TABLE IF NOT EXISTS hunk_links (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id              UUID NOT NULL REFERENCES orgs(id),
-  event_id            UUID NOT NULL REFERENCES gx_pr_events(id) ON DELETE CASCADE,
+  event_id            UUID NOT NULL REFERENCES pr_events(id) ON DELETE CASCADE,
   file                TEXT NOT NULL,
   line_start          INTEGER NOT NULL,
   line_end            INTEGER NOT NULL,
@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS hunk_links_org_event
 CREATE TABLE IF NOT EXISTS summaries (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id              UUID NOT NULL REFERENCES orgs(id),
-  bookmark_id         UUID NOT NULL REFERENCES gx_bookmarks(id) ON DELETE CASCADE,
+  bookmark_id         UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE,
   content             TEXT NOT NULL,
   model               TEXT,
   latency_ms          BIGINT,

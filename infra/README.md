@@ -1,9 +1,9 @@
-# TX Server Deploy
+# gx Server Deploy
 
 This CDK app lives in the private Console repo. It deploys the Hono server in
 `server/` to ECS/Fargate with private RDS Postgres, an ALB, Route 53 records,
 and Bedrock access through the ECS task role. It also serves the macOS app ZIP
-from `https://download.<domain>/TX-macOS.zip` through CloudFront and a private
+from `https://download.<domain>/gx-macOS.zip` through CloudFront and a private
 S3 bucket.
 
 ## Local Bedrock Setup
@@ -145,13 +145,13 @@ smoke-tests `https://api.<domain>/health`.
 
 - The ECS task role allows `bedrock:InvokeModel` and
   `bedrock:InvokeModelWithResponseStream` for the hardcoded model list in
-  `lib/tx-server-stack.ts`: the server's own Sonnet summary model plus the two
+  `lib/gx-server-stack.ts`: the server's own Sonnet summary model plus the two
   Opus reviewers the `/gx/bedrock/fight` passthrough proxies for the CLI. Each
   is granted as a `us.` inference profile *and* as its underlying foundation
   model in every region (cross-region inference needs both). Adding a model to
   `BEDROCK_FIGHT_MODELS` in `server/src/routes/bedrock.ts` without adding it
   here is an `AccessDeniedException` in production only.
-- `download.<domain>` serves the latest uploaded `TX-macOS.zip`; the API
+- `download.<domain>` serves the latest uploaded `gx-macOS.zip`; the API
   remains on `staging.<domain>` and `api.<domain>`.
 - RDS is private and only reachable from the ECS service security group.
 - Migrations run in GitHub Actions by starting a one-off Fargate task inside the

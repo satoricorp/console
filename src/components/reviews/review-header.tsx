@@ -13,17 +13,17 @@ function relativeTime(ms: number): string {
 }
 
 function statusDot(status: string): string {
-  if (status === "merged") return "var(--tx-ok)";
-  if (status === "closed") return "var(--tx-muted)";
-  return "var(--tx-ok)";
+  if (status === "merged") return "var(--gx-ok)";
+  if (status === "closed") return "var(--gx-muted)";
+  return "var(--gx-ok)";
 }
 
 function riskDot(level: string | null): string {
   const l = (level ?? "").toLowerCase();
-  if (l === "low") return "var(--tx-ok)";
-  if (l === "medium" || l === "med") return "var(--tx-warn)";
-  if (l === "high" || l === "critical") return "var(--tx-risk)";
-  return "var(--tx-faint)";
+  if (l === "low") return "var(--gx-ok)";
+  if (l === "medium" || l === "med") return "var(--gx-warn)";
+  if (l === "high" || l === "critical") return "var(--gx-risk)";
+  return "var(--gx-faint)";
 }
 
 export function ReviewSiteHeader({
@@ -40,8 +40,8 @@ export function ReviewSiteHeader({
 
   return (
     <header className="site-header">
-      <Link className="tx-mark" href="/">
-        tx
+      <Link className="gx-mark" href="/">
+        gx
       </Link>
       <div className="crumb">
         <Link href={demoMode ? "/reviews?demo=1" : "/reviews"}>Reviews</Link>

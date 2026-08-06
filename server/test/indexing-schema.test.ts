@@ -42,9 +42,9 @@ function mockIndexingFetch(calls: Array<{ url: string; body: unknown }>) {
 }
 
 describe("indexing namespace + schema", () => {
-  test("namespace matches the tx CLI shape and carries the schema version", () => {
-    expect(namespaceForOrgRepo("2f273110-b6ce-4b3b-95d3-e7c0ca802e83", "satoricorp/tx")).toBe(
-      `gx-2f273110-b6ce-4b3b-95d3-e7c0ca802e83-satoricorp-tx-v${indexSchemaVersion}`,
+  test("namespace matches the gx CLI shape and carries the schema version", () => {
+    expect(namespaceForOrgRepo("2f273110-b6ce-4b3b-95d3-e7c0ca802e83", "satoricorp/gx")).toBe(
+      `gx-2f273110-b6ce-4b3b-95d3-e7c0ca802e83-satoricorp-gx-v${indexSchemaVersion}`,
     );
     // A schema change must land in a new namespace: TurboPuffer pins vector
     // width and full-text settings per namespace.
@@ -196,7 +196,7 @@ describe("hybrid query construction", () => {
     expect(terms).toContain("AttachSessionsFromHunkLinks");
     expect(terms).toContain("attach");
     expect(terms).toContain("hunk");
-    expect(identifierTerms("TX_REVIEW_JUDGE").split(" ")).toContain("judge");
+    expect(identifierTerms("GX_REVIEW_JUDGE").split(" ")).toContain("judge");
     // Plain prose must not produce a symbol query.
     expect(identifierTerms("how are upload failures retried")).toBe("");
   });

@@ -10,13 +10,13 @@ import {
 import { fetchNamespaceMetadata, searchIndex } from "../indexing/search";
 
 /**
- * POST /v1/review/search — retrieval for `tx review`, gated through TX auth.
+ * POST /v1/review/search — retrieval for `gx review`, gated through gx auth.
  *
  * The CLI's review context used to require a raw TURBOPUFFER_API_KEY (and an
  * OpenAI key for the semantic leg) in the reviewer's own environment, which no
  * onboarded user has: only dev machines ever retrieved anything. This route is
  * the same trade the /gx/openai and /gx/bedrock proxies made for inference —
- * the provider keys live here, the caller brings a TX login.
+ * the provider keys live here, the caller brings an gx login.
  *
  * It also closes the namespace question for good: the org and namespace are
  * resolved server-side from the caller's identity and the repository, with the

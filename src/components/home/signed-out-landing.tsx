@@ -1,6 +1,6 @@
 import { FaqAccordion } from "@/components/home/faq-accordion";
 import { FeaturesSection } from "@/components/home/features-section";
-import { GitToTxSection } from "@/components/home/git-to-tx-section";
+import { GitToTxSection } from "@/components/home/git-to-gx-section";
 import { HeroSection } from "@/components/home/hero-section";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { LandingBgFade } from "@/components/home/landing-bg-fade";
@@ -11,7 +11,7 @@ const FAQ_ITEMS = [
   {
     question: "What models can I use to review?",
     answer:
-      "TX uses the latest frontier models to review changes. It pits models against each other for the best outcomes, and is constantly updating to the best performing models.",
+      "gx uses the latest frontier models to review changes. It pits models against each other for the best outcomes, and is constantly updating to the best performing models.",
   },
   {
     question: "What are the independent resources used for review?",
@@ -19,14 +19,14 @@ const FAQ_ITEMS = [
       "These are 92 resources maintained independently that help ensure best coding practices and provide reference context to ensure architecture, security, testing, and more are applied to every review.",
   },
   {
-    question: "Do I need to change how I code to use TX?",
+    question: "Do I need to change how I code to use gx?",
     answer:
-      "No. Keep using your favorite coding tools just as you currently do. The easiest way to get started is with the TX MCP, with the option to use the CLI. Both will generate the same metadata, making review simpler.",
+      "No. Keep using your favorite coding tools just as you currently do. The easiest way to get started is with the gx MCP, with the option to use the CLI. Both will generate the same metadata, making review simpler.",
   },
   {
     question: "Do I still use GitHub?",
     answer:
-      "Yes, and you can use GitHub independently of TX if needed. Once you install the TX Github App, you'll be able to interact with TX in your PRs. @tx on any PR to ask questions about the change.",
+      "Yes, and you can use GitHub independently of gx if needed. Once you install the gx Github App, you'll be able to interact with gx in your PRs. @gx on any PR to ask questions about the change.",
   },
 ] as const;
 

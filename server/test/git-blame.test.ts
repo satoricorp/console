@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { getSql, runMigrations } from "../src/db";
 import { loadGitBlameContext, parsePatchHunks } from "../src/github/git-blame";
-import { buildTxChatUserPrompt } from "../src/llm/prompts/tx-chat";
+import { buildTxChatUserPrompt } from "../src/llm/prompts/gx-chat";
 import type { ExtractContext } from "../src/summary/generate";
 import { describeDb } from "./db-gate";
 
@@ -42,8 +42,8 @@ describe("parsePatchHunks", () => {
   });
 });
 
-describe("tx chat prompt git_blame context", () => {
-  test("includes GitHub PR file fallback when TX event context is missing", () => {
+describe("gx chat prompt git_blame context", () => {
+  test("includes GitHub PR file fallback when gx event context is missing", () => {
     const prompt = buildTxChatUserPrompt({
       author: "alice",
       question: "what changed?",
@@ -55,7 +55,7 @@ describe("tx chat prompt git_blame context", () => {
           status: "modified",
           additions: 1,
           deletions: 0,
-          patch: "@@ -1 +1,2 @@\n # Music\n+TX smoke test",
+          patch: "@@ -1 +1,2 @@\n # Music\n+gx smoke test",
         },
       ],
       recentComments: [],
@@ -63,10 +63,10 @@ describe("tx chat prompt git_blame context", () => {
 
     expect(prompt).toContain("GitHub PR file diff fallback");
     expect(prompt).toContain("- README.md status=modified +1 -0");
-    expect(prompt).toContain("+TX smoke test");
+    expect(prompt).toContain("+gx smoke test");
   });
 
-  test("includes TX published revision diffs from artifact context", () => {
+  test("includes gx published revision diffs from artifact context", () => {
     const prompt = buildTxChatUserPrompt({
       author: "alice",
       question: "what changed?",
@@ -91,7 +91,7 @@ describe("tx chat prompt git_blame context", () => {
             baseBranchName: "main",
             description: "documentation",
             files: ["README.md"],
-            patch: "@@ -1 +1,2 @@\n # Music\n+TX smoke test",
+            patch: "@@ -1 +1,2 @@\n # Music\n+gx smoke test",
             githubPrUrl: "https://github.com/acme/music/pull/1",
           },
         ],
@@ -108,10 +108,10 @@ describe("tx chat prompt git_blame context", () => {
       recentComments: [],
     });
 
-    expect(prompt).toContain("TX published revision diffs");
+    expect(prompt).toContain("gx published revision diffs");
     expect(prompt).toContain("branch=docs/documentation");
-    expect(prompt).toContain("+TX smoke test");
-    expect(prompt).toContain("TX published session evidence");
+    expect(prompt).toContain("+gx smoke test");
+    expect(prompt).toContain("gx published session evidence");
   });
 
   test("labels published revision diff order as newest first", () => {
@@ -155,13 +155,13 @@ describe("tx chat prompt git_blame context", () => {
       recentComments: [],
     });
 
-    expect(prompt).toContain("TX published revision diffs (newest first)");
+    expect(prompt).toContain("gx published revision diffs (newest first)");
     expect(prompt.indexOf("newest revision")).toBeLessThan(
       prompt.indexOf("older revision"),
     );
   });
 
-  test("keeps prior TX comments from overriding publish evidence", () => {
+  test("keeps prior gx comments from overriding publish evidence", () => {
     const prompt = buildTxChatUserPrompt({
       author: "alice",
       question: "what changed latest?",
@@ -193,8 +193,8 @@ describe("tx chat prompt git_blame context", () => {
       },
       recentComments: [
         {
-          author: "tx-agentic-code-review",
-          body: "TX: older bot answer about stale evidence",
+          author: "gx-agentic-code-review",
+          body: "gx: older bot answer about stale evidence",
           file: null,
           line: null,
         },
@@ -205,9 +205,9 @@ describe("tx chat prompt git_blame context", () => {
       "Recent PR comments (conversation history, not authoritative change evidence)",
     );
     expect(prompt).toContain(
-      "tx-agentic-code-review (prior TX reply, not source of truth)",
+      "gx-agentic-code-review (prior gx reply, not source of truth)",
     );
-    expect(prompt).toContain("Authoritative TX published revision diffs");
+    expect(prompt).toContain("Authoritative gx published revision diffs");
     expect(prompt.indexOf("older bot answer")).toBeLessThan(
       prompt.indexOf("current publish evidence"),
     );
@@ -237,7 +237,7 @@ describe("tx chat prompt git_blame context", () => {
       context: ctx,
       gitBlameContext: {
         source: "git_blame",
-        repoFullName: "acme/tx",
+        repoFullName: "acme/gx",
         pullNumber: 17,
         baseSha: "base",
         headSha: "head",
@@ -252,17 +252,17 @@ describe("tx chat prompt git_blame context", () => {
             blameLineStart: 42,
             blameLineEnd: 45,
             commitSha: "prevsha1234567890",
-            commitUrl: "https://github.com/acme/tx/commit/prevsha",
+            commitUrl: "https://github.com/acme/gx/commit/prevsha",
             authoredAtMs: Date.UTC(2026, 5, 12),
             authorLogin: "alice",
             authorName: null,
             messageHeadline: "Add webhook endpoint",
             associatedPrNumber: 12,
-            associatedPrUrl: "https://github.com/acme/tx/pull/12",
-            codeUrl: "https://github.com/acme/tx/blob/prevsha/server/src/github/webhook.ts#L42-L45",
-            txEventIds: ["event-prev"],
-            txSessionIds: ["session-prev"],
-            txSessionEvents: [],
+            associatedPrUrl: "https://github.com/acme/gx/pull/12",
+            codeUrl: "https://github.com/acme/gx/blob/prevsha/server/src/github/webhook.ts#L42-L45",
+            gxEventIds: ["event-prev"],
+            gxSessionIds: ["session-prev"],
+            gxSessionEvents: [],
           },
         ],
       },
@@ -270,8 +270,8 @@ describe("tx chat prompt git_blame context", () => {
     });
 
     expect(prompt).toContain("git_blame context (previous GitHub/git work)");
-    expect(prompt).toContain("[server/src/github/webhook.ts:42-45](https://github.com/acme/tx/blob/prevsha/server/src/github/webhook.ts#L42-L45)");
-    expect(prompt).toContain("tx_provenance=captured");
+    expect(prompt).toContain("[server/src/github/webhook.ts:42-45](https://github.com/acme/gx/blob/prevsha/server/src/github/webhook.ts#L42-L45)");
+    expect(prompt).toContain("gx_provenance=captured");
   });
 });
 
@@ -299,17 +299,17 @@ describeDb("loadGitBlameContext", () => {
           headers: { "Content-Type": "application/json" },
         });
       }
-      if (url.endsWith("/repos/acme/tx/pulls/17")) {
+      if (url.endsWith("/repos/acme/gx/pulls/17")) {
         return new Response(
           JSON.stringify({
-            html_url: "https://github.com/acme/tx/pull/17",
+            html_url: "https://github.com/acme/gx/pull/17",
             base: { sha: "basesha", ref: "main" },
             head: { sha: "headsha", ref: "feat/blame" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      if (url.includes("/repos/acme/tx/pulls/17/files")) {
+      if (url.includes("/repos/acme/gx/pulls/17/files")) {
         return new Response(
           JSON.stringify([
             {
@@ -321,12 +321,12 @@ describeDb("loadGitBlameContext", () => {
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      if (url.includes("/repos/acme/tx/pulls/17/commits")) {
+      if (url.includes("/repos/acme/gx/pulls/17/commits")) {
         return new Response(
           JSON.stringify([
             {
               sha: "headsha",
-              html_url: "https://github.com/acme/tx/commit/headsha",
+              html_url: "https://github.com/acme/gx/commit/headsha",
               parents: [{ sha: "basesha" }],
               author: { login: "agent" },
               commit: {
@@ -352,12 +352,12 @@ describeDb("loadGitBlameContext", () => {
                         age: 1,
                         commit: {
                           oid: "prevsha",
-                          commitUrl: "https://github.com/acme/tx/commit/prevsha",
+                          commitUrl: "https://github.com/acme/gx/commit/prevsha",
                           authoredDate: "2026-06-12T20:00:00Z",
                           messageHeadline: "Add webhook endpoint",
                           author: { name: "Builder", user: { login: "builder" } },
                           associatedPullRequests: {
-                            nodes: [{ number: 12, url: "https://github.com/acme/tx/pull/12" }],
+                            nodes: [{ number: 12, url: "https://github.com/acme/gx/pull/12" }],
                           },
                         },
                       },
@@ -385,7 +385,7 @@ describeDb("loadGitBlameContext", () => {
 
     const [previousEvent] = await db<{ id: string }[]>`
       INSERT INTO pr_events (
-        created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
       ) VALUES (
         ${now - 10_000},
         '0.1.0-test',
@@ -405,10 +405,10 @@ describeDb("loadGitBlameContext", () => {
         published_at_ms, updated_at_ms, org_id, latest_event_id
       ) VALUES (
         ${blameUserId},
-        'acme/tx',
+        'acme/gx',
         'old-webhook',
         12,
-        'https://github.com/acme/tx/pull/12',
+        'https://github.com/acme/gx/pull/12',
         ${now - 10_000},
         ${now - 10_000},
         ${orgId},
@@ -437,7 +437,7 @@ describeDb("loadGitBlameContext", () => {
 
     const [currentEvent] = await db<{ id: string }[]>`
       INSERT INTO pr_events (
-        created_at_ms, tx_version, head_commit_id, payload, org_id, user_id, repo_root_path
+        created_at_ms, gx_version, head_commit_id, payload, org_id, user_id, repo_root_path
       ) VALUES (
         ${now},
         '0.1.0-test',
@@ -475,10 +475,10 @@ describeDb("loadGitBlameContext", () => {
     }
   });
 
-  test("caches GitHub blame and joins previous TX provenance", async () => {
+  test("caches GitHub blame and joins previous gx provenance", async () => {
     const context = await loadGitBlameContext(getSql(), {
       orgId,
-      repoFullName: "acme/tx",
+      repoFullName: "acme/gx",
       pullNumber: 17,
       installationId: 424242,
       eventId: currentEventId,
@@ -489,16 +489,16 @@ describeDb("loadGitBlameContext", () => {
     const row = context?.rows[0];
     expect(row?.commitSha).toBe("prevsha");
     expect(row?.messageHeadline).toBe("Add webhook endpoint");
-    expect(row?.codeUrl).toBe("https://github.com/acme/tx/blob/prevsha/server/src/github/webhook.ts#L42-L45");
-    expect(row?.txEventIds).toContain(previousEventId);
-    expect(row?.txSessionIds).toContain("prev-session");
-    expect(row?.txSessionEvents[0]?.eventType).toBe("edit");
+    expect(row?.codeUrl).toBe("https://github.com/acme/gx/blob/prevsha/server/src/github/webhook.ts#L42-L45");
+    expect(row?.gxEventIds).toContain(previousEventId);
+    expect(row?.gxSessionIds).toContain("prev-session");
+    expect(row?.gxSessionEvents[0]?.eventType).toBe("edit");
 
     const [snapshotCount] = await getSql()<{ count: string }[]>`
       SELECT COUNT(*)::text AS count
       FROM git_blame_snapshots
       WHERE org_id = ${orgId}
-        AND repo_full_name = 'acme/tx'
+        AND repo_full_name = 'acme/gx'
         AND ref_sha = 'basesha'
     `;
     expect(Number(snapshotCount.count)).toBe(1);

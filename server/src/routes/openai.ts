@@ -25,7 +25,7 @@ openAIRoutes.use("*", async (c, next) => {
       return c.json(
         {
           error: "entitlement_unavailable",
-          message: "TX entitlement service is unavailable. Please retry.",
+          message: "gx entitlement service is unavailable. Please retry.",
         },
         503,
       );
@@ -38,7 +38,7 @@ openAIRoutes.use("*", async (c, next) => {
         error: "payment_required",
         reason: quota.reason ?? "trial_expired",
         message:
-          "TX free trial has ended for this org. Upgrade to keep using TX Cloud AI, or set your own model key with `tx set key`.",
+          "gx free trial has ended for this org. Upgrade to keep using gx Cloud AI, or set your own model key with `gx set key`.",
         upgrade_url: quota.upgradeUrl,
         trial_ends_at: quota.trialEndsAt ?? null,
       },
@@ -53,19 +53,19 @@ const defaultOpenAITimeoutMs = 300_000;
 
 function openAIBaseURL(): string {
   const raw =
-    process.env.TX_CLOUD_OPENAI_BASE_URL?.trim() ||
-    process.env.TX_OPENAI_BASE_URL?.trim() ||
+    process.env.GX_CLOUD_OPENAI_BASE_URL?.trim() ||
+    process.env.GX_OPENAI_BASE_URL?.trim() ||
     defaultOpenAIBaseURL;
   const base = raw.replace(/\/+$/, "");
   return base.endsWith("/v1") ? base : `${base}/v1`;
 }
 
 function openAIAPIKey(): string {
-  return process.env.TX_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
+  return process.env.GX_OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "";
 }
 
 function openAITimeoutMs(): number {
-  const raw = process.env.TX_CLOUD_OPENAI_TIMEOUT_MS?.trim();
+  const raw = process.env.GX_CLOUD_OPENAI_TIMEOUT_MS?.trim();
   if (!raw) return defaultOpenAITimeoutMs;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultOpenAITimeoutMs;

@@ -12,7 +12,7 @@ import {
 } from "../src/indexing/turbopuffer";
 
 /**
- * Rows shaped like the live satoricorp/tx namespace, which is what
+ * Rows shaped like the live satoricorp/gx namespace, which is what
  * `published_revision_diff` chunks actually look like: a branch, a head SHA, a
  * per-file part of the revision's patch, and no PR number anywhere.
  */
@@ -23,15 +23,15 @@ function row(
   description: string,
 ): IndexSearchResult {
   const text = [
-    "TX published revision diff.",
-    "Repo: satoricorp/tx",
+    "gx published revision diff.",
+    "Repo: satoricorp/gx",
     `Branch: ${branch}`,
     `Head: ${headSha}`,
     `Description: ${description}`,
     `Files:\n${file}`,
   ].join("\n");
   return {
-    id: `tx-published-revision-${headSha}-${file}`,
+    id: `gx-published-revision-${headSha}-${file}`,
     score: 0.5,
     text,
     attributes: {
@@ -41,7 +41,7 @@ function row(
       branch_name: branch,
       head_sha: headSha,
       source_kind: "published_revision_diff",
-      repo_full_name: "satoricorp/tx",
+      repo_full_name: "satoricorp/gx",
     },
   };
 }
@@ -53,14 +53,14 @@ function row(
  */
 function reviewSummaryRow(mentionedFile: string): IndexSearchResult {
   const text = [
-    "TX code review summary.",
-    "Repo: satoricorp/tx",
+    "gx code review summary.",
+    "Repo: satoricorp/gx",
     "Branch: main",
     `Head: ${"a001eaac1f0b0d5f0e6c9a2b3c4d5e6f70819293"}`,
     `Two findings in ${mentionedFile}, both resolved.`,
   ].join("\n");
   return {
-    id: "tx-code-review-summary-1",
+    id: "gx-code-review-summary-1",
     score: 0.4,
     text,
     attributes: {
@@ -69,7 +69,7 @@ function reviewSummaryRow(mentionedFile: string): IndexSearchResult {
       source_kind: "code_review_summary",
       branch_name: "main",
       head_sha: "a001eaac1f0b0d5f0e6c9a2b3c4d5e6f70819293",
-      repo_full_name: "satoricorp/tx",
+      repo_full_name: "satoricorp/gx",
     },
   };
 }
@@ -85,8 +85,8 @@ const JUDGE_HEAD = "a001eaac1f0b0d5f0e6c9a2b3c4d5e6f70819293";
 const JUDGE_TITLE = "Make the judge verify every candidate, and let it reason";
 
 const liveRows: IndexSearchResult[] = [
-  row(PR_112_FILES[1]!, PR_112_HEAD, PR_112_BRANCH, "Report code index drift in tx doctor"),
-  row(PR_112_FILES[0]!, PR_112_HEAD, PR_112_BRANCH, "Report code index drift in tx doctor"),
+  row(PR_112_FILES[1]!, PR_112_HEAD, PR_112_BRANCH, "Report code index drift in gx doctor"),
+  row(PR_112_FILES[0]!, PR_112_HEAD, PR_112_BRANCH, "Report code index drift in gx doctor"),
   row("internal/codereview/engine_callers_test.go", JUDGE_HEAD, "main", JUDGE_TITLE),
   row("internal/codereview/testdata/judge-prose-preamble.txt", JUDGE_HEAD, "main", JUDGE_TITLE),
   row("internal/codereview/judge.go", JUDGE_HEAD, "main", JUDGE_TITLE),
@@ -99,7 +99,7 @@ const liveRows: IndexSearchResult[] = [
 ];
 
 describe("scopePreviousPrRows", () => {
-  test("serves nothing for satoricorp/tx#112 — no prior PR touched its files", () => {
+  test("serves nothing for satoricorp/gx#112 — no prior PR touched its files", () => {
     const kept = scopePreviousPrRows(liveRows, {
       changedFiles: PR_112_FILES,
       headSha: PR_112_HEAD,
@@ -240,7 +240,7 @@ describe("scopePreviousPrRows", () => {
 });
 
 describe("scopePreviousPrRows: which branch is the change's own", () => {
-  // 23 of the 25 prior-PR rows in the live satoricorp/tx namespace carry
+  // 23 of the 25 prior-PR rows in the live satoricorp/gx namespace carry
   // branch_name = "main". A rule that excluded every row sharing the branch
   // string erased all of them for any change pushed from the default branch —
   // which is this project's own workflow.
@@ -275,7 +275,7 @@ describe("scopePreviousPrRows: which branch is the change's own", () => {
   });
 
   test("excludes an earlier publish of the same change by its commit id", () => {
-    // The tx review path knows the range's commits but may not know the
+    // The gx review path knows the range's commits but may not know the
     // branch. A re-push publishes a new head SHA, so head-SHA equality alone
     // would serve the change its own earlier diff back as a "previous PR".
     const kept = scopePreviousPrRows(liveRows, {

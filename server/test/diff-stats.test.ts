@@ -6,7 +6,7 @@ import {
 } from "../src/summary/diff-stats";
 
 /**
- * The real satoricorp/tx#112 diff, trimmed to its structure but with the exact
+ * The real satoricorp/gx#112 diff, trimmed to its structure but with the exact
  * line counts GitHub reports: doctor.go +92, doctor_code_index_test.go +45,
  * total +137/-0 across 2 files. The posted summary claimed "+95/-0".
  */
@@ -39,7 +39,7 @@ function pr112Patch(): string {
 }
 
 describe("parsePatchStats", () => {
-  test("counts satoricorp/tx#112 as +137/-0 across 2 files", () => {
+  test("counts satoricorp/gx#112 as +137/-0 across 2 files", () => {
     const stats = parsePatchStats(pr112Patch());
     expect(stats).toHaveLength(2);
     const doctor = stats.find((s) => s.file === "internal/cli/doctor.go")!;
@@ -103,7 +103,7 @@ describe("parsePatchStats", () => {
 
   test("counts deleted SQL comments, which render as ---", () => {
     // Verified against `git diff --numstat` on a real edit to
-    // server/migrations/014_rename_gx_prefix.sql: 1 added, 4 removed. A parser
+    // server/migrations/014_orgs_backfill.sql: 1 added, 4 removed. A parser
     // that skips every line starting with `---` reported +1/-0. This repo's
     // migrations carry dozens of column-0 `--` comments.
     const patch = [
@@ -112,14 +112,14 @@ describe("parsePatchStats", () => {
       "--- a/m.sql",
       "+++ b/m.sql",
       "@@ -1,6 +1,4 @@",
-      "--- WP-4: drop tx_ prefix on legacy tables, add org_id, backfill orgs.",
+      "--- WP-4: add org_id to the legacy tables and backfill orgs.",
       " ",
       "--- Backfill orgs from GitHub App installations (one org per installation)",
       " INSERT INTO orgs (installation_id, created_at_ms)",
       "@@ -8,13 +6,12 @@ SELECT",
       "--- Bootstrap org for single-player rows without installation mapping",
-      "--- Rename legacy tables (FKs from 013 follow automatically)",
-      " ALTER TABLE tx_pr_events RENAME TO pr_events;",
+      "--- Org-scoped indexes to match the new org_id column",
+      " ALTER TABLE pr_events ADD COLUMN IF NOT EXISTS org_id UUID;",
       "+-- added note",
     ].join("\n");
     expect(parsePatchStats(patch)).toEqual([

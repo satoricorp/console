@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChevronDown } from "lucide-react";
-import { TxWordmark } from "@/components/tx-wordmark";
+import { GxWordmark } from "@/components/gx-wordmark";
 import { GetStartedButton } from "@/components/get-started-button";
 import { WorksWithCarousel } from "@/components/home/works-with-carousel";
 import { SignInLink } from "@/components/sign-in-link";
@@ -60,14 +60,14 @@ export function HeroSection() {
         <div className="relative z-10 flex h-full min-h-0 flex-col items-start justify-center py-4 pl-10 pr-8 sm:py-6 sm:pl-16 sm:pr-12 lg:pl-24">
           <div className="flex w-full max-w-3xl flex-col items-start gap-5 text-left sm:gap-6">
             <div className="w-full max-w-2xl">
-              <TxWordmark size="hero" className="mb-1 block sm:mb-1.5" />
+              <GxWordmark size="hero" className="mb-1 block sm:mb-1.5" />
               <h1 className="text-pretty text-3xl font-medium leading-[1.12] tracking-tight text-zinc-950 dark:text-zinc-50 sm:text-5xl">
                 Simplified Code Review
               </h1>
               <p className="mt-4 text-pretty text-sm leading-6 text-zinc-600 dark:text-zinc-400 sm:text-base">
                 Join data from your coding sessions with your code to improve
                 code review and capture your teams knowledge. Set up once with
-                a single command — tx init — then keep using plain Git.
+                a single command — gx init — then keep using plain Git.
               </p>
             </div>
 
@@ -88,7 +88,7 @@ export function HeroSection() {
       <WorksWithCarousel />
 
       <a
-        href="#git-to-tx"
+        href="#git-to-gx"
         aria-label="Scroll to the next section"
         className="flex shrink-0 justify-center pb-5 pt-2"
       >

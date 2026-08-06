@@ -1,6 +1,6 @@
 import type postgres from "postgres";
 import { findOrCreateBookmark } from "../bookmarks/adoption";
-import { containsTxMention } from "../tx-mention/handler";
+import { containsTxMention } from "../gx-mention/handler";
 import { classifyReviewComment, type ClassifyInput } from "../rules/classifier";
 import { resolveOrgIdForInstallation } from "./app";
 import { processTxMention } from "./mention";
@@ -77,7 +77,7 @@ export async function ingestLineComment(
       file,
       line,
       in_reply_to,
-      is_tx_mention,
+      is_gx_mention,
       created_at_ms
     ) VALUES (
       ${orgId},
