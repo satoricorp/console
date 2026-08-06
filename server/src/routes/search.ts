@@ -7,7 +7,13 @@ import {
   namespaceForOrgRepo,
   reviewKnowledgeNamespace,
 } from "../indexing/config";
-import { fetchNamespaceMetadata, searchIndex } from "../indexing/search";
+import {
+  embedQueryText,
+  fetchNamespaceMetadata,
+  searchIndex,
+  type IndexFilterClause,
+  type IndexSearchResult,
+} from "../indexing/search";
 
 /**
  * POST /v1/review/search — retrieval for `gx review`, gated through gx auth.
@@ -52,6 +58,14 @@ export type ReviewSearchBody = {
   symbol_query?: string;
   source_kinds?: string[];
   limit?: number;
+  /**
+   * Knowledge-target narrowing signals, mirroring the CLI's direct-retrieval
+   * path: language tags derived from the changed files and review categories
+   * (corpus tiers) derived from the review options. Optional — a request
+   * without them searches the corpus broadly, which is what older CLIs get.
+   */
+  languages?: string[];
+  categories?: string[];
 };
 
 /**
@@ -139,15 +153,79 @@ reviewSearchRoutes.post("/v1/review/search", async (c) => {
         rows: [],
       });
     }
-    const rows = await searchIndex({
-      orgId: auth.orgId,
-      repoFullName: "",
-      query,
-      limit,
-      namespace,
-      includeOrgFilter: false,
-      extraFilters: [["source_kind", "Eq", "review_corpus"]],
-    });
+
+    // The corpus's own semantics, matching the CLI's direct-retrieval base
+    // filter (reviewResourceBaseFilter in gx): research-tier rows are input to
+    // curation rather than review guidance, and historical or superseded rows
+    // exist for provenance, not to be served.
+    const baseFilter: IndexFilterClause[] = [
+      ["source_kind", "Eq", "review_corpus"],
+      ["tier", "NotEq", "research"],
+      ["historical", "Eq", false],
+      ["superseded_by", "Eq", ""],
+    ];
+    // Only `tier` and `language_tags` are declared filterable in the corpus
+    // schema (review_corpus_schema in the indexer). TurboPuffer rejects the
+    // entire query — HTTP 400, zero rows — when a filter names an undeclared
+    // attribute, so the signal set the CLI computes (which also includes
+    // framework and risk tags) is deliberately narrowed to these two here.
+    const categories = signalList(body.categories);
+    const languages = signalList(body.languages);
+    const signalConditions: IndexFilterClause[] = [];
+    if (categories.length > 0) signalConditions.push(["tier", "In", categories]);
+    if (languages.length > 0) signalConditions.push(["language_tags", "ContainsAny", languages]);
+
+    let rows: IndexSearchResult[];
+    let narrowed: boolean | undefined;
+    if (signalConditions.length === 0) {
+      rows = await searchIndex({
+        orgId: auth.orgId,
+        repoFullName: "",
+        query,
+        limit,
+        namespace,
+        includeOrgFilter: false,
+        extraFilters: baseFilter,
+      });
+    } else {
+      // Mirror the CLI's two-query shape: a broad pass at half the budget so
+      // strong cross-language matches survive, and a signal-narrowed pass at
+      // the full budget. Embed once — the queries differ only in filters.
+      const vector = (await embedQueryText(query, namespace)) ?? undefined;
+      const broadRows = await searchIndex({
+        orgId: auth.orgId,
+        repoFullName: "",
+        query,
+        limit: Math.max(2, Math.floor(limit / 2)),
+        namespace,
+        includeOrgFilter: false,
+        extraFilters: baseFilter,
+        vector,
+      });
+      // A failed narrowed pass degrades to the broad rows instead of failing
+      // retrieval, but visibly: `narrowed: false` in the response, unlike the
+      // CLI's direct path, which swallows the error and hid exactly this
+      // failure for weeks.
+      const narrowedRows = await searchIndex({
+        orgId: auth.orgId,
+        repoFullName: "",
+        query,
+        limit,
+        namespace,
+        includeOrgFilter: false,
+        extraFilters: [...baseFilter, ["Or", signalConditions]],
+        vector,
+      }).catch(() => null);
+      narrowed = narrowedRows !== null;
+      const seen = new Set<string>();
+      rows = [...broadRows, ...(narrowedRows ?? [])].filter((row) => {
+        if (!row.id) return true;
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      });
+    }
+
     return c.json({
       available: true,
       target,
@@ -155,6 +233,7 @@ reviewSearchRoutes.post("/v1/review/search", async (c) => {
       exists: true,
       approx_row_count: metadata.approxRowCount,
       last_write_at: metadata.lastWriteAt,
+      ...(narrowed === undefined ? {} : { narrowed }),
       rows: responseRows(rows, limit),
     });
   }
@@ -217,6 +296,27 @@ reviewSearchRoutes.post("/v1/review/search", async (c) => {
     rows: responseRows(rows, limit),
   });
 });
+
+/**
+ * Sanitize a caller-supplied signal list: strings only, trimmed, deduplicated,
+ * capped. The cap is generous — the CLI derives a handful of language tags and
+ * at most a few categories — and exists so a buggy or hostile caller cannot
+ * inflate the filter tree without bound.
+ */
+function signalList(value: unknown, cap = 20): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
 
 /**
  * Rows as the CLI consumes them. `text` is lifted to the top level and dropped
