@@ -166,7 +166,7 @@ async function proxyOpenAIResponse(
         userId: auth.userId,
         sessionId: auth.sessionId ?? null,
         machineId: auth.machineId ?? null,
-        surface: c.req.header("X-GX-Surface") ?? null,
+        surface: c.req.header("X-GX-Client") ?? null,
         endpoint,
         model: parsed.model,
         usage: parsed.usage,

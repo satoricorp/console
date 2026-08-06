@@ -25,6 +25,9 @@ reviewHistoryRoutes.post("/v1/code-review-history/record", async (c) => {
     headCommitId: stringValue(body.headCommitId || body.head_commit_id),
     sourceKind: stringValue(body.sourceKind || body.source_kind),
     sourceRef: stringValue(body.sourceRef || body.source_ref),
+    clientSurface:
+      stringValue(body.client || body.clientSurface || body.client_surface) ||
+      stringValue(c.req.header("x-gx-client")),
     prompt: stringValue(body.prompt),
     scope: stringValue(body.scope),
     mode: stringValue(body.mode),

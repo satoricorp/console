@@ -13,8 +13,9 @@ CREATE TABLE IF NOT EXISTS llm_usage (
   user_id            TEXT NOT NULL,
   session_id         TEXT,
   machine_id         TEXT,
-  -- Which product surface made the call (CLI review, MCP, console...).
-  -- Nullable until clients start sending X-GX-Surface.
+  -- Which surface made the call (cli, mcp, skill, slash-gx — same vocabulary
+  -- as code_review_history_runs.client_surface, from the X-GX-Client header).
+  -- NULL means the client predates the field.
   surface            TEXT,
   endpoint           TEXT NOT NULL,
   model              TEXT NOT NULL,
