@@ -54,7 +54,7 @@ describe("bedrock fight allowlist", () => {
   });
 
   test("rejects models that are not configured", () => {
-    expect(isAllowedBedrockModel("us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe(false);
+    expect(isAllowedBedrockModel("us.anthropic.claude-3-haiku-20240307-v1:0")).toBe(false);
     expect(isAllowedBedrockModel("us.amazon.nova-premier-v1:0")).toBe(false);
     expect(isAllowedBedrockModel("arn:aws:bedrock:us-west-2:1:provisioned-model/x")).toBe(false);
   });
@@ -291,7 +291,7 @@ describeDb("POST /gx/bedrock/fight", () => {
       }),
     );
 
-    const response = await post({ ...validBody, model: "us.anthropic.claude-haiku-4-5-20251001-v1:0" });
+    const response = await post({ ...validBody, model: "us.anthropic.claude-3-haiku-20240307-v1:0" });
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string; allowed_models: string[] };
     expect(body.error).toBe("model_not_allowed");

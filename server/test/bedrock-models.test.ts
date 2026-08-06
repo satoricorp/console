@@ -35,7 +35,10 @@ describe("Bedrock model IDs are inference profiles", () => {
   });
 
   test("every /gx/bedrock/fight model is an inference profile", () => {
-    expect(BEDROCK_FIGHT_MODELS.length).toBe(3);
+    // Guards against the list emptying, not against it growing. The real
+    // check is the loop below; pinning an exact count only meant every model
+    // addition failed here for no safety benefit.
+    expect(BEDROCK_FIGHT_MODELS.length).toBeGreaterThan(0);
     for (const model of BEDROCK_FIGHT_MODELS) {
       assertInferenceProfile(model);
     }
@@ -48,12 +51,14 @@ describe("Bedrock model IDs are inference profiles", () => {
     }
   });
 
-  test("the reviewers are two different Opus generations and the judge is neither", () => {
-    const [reviewerA, reviewerB, judge] = BEDROCK_FIGHT_MODELS;
-    expect(reviewerA).toContain("opus");
-    expect(reviewerB).toContain("opus");
-    expect(reviewerA).not.toBe(reviewerB);
-    expect(judge).not.toBe(reviewerA);
-    expect(judge).not.toBe(reviewerB);
+  test("the fight models are distinct", () => {
+    // This list is a PERMISSION list: which models the endpoint may be asked
+    // for. It does not assign roles. It used to be read positionally as
+    // [reviewerA, reviewerB, judge] and assert two Opus generations, which
+    // stopped being true when the CLI moved its first leg to Haiku — and was
+    // always fragile, since reordering the array would have broken it without
+    // any behaviour changing. Which model plays which role is decided by the
+    // CLI (defaultBedrockReviewModelA/B and the judge model), not here.
+    expect(new Set(BEDROCK_FIGHT_MODELS).size).toBe(BEDROCK_FIGHT_MODELS.length);
   });
 });
