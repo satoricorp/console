@@ -22,9 +22,12 @@ function stubTurboPuffer(options: {
   metadataStatus?: number;
   metadata?: Record<string, unknown>;
   rows?: unknown[];
+  /** Per-query-call responses, consumed in order; falls back to `rows`. */
+  queryResponses?: Array<{ rows?: unknown[]; status?: number }>;
   embeddingWidth?: number;
   captured?: CapturedRequest[];
 }) {
+  let queryCall = 0;
   setIndexingFetch((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/embeddings")) {
@@ -50,7 +53,11 @@ function stubTurboPuffer(options: {
     }
     if (url.endsWith("/query")) {
       options.captured?.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
-      return new Response(JSON.stringify({ rows: options.rows ?? [] }), {
+      const perCall = options.queryResponses?.[queryCall++];
+      if (perCall?.status && perCall.status !== 200) {
+        return new Response("filter rejected", { status: perCall.status });
+      }
+      return new Response(JSON.stringify({ rows: perCall?.rows ?? options.rows ?? [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -60,16 +67,16 @@ function stubTurboPuffer(options: {
 }
 
 /** Collect every [field, op, value] clause in a turbopuffer filter tree. */
-function filterClauses(node: unknown, out: Array<[string, string, string]> = []) {
+function filterClauses(node: unknown, out: Array<[string, string, unknown]> = []) {
   if (!Array.isArray(node)) return out;
-  if (node.length === 3 && typeof node[0] === "string" && typeof node[1] === "string" && typeof node[2] === "string") {
-    out.push(node as [string, string, string]);
+  if (node.length === 3 && typeof node[0] === "string" && typeof node[1] === "string") {
+    out.push(node as [string, string, unknown]);
   }
   for (const child of node) filterClauses(child, out);
   return out;
 }
 
-function firstLegFilters(body: unknown): Array<[string, string, string]> {
+function firstLegFilters(body: unknown): Array<[string, string, unknown]> {
   const record = body as { queries?: Array<{ filters?: unknown }>; filters?: unknown };
   const filters = record.queries?.[0]?.filters ?? record.filters;
   return filterClauses(filters);
@@ -238,15 +245,99 @@ describeDb("POST /v1/review/search", () => {
     const json = (await res.json()) as {
       namespace: string;
       exists: boolean;
+      narrowed?: boolean;
       rows: Array<{ id: string }>;
     };
     expect(json.namespace).toBe("gx-review-knowledge");
     expect(json.exists).toBe(true);
     expect(json.rows).toHaveLength(1);
+    // No signals in the request → one broad query, no narrowed verdict.
+    expect(captured).toHaveLength(1);
+    expect(json.narrowed).toBeUndefined();
 
     const clauses = firstLegFilters(captured[0]!.body);
     expect(clauses).toContainEqual(["source_kind", "Eq", "review_corpus"]);
+    // The corpus base filter matches the CLI's direct path: research-tier,
+    // historical, and superseded rows are never served.
+    expect(clauses).toContainEqual(["tier", "NotEq", "research"]);
+    expect(clauses).toContainEqual(["historical", "Eq", false]);
+    expect(clauses).toContainEqual(["superseded_by", "Eq", ""]);
     expect(clauses.find((clause) => clause[0] === "org_id")).toBeUndefined();
+  });
+
+  test("knowledge search with signals adds a narrowed pass and merges", async () => {
+    const captured: CapturedRequest[] = [];
+    stubTurboPuffer({
+      captured,
+      embeddingWidth: 512,
+      queryResponses: [
+        {
+          rows: [
+            { id: "kn-broad", attributes: { text: "General guidance.", source_kind: "review_corpus" } },
+            { id: "kn-both", attributes: { text: "Shared row.", source_kind: "review_corpus" } },
+          ],
+        },
+        {
+          rows: [
+            { id: "kn-both", attributes: { text: "Shared row.", source_kind: "review_corpus" } },
+            { id: "kn-go", attributes: { text: "Go-specific rule.", source_kind: "review_corpus" } },
+          ],
+        },
+      ],
+    });
+
+    const res = await request({
+      target: "knowledge",
+      query: "error handling review guidance",
+      languages: ["go", "  go  ", "typescript", 7 as unknown as string],
+      categories: ["security"],
+      limit: 10,
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { narrowed?: boolean; rows: Array<{ id: string }> };
+    expect(json.narrowed).toBe(true);
+    // Union of both passes, deduplicated by row id.
+    expect(json.rows.map((row) => row.id)).toEqual(["kn-broad", "kn-both", "kn-go"]);
+
+    expect(captured).toHaveLength(2);
+    const broad = firstLegFilters(captured[0]!.body);
+    expect(broad).toContainEqual(["source_kind", "Eq", "review_corpus"]);
+    expect(broad.find((clause) => clause[0] === "language_tags")).toBeUndefined();
+    // Broad pass runs at half the requested budget, floor 2 — the CLI's shape.
+    expect((captured[0]!.body as { limit?: number }).limit).toBe(5);
+
+    const narrowedClauses = firstLegFilters(captured[1]!.body);
+    expect(narrowedClauses).toContainEqual(["tier", "In", ["security"]]);
+    // Signals are sanitized: trimmed, deduplicated, non-strings dropped.
+    expect(narrowedClauses).toContainEqual(["language_tags", "ContainsAny", ["go", "typescript"]]);
+    expect(narrowedClauses).toContainEqual(["superseded_by", "Eq", ""]);
+    expect((captured[1]!.body as { limit?: number }).limit).toBe(10);
+  });
+
+  test("a rejected narrowed pass degrades to broad rows and says so", async () => {
+    const captured: CapturedRequest[] = [];
+    stubTurboPuffer({
+      captured,
+      embeddingWidth: 512,
+      queryResponses: [
+        {
+          rows: [
+            { id: "kn-broad", attributes: { text: "General guidance.", source_kind: "review_corpus" } },
+          ],
+        },
+        { status: 400 },
+      ],
+    });
+
+    const res = await request({
+      target: "knowledge",
+      query: "error handling review guidance",
+      languages: ["go"],
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { narrowed?: boolean; rows: Array<{ id: string }> };
+    expect(json.narrowed).toBe(false);
+    expect(json.rows.map((row) => row.id)).toEqual(["kn-broad"]);
   });
 });
 
