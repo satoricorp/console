@@ -3,9 +3,18 @@ import {
   InvokeModelCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 
+export type LLMCompletionUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+};
+
 export type LLMCompletion = {
   text: string;
   model: string;
+  /** Absent when the provider did not report usage (e.g. the mock). */
+  usage?: LLMCompletionUsage;
 };
 
 export type LLMProvider = {
@@ -217,6 +226,12 @@ async function bedrockAnthropicComplete(system: string, user: string): Promise<L
   const responseText = new TextDecoder().decode(response.body);
   const json = JSON.parse(responseText) as {
     content?: Array<{ type?: string; text?: string }>;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   };
   const text =
     json.content
@@ -228,7 +243,25 @@ async function bedrockAnthropicComplete(system: string, user: string): Promise<L
     throw new Error("Bedrock Anthropic response returned empty content");
   }
 
-  return { text, model: SERVER_BEDROCK_ANTHROPIC_MODEL };
+  const completion: LLMCompletion = { text, model: SERVER_BEDROCK_ANTHROPIC_MODEL };
+  // Both counts must be present: a usage object without them would otherwise
+  // meter as a phantom zero-token call.
+  if (
+    typeof json.usage?.input_tokens === "number" &&
+    typeof json.usage.output_tokens === "number"
+  ) {
+    completion.usage = {
+      inputTokens: json.usage.input_tokens,
+      outputTokens: json.usage.output_tokens,
+      ...(typeof json.usage.cache_read_input_tokens === "number"
+        ? { cacheReadTokens: json.usage.cache_read_input_tokens }
+        : {}),
+      ...(typeof json.usage.cache_creation_input_tokens === "number"
+        ? { cacheWriteTokens: json.usage.cache_creation_input_tokens }
+        : {}),
+    };
+  }
+  return completion;
 }
 
 function extractResponseText(json: {
@@ -287,13 +320,32 @@ async function openAIComplete(system: string, user: string): Promise<LLMCompleti
     output_text?: string;
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
     model?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      input_tokens_details?: { cached_tokens?: number };
+    };
   };
   const text = extractResponseText(json);
   if (!text) {
     throw new Error("OpenAI response returned empty content");
   }
 
-  return { text, model: json.model ?? model };
+  const completion: LLMCompletion = { text, model: json.model ?? model };
+  if (
+    typeof json.usage?.input_tokens === "number" &&
+    typeof json.usage.output_tokens === "number"
+  ) {
+    const cachedTokens = json.usage.input_tokens_details?.cached_tokens;
+    completion.usage = {
+      // input_tokens includes the cached share; split it out so cache reads
+      // are priced at the cache rate rather than the full input rate.
+      inputTokens: Math.max(0, json.usage.input_tokens - (cachedTokens ?? 0)),
+      outputTokens: json.usage.output_tokens,
+      ...(typeof cachedTokens === "number" ? { cacheReadTokens: cachedTokens } : {}),
+    };
+  }
+  return completion;
 }
 
 export function createLLMProvider(contextHint?: string): LLMProvider {
