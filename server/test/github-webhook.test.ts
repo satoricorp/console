@@ -190,6 +190,7 @@ describeDb("GitHub webhook", () => {
     await db`DELETE FROM review_usage WHERE org_id = ${orgId}`;
     await db`DELETE FROM github_post_skips WHERE org_id = ${orgId}`;
     await db`DELETE FROM summary_events WHERE org_id = ${orgId}`;
+    await db`DELETE FROM summary_generations WHERE org_id = ${orgId}`;
     await db`DELETE FROM summaries WHERE org_id = ${orgId}`;
 
     await db`
@@ -468,6 +469,18 @@ describeDb("GitHub webhook", () => {
     `;
     expect(comments.length).toBe(1);
     expect(comments[0]?.github_comment_id).toBeNull();
+
+    // The generation ledger counts this run per user, unlike review_usage's
+    // per-bookmark dedup key.
+    const generations = await db<{ source: string; user_id: string | null }[]>`
+      SELECT source, user_id FROM summary_generations
+      WHERE org_id = ${orgId} AND bookmark_id = ${bookmarkId}
+      ORDER BY created_at_ms DESC
+      LIMIT 1
+    `;
+    expect(generations.length).toBe(1);
+    expect(generations[0]?.source).toBe("webhook");
+    expect(generations[0]?.user_id).toBe("webhook-test-user");
   });
 
   test("pull_request without an gx event waits without evaluating quota", async () => {
@@ -643,6 +656,16 @@ describeDb("GitHub webhook", () => {
 
   test("@gx review comment triggers handler and posts threaded reply", async () => {
     const reviewCommentId = 55503 + Math.floor(Math.random() * 100000);
+    // Map alice to a Convex identity so ingest can stamp pr_comments.user_id.
+    await getSql()`
+      INSERT INTO org_members (
+        org_id, github_user_id, convex_user_id, role, source, created_at_ms
+      ) VALUES (
+        ${orgId}, 777001, 'alice-convex-user', 'member', 'manual', ${Date.now()}
+      )
+      ON CONFLICT (org_id, github_user_id) DO UPDATE SET
+        convex_user_id = EXCLUDED.convex_user_id
+    `;
     const res = await postWebhook("pull_request_review_comment", {
       action: "created",
       installation: { id: INSTALLATION_ID },
@@ -654,7 +677,7 @@ describeDb("GitHub webhook", () => {
       },
       comment: {
         id: reviewCommentId,
-        user: { login: "alice" },
+        user: { login: "alice", id: 777001 },
         body: "@gx explain this webhook handler change",
         path: "server/src/github/webhook.ts",
         line: 12,
@@ -664,11 +687,12 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
 
     const db = getSql();
-    const comments = await db<{ is_gx_mention: boolean }[]>`
-      SELECT is_gx_mention FROM pr_comments
+    const comments = await db<{ is_gx_mention: boolean; user_id: string | null }[]>`
+      SELECT is_gx_mention, user_id FROM pr_comments
       WHERE org_id = ${orgId} AND github_comment_id = ${reviewCommentId}
     `;
     expect(comments[0]?.is_gx_mention).toBe(true);
+    expect(comments[0]?.user_id).toBe("alice-convex-user");
     expect(
       fetchCalls.some((c) =>
         c.url.includes(`/pulls/${PR_NUMBER}/comments/${reviewCommentId}/replies`),
@@ -677,6 +701,16 @@ describeDb("GitHub webhook", () => {
     expect(fetchCalls.some((c) => c.url.includes("/issues/17/comments"))).toBe(
       false,
     );
+
+    // gx's own turn is persisted beside the human comment.
+    const replies = await db<
+      { author: string; github_comment_id: string | number | null }[]
+    >`
+      SELECT author, github_comment_id FROM pr_comments
+      WHERE org_id = ${orgId} AND author = 'gx' AND in_reply_to = ${reviewCommentId}
+    `;
+    expect(replies.length).toBe(1);
+    expect(Number(replies[0]?.github_comment_id)).toBe(9002);
   });
 
   test("@gx issue comment triggers handler and posts reply", async () => {
@@ -721,6 +755,18 @@ describeDb("GitHub webhook", () => {
       SELECT status FROM rules WHERE id = ${rule.id}
     `;
     expect(updatedRule.status).toBe("retired");
+
+    // The veto acknowledgement is persisted as gx's turn (no model — no LLM ran).
+    const replies = await db<
+      { body: string; github_comment_id: string | number | null; model: string | null }[]
+    >`
+      SELECT body, github_comment_id, model FROM pr_comments
+      WHERE org_id = ${orgId} AND author = 'gx' AND in_reply_to = ${issueCommentId}
+    `;
+    expect(replies.length).toBe(1);
+    expect(replies[0]?.body).toContain("retired");
+    expect(Number(replies[0]?.github_comment_id)).toBe(9001);
+    expect(replies[0]?.model).toBeNull();
   });
 
   test("pull_request closed with merged=true sets bookmark merge_status", async () => {

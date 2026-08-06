@@ -251,6 +251,17 @@ describeDb("generateSummary integration", () => {
       SELECT kind FROM summary_events WHERE summary_id = ${result.summaryId}
     `;
     expect(events.some((e) => e.kind === "view")).toBe(true);
+
+    const generations = await db<
+      { source: string; model: string | null; bookmark_id: string; user_id: string | null }[]
+    >`
+      SELECT source, model, bookmark_id, user_id FROM summary_generations
+      WHERE summary_id = ${result.summaryId}
+    `;
+    expect(generations.length).toBe(1);
+    expect(generations[0]?.source).toBe("console");
+    expect(generations[0]?.model).toBe("mock");
+    expect(generations[0]?.bookmark_id).toBe(bookmarkId);
   });
 
   // The standalone POST /v1/summaries/generate route was removed (production
@@ -269,6 +280,22 @@ describeDb("generateSummary integration", () => {
     expect(result.eventId).toBe(eventId);
     expect(result.lineCount).toBeLessThanOrEqual(40);
     expect(result.summaryId).toBeTruthy();
+
+    // Regeneration semantics: every generation appends a ledger row, while
+    // review_usage stays a one-row dedup key for the bookmark.
+    const generations = await db<{ user_id: string | null }[]>`
+      SELECT user_id FROM summary_generations
+      WHERE bookmark_id = ${bookmarkId}
+      ORDER BY created_at_ms ASC
+    `;
+    expect(generations.length).toBe(2);
+    expect(generations[1]?.user_id).toBe(summaryUserId);
+
+    const usage = await db<{ user_id: string }[]>`
+      SELECT user_id FROM review_usage
+      WHERE org_id = ${orgId} AND bookmark_id = ${bookmarkId}
+    `;
+    expect(usage.length).toBe(1);
   });
 
   test("rejects when the bookmark is missing", async () => {

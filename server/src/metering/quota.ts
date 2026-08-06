@@ -53,9 +53,17 @@ function convexSiteURL(): string {
   return process.env.CONVEX_SITE_URL?.trim() || "";
 }
 
-function looksLikeConvexUserId(userId: string | undefined): userId is string {
+export function looksLikeConvexUserId(
+  userId: string | undefined,
+): userId is string {
   if (!userId) return false;
-  if (userId === "github-webhook" || userId === "local-user") return false;
+  if (
+    userId === "github-webhook" ||
+    userId === "local-user" ||
+    userId === "system"
+  ) {
+    return false;
+  }
   if (userId.startsWith("github:")) return false;
   return true;
 }
