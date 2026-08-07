@@ -46,7 +46,6 @@ export type NavLink = {
 
 export const NAV_LINKS: NavLink[] = [
   { label: "How it works", href: "/#how-it-works" },
-  { label: "Features", href: "/#features" },
   { label: "FAQ", href: "/#faq" },
   { label: "Documentation", href: DOCS_URL },
 ];
