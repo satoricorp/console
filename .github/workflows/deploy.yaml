@@ -17,18 +17,33 @@ permissions:
   contents: read
   id-token: write
 
-concurrency:
-  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
-  cancel-in-progress: false
+# NOTE: there is deliberately no workflow-level `concurrency` here.
+#
+# A workflow-level group covers the tests as well as the deployment, and
+# GitHub cancels a PENDING run as soon as a newer one queues behind the same
+# group — `cancel-in-progress: false` does not change that, it only protects
+# runs already in progress. Three pushes in quick succession therefore left
+# the middle commit with its tests silently cancelled rather than failed, so
+# main could carry a broken suite with nothing red to show for it. That is
+# exactly what happened on 2026-08-06: two staging runs were cancelled, main
+# sat unvalidated, and the breakage only surfaced on a manual re-run.
+#
+# Validation and deployment now have different needs, so they are different
+# jobs: `check` is keyed per commit and never coalesces, while `deploy` keeps
+# the shared group so deployments still serialize and skip superseded commits.
 
 jobs:
-  deploy:
-    name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  check:
+    name: Check
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    # Per-commit: every commit that reaches main gets its tests run to
+    # completion. Nothing here deploys, so two of these overlapping is fine.
+    concurrency:
+      group: check-${{ github.sha }}
+      cancel-in-progress: false
     # Postgres 16 to match the RDS engine in infra/lib/gx-server-stack.ts.
-    # Without it the ~59 database-backed server tests skip and the deploy gate
-    # goes green having verified none of the publish / webhook / auth paths.
+    # Without it the ~59 database-backed server tests skip and the gate goes
+    # green having verified none of the publish / webhook / auth paths.
     services:
       postgres:
         image: postgres:16
@@ -43,6 +58,51 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.4"
+
+      - name: Install server dependencies
+        working-directory: server
+        run: bun install --frozen-lockfile
+
+      - name: Check server
+        working-directory: server
+        env:
+          # Tests must never reach a live model. bedrockConfigured() is true
+          # whenever any AWS_* credential var is set. This job configures no
+          # AWS credentials at all, and these stay blank so an inherited value
+          # cannot turn a test into a real Bedrock call.
+          AWS_ACCESS_KEY_ID: ""
+          AWS_SECRET_ACCESS_KEY: ""
+          AWS_SESSION_TOKEN: ""
+          AWS_REGION: ""
+          AWS_DEFAULT_REGION: ""
+          AWS_PROFILE: ""
+          # An empty CI database means `bun test` also replays every migration
+          # end to end, which nothing else does. test/db-gate.ts turns a
+          # missing DATABASE_URL into a hard failure here rather than a skip.
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gx_console_test
+        run: |
+          bun run typecheck
+          bun test
+
+  deploy:
+    needs: check
+    # Shared group: deployments to one environment must not overlap, and a
+    # superseded commit does not need deploying. Cancelling a queued DEPLOY is
+    # correct; cancelling a queued CHECK is what hid the breakage.
+    concurrency:
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+      cancel-in-progress: false
+    name: Deploy ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -101,28 +161,6 @@ jobs:
       - name: Install server dependencies
         working-directory: server
         run: bun install --frozen-lockfile
-
-      - name: Check server
-        working-directory: server
-        env:
-          # Tests must never reach a live model. bedrockConfigured() is true
-          # whenever any AWS_* credential var is set, so with the deploy
-          # credentials in scope the @gx handler made a real Bedrock call and
-          # blew the 5s test timeout. Blanked here only; later steps still
-          # deploy with the configured credentials.
-          AWS_ACCESS_KEY_ID: ""
-          AWS_SECRET_ACCESS_KEY: ""
-          AWS_SESSION_TOKEN: ""
-          AWS_REGION: ""
-          AWS_DEFAULT_REGION: ""
-          AWS_PROFILE: ""
-          # An empty CI database means `bun test` also replays migrations
-          # 001..028 end to end, which nothing else does. test/db-gate.ts turns
-          # a missing DATABASE_URL into a hard failure here rather than a skip.
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/gx_console_test
-        run: |
-          bun run typecheck
-          bun test
 
       - name: Deploy Convex functions
         env:
