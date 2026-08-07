@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { getSql } from "../db";
+import { verifyGitHubTokenAudience } from "../github/oauth";
 import {
   healPersonalInstallMembership,
   parseGithubUserIdFromAuth,
@@ -7,6 +8,7 @@ import {
   resolveOrgIdForGithubUser,
 } from "../orgs/members";
 import type { AuthContext } from "../types";
+import { TtlCache } from "./ttl-cache";
 
 export type AppEnv = {
   Variables: {
@@ -55,11 +57,6 @@ function resolveLocalDevAuth(
   };
 }
 
-type GitHubUser = {
-  id?: number;
-  login?: string;
-};
-
 type CliSessionVerifyResponse = {
   session_id?: string;
   user_id?: string;
@@ -68,7 +65,32 @@ type CliSessionVerifyResponse = {
   machine_id?: string;
 };
 
-const githubAuthCache = new Map<string, AuthContext>();
+/**
+ * Verified GitHub identities, cached for a few minutes.
+ *
+ * The cached value is an authorization decision, so both bounds matter. Without
+ * an expiry, a token the user revoked at GitHub — or one whose owner was
+ * removed from the org — keeps authorizing requests until the task restarts,
+ * which on a long-lived ECS task is indefinitely. Without a ceiling, every
+ * distinct token the process ever sees is retained for its lifetime. Five
+ * minutes still absorbs the burst of calls a single CLI command makes.
+ */
+const GITHUB_AUTH_CACHE_TTL_MS = 5 * 60 * 1000;
+const GITHUB_AUTH_CACHE_MAX_ENTRIES = 1000;
+
+let githubAuthCacheNow: () => number = () => Date.now();
+
+const githubAuthCache = new TtlCache<AuthContext>({
+  ttlMs: GITHUB_AUTH_CACHE_TTL_MS,
+  maxEntries: GITHUB_AUTH_CACHE_MAX_ENTRIES,
+  now: () => githubAuthCacheNow(),
+});
+
+/** Test-only seam (mirrors setOrgMemberCheckForTests). Clears the cache too. */
+export function setGithubAuthCacheClockForTests(now: (() => number) | null): void {
+  githubAuthCacheNow = now ?? (() => Date.now());
+  githubAuthCache.clear();
+}
 
 function convexSiteURL(): string {
   return process.env.CONVEX_SITE_URL?.trim() || "";
@@ -131,47 +153,40 @@ async function resolveCliSessionToken(
   };
 }
 
+/**
+ * A raw GitHub access token used as a gx bearer.
+ *
+ * The token has to have been issued for one of gx's own OAuth clients. This
+ * used to accept anything api.github.com/user would answer for, which is every
+ * valid GitHub token in existence: a token minted by any other app the user had
+ * authorized — or by an app the attacker runs — authenticated as that user
+ * here. verifyGitHubTokenAudience asks GitHub whose application the token
+ * belongs to, which is the part that makes it a gx credential.
+ */
 async function resolveGitHubToken(
   token: string,
   orgIdHeader: string | undefined,
 ): Promise<AuthContext | null> {
   const orgId = orgIdHeader?.trim() || "";
-  const cached = githubAuthCache.get(`${orgId}:${token}`);
+  const cacheKey = `${orgId}:${token}`;
+  const cached = githubAuthCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
-  let response: Response;
-  try {
-    response = await fetch("https://api.github.com/user", {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "gx-cloud",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
-  } catch {
-    return null;
-  }
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const user = (await response.json()) as GitHubUser;
-  if (typeof user.id !== "number") {
+  const audience = await verifyGitHubTokenAudience(token);
+  if (!audience) {
     return null;
   }
 
   const auth: AuthContext = {
     orgId,
-    userId: `github:${user.id}`,
-    tokenLabel: user.login ? `github:${user.login}` : "github",
-    githubUserId: user.id,
-    githubUserLogin: user.login,
+    userId: `github:${audience.userId}`,
+    tokenLabel: audience.userLogin ? `github:${audience.userLogin}` : "github",
+    githubUserId: audience.userId,
+    githubUserLogin: audience.userLogin,
   };
-  githubAuthCache.set(`${orgId}:${token}`, auth);
+  githubAuthCache.set(cacheKey, auth);
   return auth;
 }
 
@@ -214,7 +229,13 @@ async function withDefaultOrg(auth: AuthContext): Promise<AuthContext> {
   return { ...auth, orgId: await defaultOrgId() };
 }
 
-function isTrustedInfraAuth(auth: AuthContext): boolean {
+/**
+ * Auth that came from a server-side secret rather than an end user: the Console
+ * BFF's GX_CLOUD_API_KEY and the local-dev bypass. Neither carries a GitHub
+ * identity to check org membership against, so routes that authorize a user
+ * against an org exempt them and rely on the caller's own access checks.
+ */
+export function isTrustedInfraAuth(auth: AuthContext): boolean {
   return auth.tokenLabel === "cloud-api-key" || auth.tokenLabel === "local-dev";
 }
 

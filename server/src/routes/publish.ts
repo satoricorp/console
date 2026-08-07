@@ -6,7 +6,8 @@ import {
   resolveOrgIdForInstallation,
 } from "../github/app";
 import { indexPublishedArtifact } from "../indexing/turbopuffer";
-import { requireAuth, type AppEnv } from "../middleware/auth";
+import { isTrustedInfraAuth, requireAuth, type AppEnv } from "../middleware/auth";
+import { isOrgMember, parseGithubUserIdFromAuth } from "../orgs/members";
 import { enqueueReviewPlanGeneration } from "../review-plan/generate";
 import {
   loadPublishedSessionTexts,
@@ -19,7 +20,7 @@ import { reconcilePublishBookmarkWithPullRequest } from "../publish/reconcile";
 import { publishRevisions } from "../publish/revisions";
 import { postMissingPrSummaryAfterPublish } from "../publish/summary-post";
 import { capture, Events } from "../telemetry/posthog";
-import type { PublishRegistration, PushBundle } from "../types";
+import type { AuthContext, PublishRegistration, PushBundle } from "../types";
 
 export const publishRoutes = new Hono<AppEnv>();
 
@@ -58,7 +59,7 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
 
   try {
     const db = getSql();
-    const orgId = await resolvePublishOrgId(db, auth.orgId, repoFullName);
+    const orgId = await resolvePublishOrgId(db, auth, repoFullName);
     const result = await db.begin(async (tx) => {
       const [event] = await tx<{ id: string }[]>`
         INSERT INTO pr_events (
@@ -211,6 +212,9 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       201,
     );
   } catch (error) {
+    if (error instanceof PublishForbiddenError) {
+      return publishForbidden(c, auth, error);
+    }
     console.error("Failed to publish gx payload", error);
     return c.json({ error: "Failed to publish" }, 500);
   }
@@ -228,7 +232,7 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
 
   try {
     const db = getSql();
-    const orgId = await resolvePublishOrgId(db, auth.orgId, registration.repo_full_name);
+    const orgId = await resolvePublishOrgId(db, auth, registration.repo_full_name);
     const bookmark = await upsertBookmark(db, {
       orgId,
       userId: auth.userId,
@@ -258,6 +262,9 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
       201,
     );
   } catch (error) {
+    if (error instanceof PublishForbiddenError) {
+      return publishForbidden(c, auth, error);
+    }
     console.error("Failed to register gx publish", error);
     return c.json({ error: "Failed to register publish" }, 500);
   }
@@ -304,16 +311,81 @@ function validatePublishRegistration(value: unknown): PublishRegistration {
   };
 }
 
+/** Publish aimed at an org the caller does not belong to. */
+class PublishForbiddenError extends Error {
+  constructor(readonly repoFullName: string) {
+    super(
+      `You are not a member of the organization that owns ${repoFullName} on gx`,
+    );
+    this.name = "PublishForbiddenError";
+  }
+}
+
+/**
+ * The org a publish is filed under.
+ *
+ * `repoFullName` is derived from the request body (remote_url, the PR URL, or
+ * repo_full_name), so "which org installed that repo" is a question the caller
+ * gets to choose. Answering it and then writing there unconditionally is a
+ * tenant confusion: any authenticated gx user could name someone else's repo
+ * and have their pr_events, bookmarks and indexed session text land in that
+ * org, then have the reconcile and summary steps use that org's installation
+ * token to take over a PR bookmark and rewrite the real PR body.
+ *
+ * The retarget itself is legitimate and has to stay — a CLI session whose org
+ * resolved to the user's personal org publishes into the org that installed
+ * the App, and that is how a bookmark migrates orgs. Membership is what
+ * separates the two: a caller who belongs to the owning org keeps the
+ * retarget, and one who does not is refused rather than silently redirected.
+ */
 async function resolvePublishOrgId(
   db: SqlExecutor,
-  fallbackOrgId: string,
+  auth: AuthContext,
   repoFullName: string,
 ): Promise<string> {
   const grant = await findInstalledRepository(db, repoFullName);
   if (!grant) {
-    return fallbackOrgId;
+    // Nothing else owns this repo, so the publish stays in the caller's own org.
+    return auth.orgId;
   }
-  return (await resolveOrgIdForInstallation(db, grant.installationId)) ?? fallbackOrgId;
+
+  const ownerOrgId = await resolveOrgIdForInstallation(db, grant.installationId);
+  if (!ownerOrgId || ownerOrgId === auth.orgId) {
+    return auth.orgId;
+  }
+
+  // The Console BFF and local dev hold a server-side key rather than a user
+  // identity; their per-user access checks run in the caller.
+  if (isTrustedInfraAuth(auth)) {
+    return ownerOrgId;
+  }
+
+  const githubUserId =
+    typeof auth.githubUserId === "number"
+      ? auth.githubUserId
+      : parseGithubUserIdFromAuth(auth.userId);
+  if (
+    typeof githubUserId === "number" &&
+    (await isOrgMember(db, ownerOrgId, githubUserId))
+  ) {
+    return ownerOrgId;
+  }
+
+  throw new PublishForbiddenError(repoFullName);
+}
+
+function publishForbidden(
+  c: Context<AppEnv>,
+  auth: AuthContext,
+  error: PublishForbiddenError,
+) {
+  console.warn("publish refused: caller is not a member of the owning org", {
+    callerOrgId: auth.orgId,
+    userId: auth.userId,
+    githubUserLogin: auth.githubUserLogin,
+    repoFullName: error.repoFullName,
+  });
+  return c.json({ error: error.message }, 403);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
