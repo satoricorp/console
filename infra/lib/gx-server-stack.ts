@@ -110,6 +110,22 @@ export class GxServerStack extends Stack {
           : RemovalPolicy.DESTROY,
     });
 
+    /**
+     * Scaffolding for a brand-new environment, never touched afterwards.
+     *
+     * DO NOT add keys here to introduce a new secret. `generateSecretString` is
+     * a CloudFormation property like any other: change it and the secret value
+     * is regenerated from the template on the next deploy, which overwrites
+     * every value an operator has since filled in with "replace-me" and drops
+     * any key the template does not list. Adding GITHUB_CLIENT_ID and
+     * GITHUB_CLIENT_SECRET here did exactly that to staging on 2026-08-07 —
+     * the ECS task then could not start (the regenerated secret no longer had
+     * GX_POSTHOG_KEY), the circuit breaker tripped, and the rollback did not
+     * restore the values because both retained versions were post-regeneration.
+     *
+     * A new secret only needs its `fromSecretsManager` reference below plus an
+     * operator writing the value; GX_POSTHOG_KEY has always worked that way.
+     */
     const appSecret = new secretsmanager.Secret(this, "AppSecret", {
       secretName: `/gx/${props.environmentName}/server`,
       description: `gx ${props.environmentName} server app secrets`,
@@ -120,8 +136,6 @@ export class GxServerStack extends Stack {
           GITHUB_APP_ID: "replace-me",
           GITHUB_APP_PRIVATE_KEY: "replace-me",
           GITHUB_WEBHOOK_SECRET: "replace-me",
-          GITHUB_CLIENT_ID: "replace-me",
-          GITHUB_CLIENT_SECRET: "replace-me",
           OPENAI_API_KEY: "replace-me",
           TURBOPUFFER_API_KEY: "replace-me",
         }),
