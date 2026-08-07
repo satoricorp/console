@@ -104,6 +104,39 @@ export async function findInstalledRepository(
   };
 }
 
+/**
+ * The installation grant for a repo, but only when the installation belongs to
+ * `orgId`.
+ *
+ * `findInstalledRepository` answers "is this repo installed anywhere", which is
+ * the wrong question wherever the answer is about to become an installation
+ * access token: the repo name reaching those call sites came from a request
+ * body, so the plain lookup hands the caller a token for whoever installed that
+ * repo — enough to edit a stranger's pull request. Every site that turns a
+ * client-supplied repo name into a token asks this instead, so the token is
+ * only ever minted for the org the request is already authorized to act for.
+ */
+export async function findInstalledRepositoryForOrg(
+  db: SqlExecutor,
+  orgId: string,
+  repoFullName: string,
+): Promise<GitHubAppInstallationGrant | null> {
+  const grant = await findInstalledRepository(db, repoFullName);
+  if (!grant) return null;
+
+  const ownerOrgId = await resolveOrgIdForInstallation(db, grant.installationId);
+  if (ownerOrgId && ownerOrgId === orgId) {
+    return grant;
+  }
+  console.error("refused an installation token for a repo owned by another org", {
+    orgId,
+    ownerOrgId,
+    repoFullName,
+    installationId: grant.installationId,
+  });
+  return null;
+}
+
 export async function getInstallationTokenForRepo(
   db: SqlExecutor,
   repoFullName: string,

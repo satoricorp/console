@@ -1,6 +1,6 @@
 import type postgres from "postgres";
 import {
-  findInstalledRepository,
+  findInstalledRepositoryForOrg,
   getInstallationAccessToken,
 } from "../github/app";
 import type { BookmarkRow } from "./bookmark";
@@ -18,6 +18,7 @@ export async function reconcilePublishBookmarkWithPullRequest(
   let prUrl = input.githubPrUrl;
   const lookedUp = await lookupOpenPullRequestForBranch(
     db,
+    input.orgId,
     input.bookmark.repo_full_name,
     input.bookmark.branch_name,
   );
@@ -86,6 +87,7 @@ export async function reconcilePublishBookmarkWithPullRequest(
 
 async function lookupOpenPullRequestForBranch(
   db: postgres.Sql,
+  orgId: string,
   repoFullName: string,
   branchName: string,
 ): Promise<{ number: number; htmlUrl: string } | null> {
@@ -93,7 +95,9 @@ async function lookupOpenPullRequestForBranch(
   if (!branch || branch === "HEAD" || branch === "unknown") {
     return null;
   }
-  const grant = await findInstalledRepository(db, repoFullName);
+  // Org-scoped: this lookup decides which PR the bookmark takes ownership of,
+  // and it runs on a repo name the publisher chose.
+  const grant = await findInstalledRepositoryForOrg(db, orgId, repoFullName);
   if (!grant) {
     return null;
   }
