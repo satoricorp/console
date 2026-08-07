@@ -4,100 +4,100 @@ import { HOW_IT_WORKS_DOCS_URL } from "@/lib/site-links";
 const STEPS = [
   {
     step: "01",
-    verb: "Surface",
-    title: "Surface only critical code changes",
+    verb: "Before you push",
+    title: "Skip a round of review comments.",
     detail:
-      "Because gx has context on code changes, it can surface the most important changes that are in the critical path, saving you hours every day.",
-    visual: "capture",
+      "Run /gx in your coding agent to review the change you just made. Fix what it finds while the code is still in your working tree, and the issues a reviewer would have flagged are gone before the PR exists.",
+    visual: "session",
   },
   {
     step: "02",
-    verb: "Review Loop",
-    title: "Review Loop.",
+    verb: "In the pull request",
+    title: "Get answers without waiting on the author.",
     detail:
-      "gx uses 92 independent resources to make sure we review your code correctly, reducing bugs. gx verifies its findings through Review Loop, where frontier models face-off to determine the best fixes for every issue.",
-    visual: "verify",
+      "Mention @gx in any PR comment. It answers from your codebase and from the session that produced the change, so reviewers get the 'why' in seconds instead of a Slack thread and a day of lag.",
+    visual: "chat",
   },
   {
     step: "03",
-    verb: "Save",
-    title: "Save your coding history.",
+    verb: "Reviewing",
+    title: "Read three files instead of forty.",
     detail:
-      "Don't let any more of your data slip through your fingers. It's important to understand how your product is built, from ground zero. Start saving your data today.",
-    visual: "review",
+      "gx ranks every change by how much it matters and who it affects, so you start on the critical path instead of scrolling the whole diff looking for the part that counts.",
+    visual: "priority",
   },
 ] as const;
 
-function CaptureMockup() {
-  const items = [
-    "Coding Sessions",
-    "Indexed Codebase",
-    "Previous PR Changes & Comments",
+function SessionMockup() {
+  const lines = [
+    { text: "/gx", tone: "prompt" },
+    { text: "Reviewing 12 changed files…", tone: "muted" },
+    { text: "2 issues found before push", tone: "found" },
   ] as const;
 
   return (
-    <div
-      aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white"
-    >
+    <div aria-hidden className="overflow-hidden border border-zinc-200 bg-white">
       <div className="border-b border-zinc-200 px-4 py-3">
-        <p className="text-xs font-medium text-zinc-900">Review Context</p>
+        <p className="text-xs font-medium text-zinc-900">Coding agent</p>
       </div>
-      <div className="space-y-0 px-4 py-3 pl-6 font-mono text-xs leading-6">
-        {items.map((item, index) => {
-          const isLast = index === items.length - 1;
-          const branch = isLast ? "└──" : "├──";
-
-          return (
-            <div
-              key={item}
-              className="flex min-w-0 items-center text-zinc-700"
+      <div className="space-y-0 px-4 py-3 font-mono text-xs leading-6">
+        {lines.map((line) => (
+          <div key={line.text} className="flex min-w-0 items-center">
+            <span
+              className={`mr-2 shrink-0 ${
+                line.tone === "prompt" ? "text-zinc-400" : "text-transparent"
+              }`}
             >
-              <span aria-hidden className="mr-2 shrink-0 text-zinc-400">
-                {branch}
-              </span>
-              <span className="truncate">{item}</span>
-            </div>
-          );
-        })}
+              ›
+            </span>
+            <span
+              className={`truncate ${
+                line.tone === "prompt"
+                  ? "text-zinc-900"
+                  : line.tone === "found"
+                    ? "text-amber-600"
+                    : "text-zinc-500"
+              }`}
+            >
+              {line.text}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function VerifyMockup() {
-  const models = [
-    { name: "OpenAI", signal: "5 issues found", tone: "error" },
-    { name: "Anthropic", signal: "2 issues found", tone: "warn" },
-    { name: "Review Loop", signal: "3 fixes surfaced", tone: "success" },
+function ChatMockup() {
+  const thread = [
+    {
+      author: "you",
+      body: "@gx what is the riskiest change here?",
+      tone: "ask",
+    },
+    {
+      author: "gx",
+      body: "The token refresh rewrite in auth/session.ts — it changes who stays signed in.",
+      tone: "answer",
+    },
   ] as const;
 
-  const signalToneClass = {
-    error: "text-red-600",
-    warn: "text-amber-600",
-    success: "text-emerald-600",
-  } as const;
-
   return (
-    <div
-      aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white"
-    >
+    <div aria-hidden className="overflow-hidden border border-zinc-200 bg-white">
       <div className="border-b border-zinc-200 px-4 py-3">
-        <p className="text-xs font-medium text-zinc-900">Review Loop</p>
+        <p className="text-xs font-medium text-zinc-900">Pull request #482</p>
       </div>
       <ul className="divide-y divide-zinc-200">
-        {models.map((model) => (
-          <li
-            key={model.name}
-            className="flex items-center justify-between gap-3 px-4 py-3 text-xs"
-          >
-            <span className="font-mono text-zinc-500">{model.name}</span>
-            <span
-              className={`truncate text-right ${signalToneClass[model.tone]}`}
+        {thread.map((message) => (
+          <li key={message.author} className="space-y-1 px-4 py-3">
+            <p
+              className={`font-mono text-[10px] uppercase tracking-wider ${
+                message.tone === "answer" ? "text-emerald-600" : "text-zinc-500"
+              }`}
             >
-              {model.signal}
-            </span>
+              {message.author}
+            </p>
+            <p className="text-xs leading-5 text-zinc-700">{message.body}</p>
           </li>
         ))}
       </ul>
@@ -105,34 +105,37 @@ function VerifyMockup() {
   );
 }
 
-function ReviewMockup() {
-  const sessions = [
-    { title: "auth-refactor session", status: "saved", tone: "ready" },
-    { title: "47 tool calls indexed", status: "indexed", tone: "ready" },
-    { title: "opus · 128k tokens", status: "$1.24", tone: "active" },
+function PriorityMockup() {
+  const files = [
+    { path: "auth/session.ts", label: "critical", tone: "high" },
+    { path: "api/publish.ts", label: "review", tone: "mid" },
+    { path: "ui/button.tsx", label: "skim", tone: "low" },
   ] as const;
 
+  const labelToneClass = {
+    high: "text-red-600",
+    mid: "text-amber-600",
+    low: "text-zinc-400",
+  } as const;
+
   return (
-    <div
-      aria-hidden
-      className="overflow-hidden border border-zinc-200 bg-white"
-    >
+    <div aria-hidden className="overflow-hidden border border-zinc-200 bg-white">
       <div className="border-b border-zinc-200 px-4 py-3">
-        <p className="text-xs font-medium text-zinc-900">Session history</p>
+        <p className="text-xs font-medium text-zinc-900">Read this first</p>
       </div>
       <ul className="divide-y divide-zinc-200">
-        {sessions.map((item) => (
+        {files.map((file) => (
           <li
-            key={item.title}
+            key={file.path}
             className="flex items-center justify-between gap-3 px-4 py-3 text-xs"
           >
-            <span className="min-w-0 truncate text-zinc-700">{item.title}</span>
+            <span className="min-w-0 truncate font-mono text-zinc-700">
+              {file.path}
+            </span>
             <span
-              className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
-                item.tone === "ready" ? "text-emerald-600" : "text-zinc-500"
-              }`}
+              className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${labelToneClass[file.tone]}`}
             >
-              {item.status}
+              {file.label}
             </span>
           </li>
         ))}
@@ -142,9 +145,9 @@ function ReviewMockup() {
 }
 
 function StepVisual({ type }: { type: (typeof STEPS)[number]["visual"] }) {
-  if (type === "capture") return <CaptureMockup />;
-  if (type === "verify") return <VerifyMockup />;
-  return <ReviewMockup />;
+  if (type === "session") return <SessionMockup />;
+  if (type === "chat") return <ChatMockup />;
+  return <PriorityMockup />;
 }
 
 export function HowItWorksSection() {
@@ -164,19 +167,12 @@ export function HowItWorksSection() {
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
             How it works
           </p>
-          <h2 className="whitespace-nowrap text-xl font-medium tracking-tight text-zinc-950 sm:text-3xl">
-            Use your coding sessions to improve code review.
+          <h2 className="text-xl font-medium tracking-tight text-zinc-950 sm:text-3xl">
+            Better code, less time in review.
           </h2>
           <p className="max-w-2xl text-sm leading-6 text-zinc-600">
-            Traditional commits don&apos;t contain session context to provide
-            the &apos;why&apos;, which helps developers understand how to review
-            code generated by agents.
-          </p>
-          <p className="max-w-2xl text-sm leading-6 text-zinc-600">
-            gx saves your raw session data, tool calls, and edits to better
-            understand how changes were made. gx also saves the metadata about
-            what models you used along with token spend, so you can understand
-            how each feature was built and how much it cost.
+            gx saves the session that produced each change — the prompts, tool
+            calls, and edits — and uses it everywhere you review.
           </p>
           <a
             href={HOW_IT_WORKS_DOCS_URL}
