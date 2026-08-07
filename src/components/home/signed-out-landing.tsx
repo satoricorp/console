@@ -1,6 +1,5 @@
 import { FaqAccordion } from "@/components/home/faq-accordion";
 import { FeaturesSection } from "@/components/home/features-section";
-import { GitToTxSection } from "@/components/home/git-to-gx-section";
 import { HeroSection } from "@/components/home/hero-section";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { LandingBgFade } from "@/components/home/landing-bg-fade";
@@ -36,7 +35,6 @@ export function SignedOutLanding() {
       <LandingBgFade>
         <main className="flex flex-1 flex-col">
           <HeroSection />
-          <GitToTxSection />
           <HowItWorksSection />
           <FeaturesSection />
 
