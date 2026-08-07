@@ -5,8 +5,8 @@ const originalFetch = globalThis.fetch;
 const originalEnv = {
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
-  GX_CLI_GITHUB_CLIENT_ID: process.env.GX_CLI_GITHUB_CLIENT_ID,
-  GX_CLI_GITHUB_CLIENT_SECRET: process.env.GX_CLI_GITHUB_CLIENT_SECRET,
+  GX_LEGACY_GITHUB_CLIENT_ID: process.env.GX_LEGACY_GITHUB_CLIENT_ID,
+  GX_LEGACY_GITHUB_CLIENT_SECRET: process.env.GX_LEGACY_GITHUB_CLIENT_SECRET,
 };
 
 function restoreEnv(key: keyof typeof originalEnv) {
@@ -38,56 +38,56 @@ describe("verifyGitHubTokenAudience", () => {
     globalThis.fetch = originalFetch;
     restoreEnv("GITHUB_CLIENT_ID");
     restoreEnv("GITHUB_CLIENT_SECRET");
-    restoreEnv("GX_CLI_GITHUB_CLIENT_ID");
-    restoreEnv("GX_CLI_GITHUB_CLIENT_SECRET");
+    restoreEnv("GX_LEGACY_GITHUB_CLIENT_ID");
+    restoreEnv("GX_LEGACY_GITHUB_CLIENT_SECRET");
   });
 
-  test("accepts a token issued for the console OAuth client", async () => {
-    process.env.GITHUB_CLIENT_ID = "Iv23console";
-    process.env.GITHUB_CLIENT_SECRET = "console-secret";
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+  test("accepts a token issued for the gx OAuth client", async () => {
+    process.env.GITHUB_CLIENT_ID = "Iv23gx";
+    process.env.GITHUB_CLIENT_SECRET = "gx-secret";
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
 
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe(
-        "https://api.github.com/applications/Iv23console/token",
+        "https://api.github.com/applications/Iv23gx/token",
       );
       expect(init?.method).toBe("POST");
       const headers = init?.headers as Record<string, string>;
       expect(headers.Authorization).toBe(
-        `Basic ${Buffer.from("Iv23console:console-secret").toString("base64")}`,
+        `Basic ${Buffer.from("Iv23gx:gx-secret").toString("base64")}`,
       );
       expect(JSON.parse(String(init?.body))).toEqual({ access_token: "gho_user" });
-      return checkTokenResponse("Iv23console", { id: 12345, login: "octocat" });
+      return checkTokenResponse("Iv23gx", { id: 12345, login: "octocat" });
     }) as typeof fetch;
 
     await expect(verifyGitHubTokenAudience("gho_user")).resolves.toEqual({
-      clientId: "Iv23console",
-      clientLabel: "console",
+      clientId: "Iv23gx",
+      clientLabel: "gx",
       userId: 12345,
       userLogin: "octocat",
     });
   });
 
-  test("accepts a CLI device-flow token, which the console client does not know", async () => {
-    process.env.GITHUB_CLIENT_ID = "Iv23console";
-    process.env.GITHUB_CLIENT_SECRET = "console-secret";
-    process.env.GX_CLI_GITHUB_CLIENT_ID = "Iv23cli";
-    process.env.GX_CLI_GITHUB_CLIENT_SECRET = "cli-secret";
+  test("accepts a token from the retired client while old CLI binaries remain", async () => {
+    process.env.GITHUB_CLIENT_ID = "Iv23gx";
+    process.env.GITHUB_CLIENT_SECRET = "gx-secret";
+    process.env.GX_LEGACY_GITHUB_CLIENT_ID = "Iv23old";
+    process.env.GX_LEGACY_GITHUB_CLIENT_SECRET = "legacy-secret";
 
     const asked: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       asked.push(url);
-      if (url.includes("Iv23cli")) {
-        return checkTokenResponse("Iv23cli", { id: 777, login: "dev" });
+      if (url.includes("Iv23old")) {
+        return checkTokenResponse("Iv23old", { id: 777, login: "dev" });
       }
       return notThisApp();
     }) as typeof fetch;
 
     await expect(verifyGitHubTokenAudience("ghu_cli")).resolves.toEqual({
-      clientId: "Iv23cli",
-      clientLabel: "cli",
+      clientId: "Iv23old",
+      clientLabel: "legacy",
       userId: 777,
       userLogin: "dev",
     });
@@ -95,10 +95,10 @@ describe("verifyGitHubTokenAudience", () => {
   });
 
   test("rejects a token issued for somebody else's application", async () => {
-    process.env.GITHUB_CLIENT_ID = "Iv23console";
-    process.env.GITHUB_CLIENT_SECRET = "console-secret";
-    process.env.GX_CLI_GITHUB_CLIENT_ID = "Iv23cli";
-    process.env.GX_CLI_GITHUB_CLIENT_SECRET = "cli-secret";
+    process.env.GITHUB_CLIENT_ID = "Iv23gx";
+    process.env.GITHUB_CLIENT_SECRET = "gx-secret";
+    process.env.GX_LEGACY_GITHUB_CLIENT_ID = "Iv23old";
+    process.env.GX_LEGACY_GITHUB_CLIENT_SECRET = "legacy-secret";
 
     globalThis.fetch = (async () => notThisApp()) as unknown as typeof fetch;
 
@@ -110,8 +110,8 @@ describe("verifyGitHubTokenAudience", () => {
   test("rejects every token when no client credentials are configured", async () => {
     delete process.env.GITHUB_CLIENT_ID;
     delete process.env.GITHUB_CLIENT_SECRET;
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
 
     globalThis.fetch = (async () => {
       throw new Error("must not ask GitHub with no credentials to ask with");
@@ -121,10 +121,10 @@ describe("verifyGitHubTokenAudience", () => {
   });
 
   test("rejects an answer that names a different client than the one asked", async () => {
-    process.env.GITHUB_CLIENT_ID = "Iv23console";
-    process.env.GITHUB_CLIENT_SECRET = "console-secret";
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    process.env.GITHUB_CLIENT_ID = "Iv23gx";
+    process.env.GITHUB_CLIENT_SECRET = "gx-secret";
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
 
     globalThis.fetch = (async () =>
       checkTokenResponse("Iv23somebodyelse", {
@@ -136,10 +136,10 @@ describe("verifyGitHubTokenAudience", () => {
   });
 
   test("rejects when GitHub refuses our own client credentials", async () => {
-    process.env.GITHUB_CLIENT_ID = "Iv23console";
+    process.env.GITHUB_CLIENT_ID = "Iv23gx";
     process.env.GITHUB_CLIENT_SECRET = "stale-secret";
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
 
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ message: "Bad credentials" }), {

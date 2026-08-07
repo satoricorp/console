@@ -6,8 +6,8 @@ const originalFetch = globalThis.fetch;
 const originalEnv = {
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
-  GX_CLI_GITHUB_CLIENT_ID: process.env.GX_CLI_GITHUB_CLIENT_ID,
-  GX_CLI_GITHUB_CLIENT_SECRET: process.env.GX_CLI_GITHUB_CLIENT_SECRET,
+  GX_LEGACY_GITHUB_CLIENT_ID: process.env.GX_LEGACY_GITHUB_CLIENT_ID,
+  GX_LEGACY_GITHUB_CLIENT_SECRET: process.env.GX_LEGACY_GITHUB_CLIENT_SECRET,
 };
 
 function restoreEnv(key: keyof typeof originalEnv) {
@@ -20,10 +20,10 @@ function restoreEnv(key: keyof typeof originalEnv) {
 }
 
 function installGxClients() {
-  process.env.GITHUB_CLIENT_ID = "Iv23console";
-  process.env.GITHUB_CLIENT_SECRET = "console-secret";
-  process.env.GX_CLI_GITHUB_CLIENT_ID = "Iv23cli";
-  process.env.GX_CLI_GITHUB_CLIENT_SECRET = "cli-secret";
+  process.env.GITHUB_CLIENT_ID = "Iv23gx";
+  process.env.GITHUB_CLIENT_SECRET = "gx-secret";
+  process.env.GX_LEGACY_GITHUB_CLIENT_ID = "Iv23old";
+  process.env.GX_LEGACY_GITHUB_CLIENT_SECRET = "legacy-secret";
 }
 
 describe("verifyGitHubTokenAudience", () => {
@@ -31,36 +31,73 @@ describe("verifyGitHubTokenAudience", () => {
     globalThis.fetch = originalFetch;
     restoreEnv("GITHUB_CLIENT_ID");
     restoreEnv("GITHUB_CLIENT_SECRET");
-    restoreEnv("GX_CLI_GITHUB_CLIENT_ID");
-    restoreEnv("GX_CLI_GITHUB_CLIENT_SECRET");
+    restoreEnv("GX_LEGACY_GITHUB_CLIENT_ID");
+    restoreEnv("GX_LEGACY_GITHUB_CLIENT_SECRET");
   });
 
-  test("accepts a token the gx CLI's device flow issued", async () => {
+  test("accepts a token the gx device flow issued", async () => {
     installGxClients();
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (!url.includes("Iv23cli")) {
+      if (!url.includes("Iv23gx")) {
         return new Response(JSON.stringify({ message: "Not Found" }), {
           status: 404,
         });
       }
       const headers = init?.headers as Record<string, string>;
-      expect(headers.Authorization).toBe(
-        `Basic ${btoa("Iv23cli:cli-secret")}`,
-      );
+      expect(headers.Authorization).toBe(`Basic ${btoa("Iv23gx:gx-secret")}`);
       expect(JSON.parse(String(init?.body))).toEqual({ access_token: "ghu_cli" });
       return Response.json({
-        app: { client_id: "Iv23cli" },
+        app: { client_id: "Iv23gx" },
         user: { id: 4242, login: "octocat" },
       });
     }) as typeof fetch;
 
     await expect(verifyGitHubTokenAudience("ghu_cli")).resolves.toEqual({
-      clientId: "Iv23cli",
-      clientLabel: "cli",
+      clientId: "Iv23gx",
+      clientLabel: "gx",
       userId: 4242,
       userLogin: "octocat",
     });
+  });
+
+  test("still accepts a CLI binary built before the clients were consolidated", async () => {
+    installGxClients();
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      if (!String(input).includes("Iv23old")) {
+        return new Response(JSON.stringify({ message: "Not Found" }), {
+          status: 404,
+        });
+      }
+      return Response.json({
+        app: { client_id: "Iv23old" },
+        user: { id: 4242, login: "octocat" },
+      });
+    }) as typeof fetch;
+
+    await expect(verifyGitHubTokenAudience("ghu_old_binary")).resolves.toEqual({
+      clientId: "Iv23old",
+      clientLabel: "legacy",
+      userId: 4242,
+      userLogin: "octocat",
+    });
+  });
+
+  test("refuses the retired client once its credentials are removed", async () => {
+    installGxClients();
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      // Only the canonical client is asked now, and the old token is not its.
+      expect(String(input)).toContain("Iv23gx");
+      return new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
+      });
+    }) as typeof fetch;
+
+    await expect(
+      verifyGitHubTokenAudience("ghu_old_binary"),
+    ).resolves.toBeNull();
   });
 
   test("rejects a valid GitHub token issued for a different application", async () => {
@@ -84,8 +121,8 @@ describe("verifyGitHubTokenAudience", () => {
   test("rejects every token when no client credentials are configured", async () => {
     delete process.env.GITHUB_CLIENT_ID;
     delete process.env.GITHUB_CLIENT_SECRET;
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
     globalThis.fetch = (async () => {
       throw new Error("must not ask GitHub with no credentials to ask with");
     }) as unknown as typeof fetch;

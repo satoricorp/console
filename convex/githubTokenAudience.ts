@@ -40,22 +40,26 @@ type CheckTokenResponse = {
 /**
  * The OAuth clients whose tokens count as a gx login.
  *
- * gx has two, and they are different applications: the Console's web sign-in
- * (GITHUB_CLIENT_ID) and the CLI's device flow (GX_CLI_GITHUB_CLIENT_ID). CLI
- * logins arrive with the second, so that pair has to be set in the Convex
- * environment for `gx auth login` to work.
+ * There is one gx OAuth client, GITHUB_CLIENT_ID, used by both the Console's
+ * web sign-in and the CLI's device flow.
+ *
+ * The legacy pair is a migration slot, not a second identity. The CLI bakes its
+ * client id into the binary at build time, so binaries built before the two
+ * clients were consolidated keep presenting the old one, and a token they
+ * obtained is still a genuine gx login. Configure it while those are in the
+ * wild and delete it once they have aged out.
  */
 export function trustedGitHubOAuthClients(): GitHubOAuthClient[] {
   return [
     {
-      label: "console",
+      label: "gx",
       id: process.env.GITHUB_CLIENT_ID?.trim() || "",
       secret: process.env.GITHUB_CLIENT_SECRET?.trim() || "",
     },
     {
-      label: "cli",
-      id: process.env.GX_CLI_GITHUB_CLIENT_ID?.trim() || "",
-      secret: process.env.GX_CLI_GITHUB_CLIENT_SECRET?.trim() || "",
+      label: "legacy",
+      id: process.env.GX_LEGACY_GITHUB_CLIENT_ID?.trim() || "",
+      secret: process.env.GX_LEGACY_GITHUB_CLIENT_SECRET?.trim() || "",
     },
   ].filter((client) => client.id && client.secret);
 }
@@ -71,8 +75,7 @@ export async function verifyGitHubTokenAudience(
   const clients = trustedGitHubOAuthClients();
   if (clients.length === 0) {
     console.error(
-      "GitHub tokens rejected: no GitHub OAuth client credentials are configured " +
-        "(GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET, GX_CLI_GITHUB_CLIENT_ID/GX_CLI_GITHUB_CLIENT_SECRET)",
+      "GitHub tokens rejected: GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET are not configured",
     );
     return null;
   }
