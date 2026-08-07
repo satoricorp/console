@@ -22,7 +22,6 @@ export type PushBundle = {
   schema_version?: number;
   created_at: number;
   gx_version: string;
-  pr_id?: string;
   review_id?: string;
   review_url?: string;
   index_status?: string;
