@@ -18,16 +18,13 @@
  * https://docs.github.com/rest/apps/oauth-applications#check-a-token
  */
 
-export type GitHubOAuthClient = {
-  /** Which gx client this is, for logs. Never the secret. */
-  label: string;
+type GitHubOAuthClient = {
   id: string;
   secret: string;
 };
 
 export type GitHubTokenAudience = {
   clientId: string;
-  clientLabel: string;
   userId: number;
   userLogin?: string;
 };
@@ -38,55 +35,32 @@ type CheckTokenResponse = {
 };
 
 /**
- * The OAuth clients whose tokens count as a gx login.
- *
- * There is one gx OAuth client, GITHUB_CLIENT_ID, used by both the Console's
- * web sign-in and the CLI's device flow.
- *
- * The legacy pair is a migration slot, not a second identity. The CLI bakes its
- * client id into the binary at build time, so binaries built before the two
- * clients were consolidated keep presenting the old one, and a token they
- * obtained is still a genuine gx login. Configure it while those are in the
- * wild and delete it once they have aged out.
+ * The one gx OAuth client. Both the Console's web sign-in and the CLI's device
+ * flow authorize against it, so a token issued for anything else is not a gx
+ * login regardless of which GitHub user it names.
  */
-export function trustedGitHubOAuthClients(): GitHubOAuthClient[] {
-  return [
-    {
-      label: "gx",
-      id: process.env.GITHUB_CLIENT_ID?.trim() || "",
-      secret: process.env.GITHUB_CLIENT_SECRET?.trim() || "",
-    },
-    {
-      label: "legacy",
-      id: process.env.GX_LEGACY_GITHUB_CLIENT_ID?.trim() || "",
-      secret: process.env.GX_LEGACY_GITHUB_CLIENT_SECRET?.trim() || "",
-    },
-  ].filter((client) => client.id && client.secret);
+function gxOAuthClient(): GitHubOAuthClient | null {
+  const id = process.env.GITHUB_CLIENT_ID?.trim() || "";
+  const secret = process.env.GITHUB_CLIENT_SECRET?.trim() || "";
+  return id && secret ? { id, secret } : null;
 }
 
 /**
- * Identity behind a GitHub token, or null when it was not issued for a gx
+ * Identity behind a GitHub token, or null when it was not issued for the gx
  * OAuth client. Unconfigured credentials mean no token can be verified, and an
  * unverifiable token is refused rather than waved through.
  */
 export async function verifyGitHubTokenAudience(
   accessToken: string,
 ): Promise<GitHubTokenAudience | null> {
-  const clients = trustedGitHubOAuthClients();
-  if (clients.length === 0) {
+  const client = gxOAuthClient();
+  if (!client) {
     console.error(
       "GitHub tokens rejected: GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET are not configured",
     );
     return null;
   }
-
-  for (const client of clients) {
-    const audience = await checkTokenForClient(client, accessToken);
-    if (audience) {
-      return audience;
-    }
-  }
-  return null;
+  return checkTokenForClient(client, accessToken);
 }
 
 async function checkTokenForClient(
@@ -110,10 +84,7 @@ async function checkTokenForClient(
       },
     );
   } catch (error) {
-    console.error("GitHub check-token request failed", {
-      client: client.label,
-      error,
-    });
+    console.error("GitHub check-token request failed", { error });
     return null;
   }
 
@@ -123,16 +94,11 @@ async function checkTokenForClient(
     return null;
   }
   if (response.status === 401) {
-    console.error("GitHub check-token rejected our client credentials", {
-      client: client.label,
-    });
+    console.error("GitHub check-token rejected our client credentials");
     return null;
   }
   if (!response.ok) {
-    console.error("GitHub check-token failed", {
-      client: client.label,
-      status: response.status,
-    });
+    console.error("GitHub check-token failed", { status: response.status });
     return null;
   }
 
@@ -150,15 +116,12 @@ async function checkTokenForClient(
   // GitHub echoes the client the token belongs to; a mismatch would mean the
   // answer describes some other application's token.
   if (payload.app?.client_id && payload.app.client_id !== client.id) {
-    console.error("GitHub check-token answered for a different client", {
-      client: client.label,
-    });
+    console.error("GitHub check-token answered for a different client");
     return null;
   }
 
   return {
     clientId: client.id,
-    clientLabel: client.label,
     userId,
     userLogin: payload.user?.login,
   };
