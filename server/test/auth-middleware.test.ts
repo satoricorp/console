@@ -31,8 +31,8 @@ function authApp() {
 function installGitHubOAuthClient() {
   process.env.GITHUB_CLIENT_ID = "Iv23console";
   process.env.GITHUB_CLIENT_SECRET = "console-secret";
-  delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-  delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+  delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+  delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
 }
 
 describe("requireAuth", () => {
@@ -360,8 +360,8 @@ describe("requireAuth", () => {
     process.env.NODE_ENV = "production";
     delete process.env.GITHUB_CLIENT_ID;
     delete process.env.GITHUB_CLIENT_SECRET;
-    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
-    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_ID;
+    delete process.env.GX_LEGACY_GITHUB_CLIENT_SECRET;
     setOrgMemberCheckForTests(async () => true);
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: 12345, login: "octocat" }), {

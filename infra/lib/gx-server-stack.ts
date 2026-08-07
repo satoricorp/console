@@ -122,8 +122,8 @@ export class GxServerStack extends Stack {
           GITHUB_WEBHOOK_SECRET: "replace-me",
           GITHUB_CLIENT_ID: "replace-me",
           GITHUB_CLIENT_SECRET: "replace-me",
-          GX_CLI_GITHUB_CLIENT_ID: "replace-me",
-          GX_CLI_GITHUB_CLIENT_SECRET: "replace-me",
+          GX_LEGACY_GITHUB_CLIENT_ID: "replace-me",
+          GX_LEGACY_GITHUB_CLIENT_SECRET: "replace-me",
           OPENAI_API_KEY: "replace-me",
           TURBOPUFFER_API_KEY: "replace-me",
         }),
@@ -243,6 +243,11 @@ export class GxServerStack extends Stack {
             // how a raw GitHub bearer is shown to have been issued for gx
             // rather than for some other application. Without them no such
             // token verifies, and that auth path refuses everything.
+            //
+            // ECS will not start a task whose referenced secret JSON key is
+            // absent, so every key named here must exist in the secret before
+            // this deploys — including the legacy pair, which stays until CLI
+            // binaries predating the client consolidation have aged out.
             GITHUB_CLIENT_ID: ecs.Secret.fromSecretsManager(
               appSecret,
               "GITHUB_CLIENT_ID",
@@ -251,13 +256,13 @@ export class GxServerStack extends Stack {
               appSecret,
               "GITHUB_CLIENT_SECRET",
             ),
-            GX_CLI_GITHUB_CLIENT_ID: ecs.Secret.fromSecretsManager(
+            GX_LEGACY_GITHUB_CLIENT_ID: ecs.Secret.fromSecretsManager(
               appSecret,
-              "GX_CLI_GITHUB_CLIENT_ID",
+              "GX_LEGACY_GITHUB_CLIENT_ID",
             ),
-            GX_CLI_GITHUB_CLIENT_SECRET: ecs.Secret.fromSecretsManager(
+            GX_LEGACY_GITHUB_CLIENT_SECRET: ecs.Secret.fromSecretsManager(
               appSecret,
-              "GX_CLI_GITHUB_CLIENT_SECRET",
+              "GX_LEGACY_GITHUB_CLIENT_SECRET",
             ),
             OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
