@@ -175,7 +175,6 @@ async function completeAuthWithGitHubToken(
       status: "success",
       auth_kind: "github",
       auth_source: args.source,
-      auth_client: audience.clientLabel,
       user_id: userId,
       github_user_id: githubUserId,
       login: githubUser.login,
