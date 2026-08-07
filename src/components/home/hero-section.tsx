@@ -88,7 +88,7 @@ export function HeroSection() {
       <WorksWithCarousel />
 
       <a
-        href="#git-to-gx"
+        href="#how-it-works"
         aria-label="Scroll to the next section"
         className="flex shrink-0 justify-center pb-5 pt-2"
       >

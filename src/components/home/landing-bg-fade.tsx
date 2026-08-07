@@ -15,9 +15,13 @@ type LandingBgFadeProps = {
 };
 
 /**
- * Document-space vertical gradient: black→white starts before How it works
- * and is fully white by `#how-it-works-rule` (the section’s top border).
- * White holds through How it works, then hard-cuts to black at Features.
+ * Document-space vertical gradient: black hard-cuts to white at
+ * `#how-it-works-rule` (the section’s top border). White holds through
+ * How it works, then hard-cuts back to black at Features.
+ *
+ * Both edges are hard cuts. A soft black→white ramp would have to run in the
+ * space above the rule, and the hero — full-viewport, with its CTA and
+ * works-with strip sitting right on that edge — has none to give.
  */
 export function LandingBgFade({ children }: LandingBgFadeProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -46,25 +50,19 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
       const rootTop = root.getBoundingClientRect().top + window.scrollY;
       const docY = (el: Element) =>
         el.getBoundingClientRect().top + window.scrollY - rootTop;
-      const vh = window.innerHeight;
-
       // Separator = section top border; marker sits at that edge.
       const ruleTop = ruleEl ? docY(ruleEl) : docY(howEl);
       const featTop = docY(featuresEl);
 
-      // Fade starts before the rule; fully white at the rule (not after).
-      const softIn = Math.min(vh * 0.55, howEl.offsetHeight * 0.35);
-
       const toPct = (y: number) => `${clamp((y / height) * 100, 0, 100)}%`;
 
-      const blackHold = toPct(ruleTop - softIn);
       const whiteStart = toPct(ruleTop);
       const whiteEnd = toPct(featTop);
 
       bg.style.background = [
         "linear-gradient(to bottom,",
         `${BLACK} 0%,`,
-        `${BLACK} ${blackHold},`,
+        `${BLACK} ${whiteStart},`,
         `${WHITE} ${whiteStart},`,
         `${WHITE} ${whiteEnd},`,
         `${BLACK} ${whiteEnd},`,
