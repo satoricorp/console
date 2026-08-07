@@ -9,6 +9,7 @@ import {
   type GitHubEmail,
   type GitHubProfile,
 } from "./githubProfile";
+import { verifyGitHubTokenAudience } from "./githubTokenAudience";
 
 type CompleteCliAuthResult = {
   cli_session_token: string;
@@ -103,6 +104,20 @@ async function completeAuthWithGitHubToken(
     source: "cli";
   },
 ): Promise<CompleteCliAuthResult> {
+  // Audience first: this route is unauthenticated, and everything below mints
+  // a 90-day gx session for whoever the token names.
+  const audience = await verifyGitHubTokenAudience(args.githubAccessToken);
+  if (!audience) {
+    await capturePostHog("server.auth.login", {
+      status: "rejected",
+      auth_kind: "github",
+      auth_source: args.source,
+      reason: "untrusted_token_audience",
+      gx_version: args.gxVersion ?? null,
+    });
+    throw new Error("GitHub token was not issued for gx");
+  }
+
   const githubUser = await githubFetch<GitHubProfile>(
     "https://api.github.com/user",
     args.githubAccessToken,
@@ -119,6 +134,11 @@ async function completeAuthWithGitHubToken(
     typeof githubUser.id === "number" ? githubUser.id : Number(githubUser.id);
   if (!Number.isSafeInteger(githubUserId)) {
     throw new Error("Invalid GitHub user id");
+  }
+  // The session is created for the profile, so the profile is who the verified
+  // token has to belong to.
+  if (githubUserId !== audience.userId) {
+    throw new Error("GitHub token does not match the GitHub user profile");
   }
 
   const email = await resolveGithubEmail(args.githubAccessToken, githubUser);
