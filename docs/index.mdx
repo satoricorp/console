@@ -17,6 +17,11 @@ This installs bash/zsh completions and aliases, like `gxr`, for `gx review`.
 
 ## Basic Usage
 
+You run exactly two gx commands: `gx init` once per repository to install the
+Git hooks, and `gx review` whenever you want an AI review. Otherwise, use Git
+as normal — the hooks record revisions, capture sessions, and publish on push
+without any gx-specific commands.
+
 ```bash
 cd your-repo
 gx init                                # once per repo: installs the Git hooks
