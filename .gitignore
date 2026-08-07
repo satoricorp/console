@@ -49,3 +49,8 @@ next-env.d.ts
 
 # gx cold-outreach generated artifacts (not for commit)
 outreach-out/
+
+# `gx review` writes its full JSON report here. The command also adds this path
+# to .git/info/exclude, but that file is per-machine — listed here so everyone
+# gets it, not just whoever ran the review.
+/review/
