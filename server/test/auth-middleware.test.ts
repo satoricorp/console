@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
-import { requireAuth, type AppEnv } from "../src/middleware/auth";
+import {
+  requireAuth,
+  setGithubAuthCacheClockForTests,
+  type AppEnv,
+} from "../src/middleware/auth";
 import {
   setOrgMemberCheckForTests,
   setOrgResolveForTests,
@@ -11,6 +15,8 @@ const originalFetch = globalThis.fetch;
 const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
 const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
+const originalClientId = process.env.GITHUB_CLIENT_ID;
+const originalClientSecret = process.env.GITHUB_CLIENT_SECRET;
 
 function authApp() {
   const app = new Hono<AppEnv>();
@@ -18,11 +24,33 @@ function authApp() {
   return app;
 }
 
+/**
+ * A gx OAuth client, so the check-token audience check has something to ask
+ * with. Without a configured client every raw GitHub bearer is refused.
+ */
+function installGitHubOAuthClient() {
+  process.env.GITHUB_CLIENT_ID = "Iv23console";
+  process.env.GITHUB_CLIENT_SECRET = "console-secret";
+  delete process.env.GX_CLI_GITHUB_CLIENT_ID;
+  delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+}
+
 describe("requireAuth", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     setOrgMemberCheckForTests(null);
     setOrgResolveForTests(null);
+    setGithubAuthCacheClockForTests(null);
+    if (originalClientId === undefined) {
+      delete process.env.GITHUB_CLIENT_ID;
+    } else {
+      process.env.GITHUB_CLIENT_ID = originalClientId;
+    }
+    if (originalClientSecret === undefined) {
+      delete process.env.GITHUB_CLIENT_SECRET;
+    } else {
+      process.env.GITHUB_CLIENT_SECRET = originalClientSecret;
+    }
     if (originalCloudApiKey === undefined) {
       delete process.env.GX_CLOUD_API_KEY;
     } else {
@@ -258,20 +286,25 @@ describe("requireAuth", () => {
     expect(res.status).toBe(403);
   });
 
-  test("authorizes a GitHub access token for an org member", async () => {
+  test("authorizes a GitHub access token issued for a gx OAuth client", async () => {
     delete process.env.GX_CLOUD_API_KEY;
+    installGitHubOAuthClient();
     setOrgMemberCheckForTests(async (orgId, githubUserId) => {
       return orgId === "test-org" && githubUserId === 12345;
     });
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe("https://api.github.com/user");
-      expect((init?.headers as Record<string, string>).Authorization).toBe(
-        "Bearer gho_test",
+      expect(String(url)).toBe(
+        "https://api.github.com/applications/Iv23console/token",
       );
-      return new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ access_token: "gho_test" });
+      return new Response(
+        JSON.stringify({
+          app: { client_id: "Iv23console" },
+          user: { id: 12345, login: "octocat" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
     }) as unknown as typeof fetch;
 
     const res = await authApp().request("http://localhost/secure", {
@@ -291,9 +324,45 @@ describe("requireAuth", () => {
     });
   });
 
-  test("rejects GitHub token for non-member org", async () => {
+  test("rejects a GitHub token issued for another application", async () => {
     delete process.env.GX_CLOUD_API_KEY;
-    setOrgMemberCheckForTests(async () => false);
+    process.env.NODE_ENV = "production";
+    installGitHubOAuthClient();
+    // Membership would pass; the token never gets that far.
+    setOrgMemberCheckForTests(async () => true);
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      // The victim's token is valid at GitHub — /user would answer 200 for it,
+      // which is exactly why /user is not what decides.
+      if (String(url) === "https://api.github.com/user") {
+        return new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
+        Authorization: "Bearer gho_some_other_apps_token",
+        "X-Org-Id": "test-org",
+      },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthorized" });
+  });
+
+  test("rejects a GitHub token when no gx OAuth client is configured", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    delete process.env.GITHUB_CLIENT_ID;
+    delete process.env.GITHUB_CLIENT_SECRET;
+    delete process.env.GX_CLI_GITHUB_CLIENT_ID;
+    delete process.env.GX_CLI_GITHUB_CLIENT_SECRET;
+    setOrgMemberCheckForTests(async () => true);
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ id: 12345, login: "octocat" }), {
         status: 200,
@@ -302,10 +371,84 @@ describe("requireAuth", () => {
 
     const res = await authApp().request("http://localhost/secure", {
       headers: {
+        Authorization: "Bearer gho_unverifiable",
+        "X-Org-Id": "test-org",
+      },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test("rejects GitHub token for non-member org", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    installGitHubOAuthClient();
+    setOrgMemberCheckForTests(async () => false);
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          app: { client_id: "Iv23console" },
+          user: { id: 12345, login: "octocat" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const res = await authApp().request("http://localhost/secure", {
+      headers: {
         Authorization: "Bearer gho_other",
         "X-Org-Id": "test-org",
       },
     });
     expect(res.status).toBe(403);
+  });
+
+  test("stops honoring a revoked GitHub token once the cache entry expires", async () => {
+    delete process.env.GX_CLOUD_API_KEY;
+    process.env.NODE_ENV = "production";
+    installGitHubOAuthClient();
+    setOrgMemberCheckForTests(async () => true);
+
+    let now = 1_000_000;
+    setGithubAuthCacheClockForTests(() => now);
+
+    let revoked = false;
+    let checkTokenCalls = 0;
+    globalThis.fetch = (async () => {
+      checkTokenCalls += 1;
+      if (revoked) {
+        return new Response(JSON.stringify({ message: "Not Found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          app: { client_id: "Iv23console" },
+          user: { id: 12345, login: "octocat" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const call = () =>
+      authApp().request("http://localhost/secure", {
+        headers: {
+          Authorization: "Bearer gho_revocable",
+          "X-Org-Id": "test-org",
+        },
+      });
+
+    expect((await call()).status).toBe(200);
+    expect(checkTokenCalls).toBe(1);
+
+    // Still inside the TTL: served from cache, GitHub is not asked again.
+    revoked = true;
+    now += 60_000;
+    expect((await call()).status).toBe(200);
+    expect(checkTokenCalls).toBe(1);
+
+    // Past the 5 minute TTL the decision is re-derived, and the revoked token
+    // no longer authenticates.
+    now += 5 * 60 * 1000;
+    expect((await call()).status).toBe(401);
+    expect(checkTokenCalls).toBe(2);
   });
 });

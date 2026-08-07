@@ -1,6 +1,6 @@
 import type postgres from "postgres";
 import {
-  findInstalledRepository,
+  findInstalledRepositoryForOrg,
   getInstallationAccessToken,
 } from "../github/app";
 import { updatePullRequestWithSummary, withUnindexedNotice } from "../github/pr-body";
@@ -50,9 +50,15 @@ export async function postMissingPrSummaryAfterPublish(
     LIMIT 1
   `;
 
-  const grant = await findInstalledRepository(db, input.bookmark.repo_full_name);
+  // Org-scoped: the token minted below edits the PR body on a real repository,
+  // and the repo name travelled here from the publish request.
+  const grant = await findInstalledRepositoryForOrg(
+    db,
+    input.orgId,
+    input.bookmark.repo_full_name,
+  );
   if (!grant) {
-    console.info("PR Summary after publish skipped: repo is not installed", {
+    console.info("PR Summary after publish skipped: repo is not installed for this org", {
       orgId: input.orgId,
       bookmarkId: input.bookmark.id,
       repoFullName: input.bookmark.repo_full_name,

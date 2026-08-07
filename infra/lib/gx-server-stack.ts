@@ -120,6 +120,10 @@ export class GxServerStack extends Stack {
           GITHUB_APP_ID: "replace-me",
           GITHUB_APP_PRIVATE_KEY: "replace-me",
           GITHUB_WEBHOOK_SECRET: "replace-me",
+          GITHUB_CLIENT_ID: "replace-me",
+          GITHUB_CLIENT_SECRET: "replace-me",
+          GX_CLI_GITHUB_CLIENT_ID: "replace-me",
+          GX_CLI_GITHUB_CLIENT_SECRET: "replace-me",
           OPENAI_API_KEY: "replace-me",
           TURBOPUFFER_API_KEY: "replace-me",
         }),
@@ -234,6 +238,26 @@ export class GxServerStack extends Stack {
             GITHUB_WEBHOOK_SECRET: ecs.Secret.fromSecretsManager(
               appSecret,
               "GITHUB_WEBHOOK_SECRET",
+            ),
+            // OAuth client credentials for GitHub's check-token API, which is
+            // how a raw GitHub bearer is shown to have been issued for gx
+            // rather than for some other application. Without them no such
+            // token verifies, and that auth path refuses everything.
+            GITHUB_CLIENT_ID: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GITHUB_CLIENT_ID",
+            ),
+            GITHUB_CLIENT_SECRET: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GITHUB_CLIENT_SECRET",
+            ),
+            GX_CLI_GITHUB_CLIENT_ID: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GX_CLI_GITHUB_CLIENT_ID",
+            ),
+            GX_CLI_GITHUB_CLIENT_SECRET: ecs.Secret.fromSecretsManager(
+              appSecret,
+              "GX_CLI_GITHUB_CLIENT_SECRET",
             ),
             OPENAI_API_KEY: ecs.Secret.fromSecretsManager(
               appSecret,
