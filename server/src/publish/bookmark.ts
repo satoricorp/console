@@ -62,12 +62,24 @@ export type BookmarkRow = {
   storage_backend: string;
 };
 
+/**
+ * The bookmark for this publish, matched by PR number when there is one and by
+ * (user, repo, branch) otherwise.
+ *
+ * The row's id is the database's to assign. There used to be a third path here
+ * that took an id from the request body (`pr_id`) and upserted on it, and its
+ * ON CONFLICT branch overwrote org_id, user_id and repo_full_name — so a caller
+ * who knew another user's bookmark id could name it and pull that row, with its
+ * event history, into their own org. Nothing ever sent the field: the gx CLI
+ * has no such field in its publish bundle, and it arrived with the original
+ * server import. A client-chosen primary key had no caller to justify the
+ * ownership check it would have needed, so the path is gone instead.
+ */
 export async function upsertBookmark(
   tx: SqlExecutor,
   args: {
     orgId: string;
     userId: string;
-    requestedId: string | null;
     repoFullName: string;
     branchName: string;
     title: string;
@@ -79,7 +91,7 @@ export async function upsertBookmark(
     updatedAtMs: number;
   },
 ): Promise<BookmarkRow> {
-  if (!args.requestedId && args.githubPrNumber !== null) {
+  if (args.githubPrNumber !== null) {
     const [existingPrBookmark] = await tx<BookmarkRow[]>`
       UPDATE bookmarks
       SET
@@ -100,57 +112,6 @@ export async function upsertBookmark(
     if (existingPrBookmark) {
       return existingPrBookmark;
     }
-  }
-
-  if (args.requestedId) {
-    const [row] = await tx<BookmarkRow[]>`
-      INSERT INTO bookmarks (
-        id,
-        org_id,
-        user_id,
-        repo_full_name,
-        branch_name,
-        title,
-        latest_event_id,
-        head_commit_id,
-        github_pr_url,
-        github_pr_number,
-        remote_head_sha,
-        updated_at_ms,
-        published_at_ms
-      ) VALUES (
-        ${args.requestedId},
-        ${args.orgId},
-        ${args.userId},
-        ${args.repoFullName},
-        ${args.branchName},
-        ${args.title},
-        ${args.eventId},
-        ${args.headCommitId},
-        ${args.githubPrUrl},
-        ${args.githubPrNumber},
-        ${args.remoteHeadSha},
-        ${args.updatedAtMs},
-        ${args.updatedAtMs}
-      )
-      ON CONFLICT (id)
-      DO UPDATE SET
-        org_id = EXCLUDED.org_id,
-        user_id = EXCLUDED.user_id,
-        repo_full_name = EXCLUDED.repo_full_name,
-        branch_name = EXCLUDED.branch_name,
-        revision = bookmarks.revision + 1,
-        latest_event_id = COALESCE(EXCLUDED.latest_event_id, bookmarks.latest_event_id),
-        head_commit_id = EXCLUDED.head_commit_id,
-        github_pr_url = COALESCE(EXCLUDED.github_pr_url, bookmarks.github_pr_url),
-        github_pr_number = COALESCE(EXCLUDED.github_pr_number, bookmarks.github_pr_number),
-        remote_head_sha = COALESCE(EXCLUDED.remote_head_sha, bookmarks.remote_head_sha),
-        title = COALESCE(bookmarks.title, EXCLUDED.title),
-        updated_at_ms = EXCLUDED.updated_at_ms
-      RETURNING *
-    `;
-    if (!row) throw new Error("Failed to upsert bookmark");
-    return row;
   }
 
   const [row] = await tx<BookmarkRow[]>`
