@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 type Tool = {
   name: string;
   slug: string;
@@ -9,16 +11,35 @@ const TOOLS: Tool[] = [
   { name: "Cursor", slug: "cursor" },
   { name: "Claude Code", slug: "claude-code" },
   { name: "Codex", slug: "codex" },
-  { name: "GitHub Copilot", slug: "github-copilot" },
-  { name: "Windsurf", slug: "windsurf" },
-  { name: "Cline", slug: "cline" },
-  { name: "Aider", slug: "aider" },
-  { name: "Continue", slug: "continue" },
+  { name: "Antigravity", slug: "antigravity" },
+  { name: "Muse Code", slug: "muse-code" },
+  { name: "Factory", slug: "factory" },
   { name: "Amp", slug: "amp" },
   { name: "Gemini CLI", slug: "gemini-cli" },
+  { name: "Kilo Code", slug: "kilo-code" },
+  { name: "Conductor", slug: "conductor" },
+  { name: "herdr", slug: "herdr" },
 ];
 
+/**
+ * Official marks live in /public/marketing/works-with as a -black/-white pair.
+ * A tool whose pair is not in yet falls back to a neutral monogram — a stand-in,
+ * not the vendor's mark — so the strip stays even until the real asset lands.
+ */
 function ToolLogo({ slug, name }: { slug: string; name: string }) {
+  const [missing, setMissing] = useState(false);
+
+  if (missing) {
+    return (
+      <span
+        aria-hidden
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border border-zinc-400/60 text-[10px] font-semibold uppercase leading-none dark:border-zinc-600"
+      >
+        {name.slice(0, 1)}
+      </span>
+    );
+  }
+
   const blackSrc = `/marketing/works-with/${slug}-black.svg`;
   const whiteSrc = `/marketing/works-with/${slug}-white.svg`;
 
@@ -31,6 +52,7 @@ function ToolLogo({ slug, name }: { slug: string; name: string }) {
         height={20}
         className="h-5 w-auto max-w-14 object-contain dark:hidden"
         draggable={false}
+        onError={() => setMissing(true)}
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -39,6 +61,7 @@ function ToolLogo({ slug, name }: { slug: string; name: string }) {
         height={20}
         className="hidden h-5 w-auto max-w-14 object-contain dark:block"
         draggable={false}
+        onError={() => setMissing(true)}
       />
       <span className="sr-only">{name}</span>
     </span>
