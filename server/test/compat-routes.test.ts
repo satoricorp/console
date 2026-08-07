@@ -241,8 +241,24 @@ describeDb("compat OpenAI proxy routes", () => {
   // caller's org from the database — so these tests need a real in-trial org.
   let orgId: string;
 
+  const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
+
   beforeAll(async () => {
     installTestAuth();
+    // The quota gate fetches trial entitlement over the network, and skips it
+    // only when CONVEX_SITE_URL is unset (`if (!base || !apiKey) return null`).
+    // Another suite in this process sets it to a fake host
+    // (test/github-webhook.test.ts) and restores it in its own afterAll, so
+    // whether it is set here depended on file ordering and timing: when it
+    // leaked in, these tests made a real fetch to that host and the route
+    // answered 402 instead of 200 — intermittently, and only on the slower CI
+    // runners. Pin it absent rather than inherit whatever ran last.
+    //
+    // It has to be this variable and not GX_CLOUD_API_KEY, which gates the same
+    // fetch: installTestAuth() uses that key as the test bearer token, so
+    // clearing it authenticates nothing and the request falls through to a real
+    // GitHub token validation instead.
+    delete process.env.CONVEX_SITE_URL;
     await runMigrations();
 
     const db = getSql();
@@ -252,6 +268,14 @@ describeDb("compat OpenAI proxy routes", () => {
       RETURNING id
     `;
     orgId = org.id;
+  });
+
+  afterAll(() => {
+    if (originalConvexSiteUrl === undefined) {
+      delete process.env.CONVEX_SITE_URL;
+    } else {
+      process.env.CONVEX_SITE_URL = originalConvexSiteUrl;
+    }
   });
 
   afterEach(() => {
