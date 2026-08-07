@@ -107,7 +107,6 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
       const bookmark = await upsertBookmark(tx, {
         orgId,
         userId: auth.userId,
-        requestedId: validUuid(payload.pr_id) ? payload.pr_id! : null,
         repoFullName,
         branchName,
         title,
@@ -233,7 +232,6 @@ async function handlePublishRegistration(c: Context<AppEnv>, body: unknown) {
     const bookmark = await upsertBookmark(db, {
       orgId,
       userId: auth.userId,
-      requestedId: null,
       repoFullName: registration.repo_full_name,
       branchName: registration.branch_name,
       title: registration.title || branchSlugTitle(registration.branch_name),
@@ -436,8 +434,4 @@ function reviewUrl(bookmarkId: string): string | undefined {
     .trim()
     .replace(/\/+$/, "");
   return siteUrl ? `${siteUrl}/reviews/${bookmarkId}` : undefined;
-}
-
-function validUuid(value: string | undefined): boolean {
-  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 }
