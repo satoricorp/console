@@ -1,3 +1,5 @@
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
+
 export const GITHUB_REPO_URL =
   process.env.NEXT_PUBLIC_GITHUB_REPO_URL ??
   "https://github.com/satoricorp/gx";
@@ -13,10 +15,13 @@ export const TWITTER_HANDLE = "@satori_corp";
 export const SUPPORT_EMAIL = "hi@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;
 
-/** First-time OAuth lands here; completed users are redirected to /reviews. */
+/** First-time OAuth lands here; completed users are redirected to the app home. */
 export const POST_SIGN_IN_URL = "/download";
-/** Returning signed-in users hitting `/` go straight to reviews. */
-export const SIGNED_IN_HOME_URL = "/reviews";
+/**
+ * Returning signed-in users hitting `/` go straight to reviews — unless the
+ * reviews surface is flagged off, in which case repositories is the app home.
+ */
+export const SIGNED_IN_HOME_URL = REVIEWS_ENABLED ? "/reviews" : "/repositories";
 export const GITHUB_SIGN_IN_URL = "/api/auth/github";
 
 /** Append `onboarding=1` so the funnel can be replayed. */
@@ -46,7 +51,6 @@ export type NavLink = {
 
 export const NAV_LINKS: NavLink[] = [
   { label: "How it works", href: "/#how-it-works" },
-  { label: "Features", href: "/#features" },
   { label: "FAQ", href: "/#faq" },
   { label: "Documentation", href: DOCS_URL },
 ];

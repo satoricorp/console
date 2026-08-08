@@ -39,7 +39,7 @@ export function SiteFooter() {
         <div className="flex flex-col gap-10 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
           <div className="flex w-fit max-w-xs flex-col items-start gap-4 text-left">
             <p className="max-w-[16rem] text-sm leading-6 text-zinc-600">
-              Simplified Code Review
+              Spend less time reviewing code
             </p>
             <GxLogo variant="footer" />
           </div>

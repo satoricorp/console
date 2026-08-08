@@ -17,7 +17,7 @@ type LandingBgFadeProps = {
 /**
  * Document-space vertical gradient: black hard-cuts to white at
  * `#how-it-works-rule` (the section’s top border). White holds through
- * How it works, then hard-cuts back to black at Features.
+ * How it works, then hard-cuts back to black at the FAQ.
  *
  * Both edges are hard cuts. A soft black→white ramp would have to run in the
  * space above the rule, and the hero — full-viewport, with its CTA and
@@ -38,11 +38,11 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
       frame = 0;
       const howEl = document.getElementById("how-it-works");
       const ruleEl = document.getElementById("how-it-works-rule");
-      const featuresEl = document.getElementById("features");
+      const faqEl = document.getElementById("faq");
       const height = root.offsetHeight;
       bg.style.height = `${height}px`;
 
-      if (!howEl || !featuresEl || height <= 0) {
+      if (!howEl || !faqEl || height <= 0) {
         bg.style.background = BLACK;
         return;
       }
@@ -52,12 +52,12 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
         el.getBoundingClientRect().top + window.scrollY - rootTop;
       // Separator = section top border; marker sits at that edge.
       const ruleTop = ruleEl ? docY(ruleEl) : docY(howEl);
-      const featTop = docY(featuresEl);
+      const faqTop = docY(faqEl);
 
       const toPct = (y: number) => `${clamp((y / height) * 100, 0, 100)}%`;
 
       const whiteStart = toPct(ruleTop);
-      const whiteEnd = toPct(featTop);
+      const whiteEnd = toPct(faqTop);
 
       bg.style.background = [
         "linear-gradient(to bottom,",
@@ -81,7 +81,7 @@ export function LandingBgFade({ children }: LandingBgFadeProps) {
 
     const ro = new ResizeObserver(schedule);
     ro.observe(root);
-    for (const id of ["how-it-works", "how-it-works-rule", "features"]) {
+    for (const id of ["how-it-works", "how-it-works-rule", "faq"]) {
       const el = document.getElementById(id);
       if (el) ro.observe(el);
     }

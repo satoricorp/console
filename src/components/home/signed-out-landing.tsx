@@ -1,5 +1,4 @@
 import { FaqAccordion } from "@/components/home/faq-accordion";
-import { FeaturesSection } from "@/components/home/features-section";
 import { HeroSection } from "@/components/home/hero-section";
 import { HowItWorksSection } from "@/components/home/how-it-works-section";
 import { LandingBgFade } from "@/components/home/landing-bg-fade";
@@ -11,11 +10,6 @@ const FAQ_ITEMS = [
     question: "What models can I use to review?",
     answer:
       "gx uses the latest frontier models to review changes. It pits models against each other for the best outcomes, and is constantly updating to the best performing models.",
-  },
-  {
-    question: "What are the independent resources used for review?",
-    answer:
-      "These are 92 resources maintained independently that help ensure best coding practices and provide reference context to ensure architecture, security, testing, and more are applied to every review.",
   },
   {
     question: "Do I need to change how I code to use gx?",
@@ -36,7 +30,6 @@ export function SignedOutLanding() {
         <main className="flex flex-1 flex-col">
           <HeroSection />
           <HowItWorksSection />
-          <FeaturesSection />
 
           <section
             id="faq"

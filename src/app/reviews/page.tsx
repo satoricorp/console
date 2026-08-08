@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import { AppPage } from "@/components/app-page";
 import {
@@ -8,13 +9,24 @@ import { ReviewsEmptyState } from "@/components/reviews/reviews-empty-state";
 import { SignInLink } from "@/components/sign-in-link";
 import { fetchAuthQuery } from "@/lib/auth-server";
 import { DEMO_REVIEW_LIST } from "@/lib/demo-review";
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
 import { gxApiJson } from "@/lib/gx-api-server";
+
+// notFound() thrown during metadata resolution happens before the layout's
+// Suspense shell flushes, so the response carries a real 404 status; the same
+// throw inside the page body would stream the 404 UI under HTTP 200.
+export function generateMetadata() {
+  if (!REVIEWS_ENABLED) notFound();
+  return {};
+}
 
 export default async function ReviewsPage({
   searchParams,
 }: {
   searchParams: Promise<{ demo?: string | string[] }>;
 }) {
+  if (!REVIEWS_ENABLED) notFound();
+
   const demoMode = (await searchParams).demo === "1";
   if (demoMode) {
     return (

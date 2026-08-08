@@ -10,6 +10,7 @@ import { Button } from "@/components/button";
 import { GitHubIcon } from "@/components/github-icon";
 import { OrgMultiSelect } from "@/components/onboarding/org-multi-select";
 import { RepoVisibilityIcon } from "@/components/onboarding/repo-icons";
+import { SIGNED_IN_HOME_URL } from "@/lib/site-links";
 
 type AvailableRepo = {
   githubId: number;
@@ -146,7 +147,7 @@ export function ConnectReposStep({
     try {
       await connectRepos({ repos: reposToConnect });
       await completeOnboarding({});
-      router.push("/reviews");
+      router.push(SIGNED_IN_HOME_URL);
     } catch (connectError) {
       setError(
         connectError instanceof Error
@@ -271,7 +272,7 @@ export function ConnectReposStep({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {canSkip ? (
             <Link
-              href="/reviews"
+              href={SIGNED_IN_HOME_URL}
               onClick={() => {
                 void completeOnboarding({});
               }}
