@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useConvexAuth } from "convex/react";
+import { POST_SIGN_IN_URL } from "@/lib/site-links";
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function WelcomePage() {
       return;
     }
 
-    router.replace("/download");
+    router.replace(POST_SIGN_IN_URL);
   }, [isAuthenticated, isLoading, router]);
 
   return (

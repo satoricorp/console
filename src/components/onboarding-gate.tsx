@@ -134,9 +134,12 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     return <OnboardingGateFallback />;
   }
 
+  // Funnel paths wait for the status too, even though they bypass the hard
+  // gate. Painting the step first and redirecting a beat later yanks the page
+  // out from under a returning user while they are reading it.
   if (
     session?.user &&
-    !skipOnboardingRedirect &&
+    (!skipOnboardingRedirect || onFunnelPath) &&
     (!isAuthenticated || onboardingStatus === undefined)
   ) {
     return <OnboardingGateFallback />;
