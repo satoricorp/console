@@ -8,7 +8,11 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { CopyCommand } from "@/components/copy-command";
 import { CLI_INSTALL_COMMAND } from "@/lib/gx-download";
-import { githubSignInUrl, withOnboardingParam } from "@/lib/site-links";
+import {
+  githubSignInUrl,
+  POST_SIGN_IN_URL,
+  withOnboardingParam,
+} from "@/lib/site-links";
 
 const AUTH_LOGIN_COMMAND = "gx auth login";
 const INIT_COMMAND = "gx init";
@@ -64,7 +68,7 @@ function WindowsRequest() {
           <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </button>
       ) : (
-        <a href={githubSignInUrl("/download")} className={buttonClassName}>
+        <a href={githubSignInUrl(POST_SIGN_IN_URL)} className={buttonClassName}>
           Click to request a native Windows build
           <ArrowUpRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </a>
