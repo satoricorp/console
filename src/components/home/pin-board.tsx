@@ -141,11 +141,9 @@ export function PinBoard({
       }
       geo.setAttribute("color", new THREE.BufferAttribute(vcol, 3));
     }
-    /* Dark field: a tight highlight blows out to white on the pin tips no matter
-       how dark the instance colour is, so the dark theme spreads the specular. */
     mat = new THREE.MeshStandardMaterial({
       metalness: 0.85,
-      roughness: 0.65,
+      roughness: 0.35,
       vertexColors: true,
       color: 0xffffff,
     });
@@ -301,7 +299,6 @@ export function PinBoard({
       const hueDrift = colorOn ? (baseHue + t * 0.015) % 1 : baseHue;
       const spanDirty =
         lastSpanX !== spanX || lastSpanZ !== spanZ || lastDark !== dark;
-      if (lastDark !== dark && mat) mat.roughness = dark ? 0.65 : 0.35;
       lastSpanX = spanX;
       lastSpanZ = spanZ;
       lastDark = dark;
@@ -327,11 +324,8 @@ export function PinBoard({
           dummy.scale.set(1, 0.12 + v * v * (3 - 2 * v) * 1.6, 1);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
-          /* Dark field stays grey end to end: `rest` sinks the idle pins into the
-             background and `peak` keeps even a fully raised tip off white. */
-          const rest = dark ? 0.015 : 0.58;
-          const peak = dark ? 0.095 : 1;
-          const L = rest + (peak - rest) * v;
+          const rest = dark ? 0.16 : 0.58;
+          const L = rest + (1 - rest) * v;
           if (colorOn && v > 0.03) c.setHSL(hueDrift, 0.3 * v * (1 - v), L);
           else c.setHSL(0, 0, L);
           mesh.setColorAt(i, c);
