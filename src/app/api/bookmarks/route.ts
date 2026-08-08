@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { api } from "../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
 import { gxApiRequest } from "@/lib/gx-api-server";
 
 const ALLOWED_STATUS = new Set(["open", "merged", "closed", "archived"]);
 
 export async function GET(request: Request) {
+  if (!REVIEWS_ENABLED) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const viewer = await fetchAuthQuery(api.profile.getViewer, {});
   if (!viewer?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
