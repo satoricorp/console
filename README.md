@@ -18,6 +18,21 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Feature flags
+
+### Reviews (`NEXT_PUBLIC_REVIEWS_ENABLED`)
+
+The `/reviews` surface (pages, `/api/reviews*` + `/api/bookmarks*` proxies, nav
+entries) is behind a kill switch in `src/lib/feature-flags.ts` while it is
+still being worked on: **on in development, off in production builds** by
+default. Set `NEXT_PUBLIC_REVIEWS_ENABLED=1` in the deployment environment to
+relaunch it (the flag is inlined at build time, so flipping it requires a
+redeploy), or `0` to hide the surface locally. With the flag off, signed-in
+users land on `/repositories` and the review routes return 404 via
+`src/middleware.ts`. The server's `/v1/reviews` endpoints and the push →
+PR-summary pipeline are untouched, so reviews keep accumulating and reappear
+when the flag turns back on.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

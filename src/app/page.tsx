@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { SignedOutLanding } from "@/components/home/signed-out-landing";
 import { isAuthenticated } from "@/lib/auth-server";
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
 import { SIGNED_IN_HOME_URL } from "@/lib/site-links";
 
 export default async function Home({
@@ -8,7 +9,7 @@ export default async function Home({
 }: {
   searchParams: Promise<{ demo?: string | string[] }>;
 }) {
-  if ((await searchParams).demo === "1") {
+  if (REVIEWS_ENABLED && (await searchParams).demo === "1") {
     redirect("/reviews?demo=1");
   }
 
