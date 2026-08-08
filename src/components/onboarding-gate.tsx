@@ -5,11 +5,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
-import { withOnboardingParam } from "@/lib/site-links";
+import { SIGNED_IN_HOME_URL, withOnboardingParam } from "@/lib/site-links";
 
 const ONBOARDING_PATH = "/onboarding";
 const ONBOARDING_START_PATH = "/download";
-const POST_ONBOARDING_PATH = "/reviews";
+const POST_ONBOARDING_PATH = SIGNED_IN_HOME_URL;
 
 /** Soft funnel steps shown once after first login. */
 const ONBOARDING_FUNNEL_PATHS = [
