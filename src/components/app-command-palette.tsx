@@ -14,6 +14,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { signOutToHome } from "@/lib/auth-client";
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
 import {
   DISCORD_URL,
   SUPPORT_EMAIL_URL,
@@ -112,7 +113,7 @@ export function AppCommandPalette() {
         event.preventDefault();
         runCommand(DOWNLOAD_PATH);
       }
-      if (key === "r") {
+      if (key === "r" && REVIEWS_ENABLED) {
         event.preventDefault();
         runCommand("/reviews");
       }
@@ -168,14 +169,16 @@ export function AppCommandPalette() {
             <CommandList>
               <CommandEmpty>No command found.</CommandEmpty>
               <CommandGroup heading="Workspace" className="text-zinc-50">
-                <CommandItem
-                  value="reviews published changes prs"
-                  onSelect={() => runCommand("/reviews")}
-                  className={commandItemClass}
-                >
-                  <span>Reviews</span>
-                  <CommandShortcut>⌘R</CommandShortcut>
-                </CommandItem>
+                {REVIEWS_ENABLED ? (
+                  <CommandItem
+                    value="reviews published changes prs"
+                    onSelect={() => runCommand("/reviews")}
+                    className={commandItemClass}
+                  >
+                    <span>Reviews</span>
+                    <CommandShortcut>⌘R</CommandShortcut>
+                  </CommandItem>
+                ) : null}
                 <CommandItem
                   value="repositories github repos"
                   onSelect={() => runCommand("/repositories")}

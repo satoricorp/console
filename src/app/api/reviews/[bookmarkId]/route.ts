@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
 import { fetchAuthQuery } from "@/lib/auth-server";
+import { REVIEWS_ENABLED } from "@/lib/feature-flags";
 import { gxApiRequest } from "@/lib/gx-api-server";
 
 async function requireViewerId(): Promise<string | null> {
@@ -12,6 +13,10 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ bookmarkId: string }> },
 ) {
+  if (!REVIEWS_ENABLED) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const viewerId = await requireViewerId();
   if (!viewerId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

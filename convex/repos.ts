@@ -35,23 +35,17 @@ export const getOnboardingStatus = query({
 
     const hasConnectedRepos = connected.length > 0;
 
-    // Returning users may still have CLI/publish history even if a prior
-    // read-time access check incorrectly cleared connectedRepos.
-    const hasCliSession = Boolean(
-      await ctx.db
-        .query("gxCliSessions")
-        .withIndex("by_userId", (q) => q.eq("userId", user._id))
-        .first(),
-    );
-
     return {
       hasConnectedRepos,
       connectedCount: connected.length,
-      // Existing users who already connected repos (or used gx) count as done.
+      // Indexing a repo is the only thing that completes onboarding. A CLI
+      // session used to count too, which quietly locked anyone who had only run
+      // the CLI out of the funnel — the gate bounced them off /download before
+      // they could reach the repo-connect step. onboardingCompletedAt is
+      // stamped whenever a repo is connected, so it survives connectedRepos
+      // being cleared by a read-time access check.
       onboardingCompleted:
-        Boolean(appState?.onboardingCompletedAt) ||
-        hasConnectedRepos ||
-        hasCliSession,
+        Boolean(appState?.onboardingCompletedAt) || hasConnectedRepos,
     };
   },
 });
