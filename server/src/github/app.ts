@@ -157,11 +157,7 @@ export async function resolveOrgIdForInstallation(
 }
 
 function webhookSecret(): string {
-  return (
-    process.env.GITHUB_WEBHOOK_SECRET?.trim() ||
-    process.env.GX_WEBHOOK_SECRET?.trim() ||
-    ""
-  );
+  return process.env.GITHUB_WEBHOOK_SECRET?.trim() || "";
 }
 
 function githubAppPrivateKey(): string {
