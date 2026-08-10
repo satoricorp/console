@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "gx: Spend less time reviewing code",
   description:
-    "gx reviews your change before you push with /gx, answers questions in your pull request with @gx, and ranks every change by how much it matters. Set up once with gx init — 1 week free.",
+    "gx reviews your change before you push with /gx, answers questions in your pull request with @gx, and ranks every change by how much it matters. Set up once with gx init.",
 };
 
 export default function RootLayout({
