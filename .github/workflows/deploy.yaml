@@ -92,6 +92,56 @@ jobs:
           bun run typecheck
           bun test
 
+  # Vercel builds the frontend from main the moment it is pushed, and the
+  # frontend's queries live in convex/. Leaving prod Convex to the manual
+  # promotion meant any commit whose UI depended on a changed function ran new
+  # UI against old queries in production until someone remembered to promote —
+  # the shape of the /download onboarding bounce. This job closes that window.
+  #
+  # It deliberately does NOT wait for the ECS half. Production server code is
+  # still promoted by hand, so prod Convex now runs ahead of the prod server
+  # between promotions: the server talks to convex/http.ts over versioned
+  # routes, so keep those additive, and promote when you change one.
+  #
+  # `environment: production` is what resolves CONVEX_DEPLOY_KEY to the prod
+  # deployment — deploy-staging's key points at dev. Adding required reviewers
+  # to that environment would start gating every push to main on an approval.
+  convex-production:
+    needs: check
+    name: Deploy production Convex
+    # Manual dispatch is staging-only; promote-production.yaml owns the prod
+    # path for a chosen SHA.
+    if: ${{ github.event_name == 'push' }}
+    concurrency:
+      group: convex-production
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.4"
+
+      # Hard-fails on a missing key, like the promotion does. `check` covers
+      # server/ only, so the real gate on this code is convex deploy's own
+      # typecheck of convex/.
+      - name: Deploy Convex functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CONVEX_DEPLOY_KEY:-}" ]]; then
+            echo "CONVEX_DEPLOY_KEY is not set for the production environment." >&2
+            echo "Set it there, or prod Convex silently stays behind main." >&2
+            exit 1
+          fi
+          bun install --frozen-lockfile
+          bunx convex deploy
+
   deploy:
     needs: check
     # Shared group: deployments to one environment must not overlap, and a
@@ -162,6 +212,10 @@ jobs:
         working-directory: server
         run: bun install --frozen-lockfile
 
+      # This is the staging environment's key, which resolves to the DEV
+      # deployment (flippant-kangaroo-746) — the same one `convex dev` uses
+      # locally, so a push to main overwrites whatever is running there.
+      # Production is handled by the convex-production job above.
       - name: Deploy Convex functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
