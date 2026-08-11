@@ -29,6 +29,11 @@ export function SiteFooter() {
     return null;
   }
 
+  // The v2 landing preview carries its own branding and links.
+  if (pathname === "/new") {
+    return null;
+  }
+
   if (isPending || session?.user) {
     return null;
   }
