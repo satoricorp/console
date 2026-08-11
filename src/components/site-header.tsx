@@ -292,6 +292,11 @@ export function SiteHeader() {
 
   const showNavLogo = !isHome || belowFold;
 
+  // The v2 landing preview carries its own branding and links.
+  if (pathname === "/new") {
+    return null;
+  }
+
   if (isPending) {
     return (
       <header className="fixed right-5 top-4 z-50 sm:right-10">
