@@ -44,22 +44,14 @@ export function TextWheel({
           if (angle < -180) angle += 360;
           const distance = Math.abs(angle);
           const highlighted = distance < WHEEL_STEP_DEG / 2;
-          // Fade words as they turn away from horizontal so the arc tapers
-          // off instead of climbing into the column above.
-          const opacity =
-            distance <= 15 ? 1 : Math.max(0, 1 - (distance - 15) / 30);
-          if (opacity === 0) {
-            return null;
-          }
           return (
             <span
               key={i}
-              className="absolute left-0 top-0 whitespace-nowrap text-[13px] tracking-[0.08em] transition-colors duration-150"
+              className="absolute left-0 top-0 whitespace-nowrap text-xs tracking-[0.08em] transition-colors duration-150"
               style={{
                 transform: `rotate(${base}deg) translateX(${RADIUS_PX}px) translateY(-50%)`,
                 transformOrigin: "0 0",
                 color: highlighted ? "#ea580c" : "#f4f4f5",
-                opacity,
               }}
             >
               {WORD}
