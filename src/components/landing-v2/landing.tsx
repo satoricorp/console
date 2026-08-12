@@ -6,9 +6,16 @@ import { GxLogo } from "@/components/gx-logo";
 import { SignInLink } from "@/components/sign-in-link";
 import { berkeleyMono } from "@/components/landing-v2/fonts";
 import { TerminalPanel } from "@/components/landing-v2/terminal-panel";
-import { TextWheel, WHEEL_STEP_DEG } from "@/components/landing-v2/text-wheel";
+import {
+  TextWheel,
+  WHEEL_STEP_DEG,
+  WORD_COUNT,
+} from "@/components/landing-v2/text-wheel";
 import { POST_SIGN_IN_URL, githubSignInUrl } from "@/lib/site-links";
 
+/** How long a scroll gesture must pause before its glide commits — long
+ * enough to bridge the gaps between events within one continuous scroll. */
+const SETTLE_DELAY_MS = 120;
 /** Total time the wheel spends spinning down to a stop on the next slide. */
 const GLIDE_DURATION_MS = 1500;
 /** Extra full rotations the wheel spins through — past every word on it —
@@ -62,18 +69,18 @@ export function LandingV2() {
   const rotationRef = useRef(0);
   const frame = useRef<number | null>(null);
   const gestureDelta = useRef(0);
-  const lastDirection = useRef(1);
   const stepRef = useRef(0);
   const glideFrom = useRef(0);
   const glideTo = useRef(0);
   const glideStep = useRef(0);
   const glideStart = useRef(0);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wordClickRef = useRef((_index: number) => {});
 
   useEffect(() => {
-    // Eases smoothly from wherever the wheel currently sits to the next (or
-    // previous) slide and no further — like a wheel of fortune, it always
-    // glides down to a stop on the very next pocket, never skipping ahead
-    // and never snapping past it.
+    // Eases smoothly from wherever the wheel currently sits to a target step
+    // and no further — like a wheel of fortune, it always glides down to a
+    // stop on the intended pocket, never snapping past it.
     const tick = (now: number) => {
       frame.current = null;
       const t = Math.min(1, (now - glideStart.current) / GLIDE_DURATION_MS);
@@ -91,57 +98,80 @@ export function LandingV2() {
       setMoving(false);
     };
 
-    const onWheel = (event: WheelEvent) => {
-      // The page never scrolls — swallow the event so the browser's elastic
-      // overscroll doesn't bump the viewport.
-      event.preventDefault();
-      const now = performance.now();
-      gestureDelta.current += event.deltaY;
-
-      const direction =
-        gestureDelta.current > 0 ? 1 : gestureDelta.current < 0 ? -1 : lastDirection.current;
-      lastDirection.current = direction;
-      // However hard or far the scroll, the target is always exactly one
-      // slide from wherever the wheel last came to rest — never skips ahead.
-      const targetStep = stepRef.current + direction;
-
+    // direction: +1/-1 only — an extra full lap is added in that direction
+    // so the slow-down always has 60 words to click through before landing.
+    const runGlide = (targetStep: number, direction: 1 | -1) => {
       glideFrom.current = rotationRef.current;
-      // An extra full lap in the same direction — so the slow-down actually
-      // has 60 words to click through before it settles on the real target.
       glideTo.current = -targetStep * WHEEL_STEP_DEG - direction * EXTRA_SPIN_DEG;
       glideStep.current = targetStep;
-      glideStart.current = now;
-      // The current slide fades out for as long as the wheel keeps moving.
+      glideStart.current = performance.now();
       setMoving(true);
-
       if (frame.current === null) {
         frame.current = requestAnimationFrame(tick);
       }
     };
 
-    const onWheelEnd = () => {
-      // A pause resets the gesture so the next scroll is judged fresh,
-      // rather than inheriting a direction from a much earlier nudge.
+    // Fires once scrolling actually pauses — a real scroll gesture fires many
+    // wheel events, and starting (or restarting) the glide on every single
+    // one meant it kept getting reset before it could make progress, so how
+    // far it visibly spun ended up depending on event timing instead of
+    // always covering the same fixed distance. Committing once, on pause,
+    // makes every gesture glide the same amount no matter how it was scrolled.
+    const commitGlide = () => {
+      settleTimer.current = null;
+      const delta = gestureDelta.current;
       gestureDelta.current = 0;
-    };
-    let endTimer: ReturnType<typeof setTimeout> | null = null;
-    const onWheelWithReset = (event: WheelEvent) => {
-      onWheel(event);
-      if (endTimer !== null) clearTimeout(endTimer);
-      endTimer = setTimeout(onWheelEnd, 300);
+      if (delta === 0) return;
+      const direction = delta > 0 ? 1 : -1;
+      // However hard or far the scroll, the target is always exactly one
+      // slide from wherever the wheel last came to rest — never skips ahead.
+      runGlide(stepRef.current + direction, direction);
     };
 
-    window.addEventListener("wheel", onWheelWithReset, { passive: false });
+    const onWheel = (event: WheelEvent) => {
+      // The page never scrolls — swallow the event so the browser's elastic
+      // overscroll doesn't bump the viewport.
+      event.preventDefault();
+      gestureDelta.current += event.deltaY;
+      // The current slide fades out the instant scrolling starts, even
+      // though the glide itself only commits once the gesture pauses.
+      setMoving(true);
+      if (settleTimer.current !== null) {
+        clearTimeout(settleTimer.current);
+      }
+      settleTimer.current = setTimeout(commitGlide, SETTLE_DELAY_MS);
+    };
+
+    // Clicking a word jumps straight to it, taking whichever direction is
+    // the shorter spin from wherever the wheel currently sits.
+    wordClickRef.current = (index: number) => {
+      gestureDelta.current = 0;
+      if (settleTimer.current !== null) {
+        clearTimeout(settleTimer.current);
+        settleTimer.current = null;
+      }
+      const currentMod = ((stepRef.current % WORD_COUNT) + WORD_COUNT) % WORD_COUNT;
+      let diff = index - currentMod;
+      if (diff > WORD_COUNT / 2) diff -= WORD_COUNT;
+      if (diff < -WORD_COUNT / 2) diff += WORD_COUNT;
+      if (diff === 0) return;
+      const direction = diff > 0 ? 1 : -1;
+      runGlide(stepRef.current + diff, direction);
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       if (frame.current !== null) {
         cancelAnimationFrame(frame.current);
       }
-      if (endTimer !== null) {
-        clearTimeout(endTimer);
+      if (settleTimer.current !== null) {
+        clearTimeout(settleTimer.current);
       }
-      window.removeEventListener("wheel", onWheelWithReset);
+      window.removeEventListener("wheel", onWheel);
     };
   }, []);
+
+  const handleWordClick = (index: number) => wordClickRef.current(index);
 
   const activeScreen =
     ((activeStep % SCREENS.length) + SCREENS.length) % SCREENS.length;
@@ -150,7 +180,11 @@ export function LandingV2() {
     <main
       className={`${berkeleyMono.className} relative h-dvh overflow-hidden bg-[#181716] text-zinc-100`}
     >
-      <TextWheel rotation={rotation} className="hidden lg:block" />
+      <TextWheel
+        rotation={rotation}
+        onWordClick={handleWordClick}
+        className="hidden lg:block"
+      />
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-14 px-8 pt-24 sm:pt-36 lg:grid-cols-[1fr_1.8fr] lg:gap-12">
         <div className="flex min-w-0 flex-col items-start">
