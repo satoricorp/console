@@ -10,7 +10,7 @@ import { TextWheel, WHEEL_STEP_DEG } from "@/components/landing-v2/text-wheel";
 import { POST_SIGN_IN_URL, githubSignInUrl } from "@/lib/site-links";
 
 /** Total time the wheel spends spinning down to a stop on the next slide. */
-const GLIDE_DURATION_MS = 3000;
+const GLIDE_DURATION_MS = 1500;
 /** Extra full rotations the wheel spins through — past every word on it —
  * before settling on the next slide, so the slow-down actually has
  * something to click through instead of covering one tiny 6° step. */
