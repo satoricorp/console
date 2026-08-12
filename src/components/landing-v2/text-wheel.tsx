@@ -2,7 +2,7 @@
 
 /** Placeholder copy — the real words (libghostty, etc.) come later. */
 const WORD = "alkjslkjasf";
-const WORD_COUNT = 60;
+export const WORD_COUNT = 60;
 export const WHEEL_STEP_DEG = 360 / WORD_COUNT;
 /** Tight ring — sharp curvature so the visible arc stays short. */
 const RADIUS_PX = 160;
@@ -26,13 +26,14 @@ export function highlightedWordIndex(rotation: number): number {
 export function TextWheel({
   rotation,
   className = "",
+  onWordClick,
 }: {
   rotation: number;
   className?: string;
+  onWordClick?: (index: number) => void;
 }) {
   return (
     <div
-      aria-hidden
       className={`pointer-events-none absolute z-0 select-none ${className}`}
       style={{ left: CENTER_OFFSET_PX, bottom: CENTER_BOTTOM_PX }}
     >
@@ -45,9 +46,11 @@ export function TextWheel({
           const distance = Math.abs(angle);
           const highlighted = distance < WHEEL_STEP_DEG / 2;
           return (
-            <span
+            <button
               key={i}
-              className="absolute left-0 top-0 whitespace-nowrap text-xs tracking-[0.08em] transition-colors duration-150"
+              type="button"
+              onClick={() => onWordClick?.(i)}
+              className="pointer-events-auto absolute left-0 top-0 cursor-pointer whitespace-nowrap bg-transparent text-xs tracking-[0.08em] transition-colors duration-150 hover:text-white"
               style={{
                 transform: `rotate(${base}deg) translateX(${RADIUS_PX}px) translateY(-50%)`,
                 transformOrigin: "0 0",
@@ -55,7 +58,7 @@ export function TextWheel({
               }}
             >
               {WORD}
-            </span>
+            </button>
           );
         })}
       </div>
