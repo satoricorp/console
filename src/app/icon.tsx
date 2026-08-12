@@ -9,8 +9,8 @@ export const size = {
 
 export const contentType = "image/png";
 
-const xer0 = await readFile(
-  join(process.cwd(), "src/fonts/Xer0-Regular.otf"),
+const blob = await readFile(
+  join(process.cwd(), "public/fonts/Blob-Regular.ttf"),
 );
 
 export default function Icon() {
@@ -25,8 +25,8 @@ export default function Icon() {
           justifyContent: "center",
           background: "#0a0a0a",
           color: "#fafafa",
-          fontFamily: "Xer0",
-          fontSize: 24,
+          fontFamily: "Blob",
+          fontSize: 26,
           lineHeight: 1,
         }}
       >
@@ -37,8 +37,8 @@ export default function Icon() {
       ...size,
       fonts: [
         {
-          name: "Xer0",
-          data: xer0,
+          name: "Blob",
+          data: blob,
           style: "normal",
           weight: 400,
         },

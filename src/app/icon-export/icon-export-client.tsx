@@ -27,9 +27,10 @@ export function IconExportClient() {
           >
             design overview
           </Link>{" "}
-          for colors, type, and export sizes. Site favicons use the{" "}
-          <strong>Xer0</strong> wordmark (
-          <code className="text-zinc-800 dark:text-zinc-200">icon.tsx</code> /{" "}
+          for colors, type, and export sizes. The site favicon uses the{" "}
+          <strong>Blob</strong> X (
+          <code className="text-zinc-800 dark:text-zinc-200">icon.tsx</code>);
+          the touch icon uses the <strong>Xer0</strong> wordmark (
           <code className="text-zinc-800 dark:text-zinc-200">apple-icon.tsx</code>
           ). This exporter is for chrome mesh marks. Use transparent PNGs for
           PWA manifests; use white or dark backgrounds for iOS / Android store
@@ -43,11 +44,11 @@ export function IconExportClient() {
         </p>
         <ul className="mt-2 list-inside list-disc space-y-1">
           <li>
-            Site tab / touch icons are generated from Xer0 in{" "}
+            The site tab icon is generated from Blob in{" "}
             <code className="text-zinc-800 dark:text-zinc-200">
               src/app/icon.tsx
-            </code>{" "}
-            and{" "}
+            </code>
+            ; the touch icon from Xer0 in{" "}
             <code className="text-zinc-800 dark:text-zinc-200">
               src/app/apple-icon.tsx
             </code>
