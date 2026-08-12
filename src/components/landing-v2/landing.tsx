@@ -11,28 +11,15 @@ import {
   WHEEL_STEP_DEG,
   WORD_COUNT,
 } from "@/components/landing-v2/text-wheel";
+import {
+  applyImpulse,
+  flickVelocityFor,
+  nearestDetent,
+  restingState,
+  stepWheel,
+  type WheelState,
+} from "@/components/landing-v2/wheel-physics";
 import { POST_SIGN_IN_URL, githubSignInUrl } from "@/lib/site-links";
-
-/** How long a scroll gesture must pause before its glide commits — long
- * enough to bridge the gaps between events within one continuous scroll. */
-const SETTLE_DELAY_MS = 120;
-/** Total time the wheel spends spinning down to a stop on the next slide. */
-const GLIDE_DURATION_MS = 1500;
-/** Extra full rotations the wheel spins through — past every word on it —
- * before settling on the next slide, so the slow-down actually has
- * something to click through instead of covering one tiny 6° step. */
-const EXTRA_SPIN_LAPS = 1;
-const EXTRA_SPIN_DEG = EXTRA_SPIN_LAPS * 360;
-/** Steepness of the glide's exponential ease — quick speed-up, then a long,
- * gradual slow-down to a dead stop, like a wheel of fortune. Higher = the
- * initial rise happens faster and the tail drags out longer. */
-const GLIDE_EASE_STEEPNESS = 4;
-const GLIDE_EASE_NORMALIZER = 1 - 2 ** -GLIDE_EASE_STEEPNESS;
-
-function glideEase(t: number): number {
-  if (t >= 1) return 1;
-  return (1 - 2 ** (-GLIDE_EASE_STEEPNESS * t)) / GLIDE_EASE_NORMALIZER;
-}
 
 type Screen =
   | { kind: "text"; lines: readonly string[] }
@@ -66,106 +53,78 @@ export function LandingV2() {
   const [rotation, setRotation] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [moving, setMoving] = useState(false);
-  const rotationRef = useRef(0);
+  const stateRef = useRef<WheelState>(restingState());
   const frame = useRef<number | null>(null);
-  const gestureDelta = useRef(0);
-  const stepRef = useRef(0);
-  const glideFrom = useRef(0);
-  const glideTo = useRef(0);
-  const glideStep = useRef(0);
-  const glideStart = useRef(0);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFrameTime = useRef(0);
   const wordClickRef = useRef((_index: number) => {});
 
   useEffect(() => {
-    // Eases smoothly from wherever the wheel currently sits to a target step
-    // and no further — like a wheel of fortune, it always glides down to a
-    // stop on the intended pocket, never snapping past it.
+    // Integrates the wheel simulation frame by frame: friction spins it
+    // down, the settle spring drops it into a pocket, and the loop parks
+    // itself once the wheel is at rest.
     const tick = (now: number) => {
       frame.current = null;
-      const t = Math.min(1, (now - glideStart.current) / GLIDE_DURATION_MS);
-      const eased = glideEase(t);
-      rotationRef.current = glideFrom.current + (glideTo.current - glideFrom.current) * eased;
-      setRotation(rotationRef.current);
-      if (t < 1) {
-        frame.current = requestAnimationFrame(tick);
+      const dt = (now - lastFrameTime.current) / 1000;
+      lastFrameTime.current = now;
+      const next = stepWheel(stateRef.current, dt);
+      stateRef.current = next;
+      setRotation(next.rotation);
+      if (next.mode === "rest") {
+        // The slide only changes — and fades back in — once the wheel has
+        // come to rest on a pocket.
+        setActiveStep(Math.round(-next.rotation / WHEEL_STEP_DEG));
+        setMoving(false);
         return;
       }
-      stepRef.current = glideStep.current;
-      // The slide only changes — and fades back in — once the wheel has
-      // come to rest.
-      setActiveStep(glideStep.current);
-      setMoving(false);
+      frame.current = requestAnimationFrame(tick);
     };
 
-    // direction: +1/-1 only — an extra full lap is added in that direction
-    // so the slow-down always has 60 words to click through before landing.
-    const runGlide = (targetStep: number, direction: 1 | -1) => {
-      glideFrom.current = rotationRef.current;
-      glideTo.current = -targetStep * WHEEL_STEP_DEG - direction * EXTRA_SPIN_DEG;
-      glideStep.current = targetStep;
-      glideStart.current = performance.now();
+    const wake = () => {
       setMoving(true);
       if (frame.current === null) {
+        lastFrameTime.current = performance.now();
         frame.current = requestAnimationFrame(tick);
       }
-    };
-
-    // Fires once scrolling actually pauses — a real scroll gesture fires many
-    // wheel events, and starting (or restarting) the glide on every single
-    // one meant it kept getting reset before it could make progress, so how
-    // far it visibly spun ended up depending on event timing instead of
-    // always covering the same fixed distance. Committing once, on pause,
-    // makes every gesture glide the same amount no matter how it was scrolled.
-    const commitGlide = () => {
-      settleTimer.current = null;
-      const delta = gestureDelta.current;
-      gestureDelta.current = 0;
-      if (delta === 0) return;
-      const direction = delta > 0 ? 1 : -1;
-      // However hard or far the scroll, the target is always exactly one
-      // slide from wherever the wheel last came to rest — never skips ahead.
-      runGlide(stepRef.current + direction, direction);
     };
 
     const onWheel = (event: WheelEvent) => {
       // The page never scrolls — swallow the event so the browser's elastic
       // overscroll doesn't bump the viewport.
       event.preventDefault();
-      gestureDelta.current += event.deltaY;
-      // The current slide fades out the instant scrolling starts, even
-      // though the glide itself only commits once the gesture pauses.
-      setMoving(true);
-      if (settleTimer.current !== null) {
-        clearTimeout(settleTimer.current);
-      }
-      settleTimer.current = setTimeout(commitGlide, SETTLE_DELAY_MS);
+      // Most browsers report pixels; Firefox reports lines (and page mode
+      // exists in theory) — normalize so a notch feels the same everywhere.
+      const scale =
+        event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      stateRef.current = applyImpulse(stateRef.current, event.deltaY * scale);
+      wake();
     };
 
-    // Clicking a word jumps straight to it, taking whichever direction is
-    // the shorter spin from wherever the wheel currently sits.
+    // Clicking a word flicks the wheel exactly hard enough that friction
+    // lands it there, taking whichever direction is the shorter spin.
     wordClickRef.current = (index: number) => {
-      gestureDelta.current = 0;
-      if (settleTimer.current !== null) {
-        clearTimeout(settleTimer.current);
-        settleTimer.current = null;
-      }
-      const currentMod = ((stepRef.current % WORD_COUNT) + WORD_COUNT) % WORD_COUNT;
-      let diff = index - currentMod;
+      const current = stateRef.current;
+      const detent = nearestDetent(current.rotation);
+      const currentIndex =
+        (((Math.round(-detent / WHEEL_STEP_DEG) % WORD_COUNT) + WORD_COUNT) %
+          WORD_COUNT);
+      let diff = index - currentIndex;
       if (diff > WORD_COUNT / 2) diff -= WORD_COUNT;
       if (diff < -WORD_COUNT / 2) diff += WORD_COUNT;
-      if (diff === 0) return;
-      const direction = diff > 0 ? 1 : -1;
-      runGlide(stepRef.current + diff, direction);
+      const travel = detent - diff * WHEEL_STEP_DEG - current.rotation;
+      if (travel === 0) return;
+      stateRef.current = {
+        mode: "spin",
+        rotation: current.rotation,
+        velocity: flickVelocityFor(travel),
+        target: current.rotation + travel,
+      };
+      wake();
     };
 
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       if (frame.current !== null) {
         cancelAnimationFrame(frame.current);
-      }
-      if (settleTimer.current !== null) {
-        clearTimeout(settleTimer.current);
       }
       window.removeEventListener("wheel", onWheel);
     };
