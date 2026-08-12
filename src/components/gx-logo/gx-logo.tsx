@@ -20,6 +20,8 @@ export type GxLogoProps = {
   children?: React.ReactNode;
   /** Fixed square render size in CSS pixels (for icon export). */
   pixelSize?: number;
+  /** Multiplies the variant's container size; the mark scales with it. */
+  scale?: number;
   /** Mouse parallax and hero float. Off for icon export. */
   interactive?: boolean;
   /** Required for canvas.toDataURL() capture. */
@@ -38,6 +40,7 @@ export function GxLogo({
   tone = "chrome",
   className,
   pixelSize,
+  scale = 1,
   interactive = true,
   preserveDrawingBuffer = false,
   environmentResolution,
@@ -85,16 +88,16 @@ export function GxLogo({
         .filter(Boolean)
         .join(" ")}
       style={{
-        width: pixelSize ?? (isHero ? "100%" : `${config.widthRem}rem`),
-        height: pixelSize ?? `${config.heightRem}rem`,
+        width: pixelSize ?? (isHero ? "100%" : `${config.widthRem * scale}rem`),
+        height: pixelSize ?? `${config.heightRem * scale}rem`,
         maxWidth:
           !pixelSize && config.maxWidthRem
-            ? `${config.maxWidthRem}rem`
+            ? `${config.maxWidthRem * scale}rem`
             : undefined,
         aspectRatio: isSquare ? "1" : undefined,
         marginLeft:
           config.markInsetXRem !== undefined
-            ? `${config.markInsetXRem}rem`
+            ? `${config.markInsetXRem * scale}rem`
             : undefined,
       }}
     >
