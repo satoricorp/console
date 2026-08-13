@@ -5,7 +5,6 @@ import { Suspense } from "react";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
-import { GettingStartedAnnouncement } from "@/components/getting-started-announcement";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { OnboardingGate } from "@/components/onboarding-gate";
 import { PostHogIdentifier } from "@/components/posthog-identifier";
@@ -61,7 +60,6 @@ export default function RootLayout({
           </Suspense>
           <ConvexClientProvider>
             <PostHogIdentifier />
-            <GettingStartedAnnouncement />
             <SiteHeader />
             <Suspense
               fallback={
