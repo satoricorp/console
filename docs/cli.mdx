@@ -162,9 +162,10 @@ judgment call covers the rest, grounded in the same indexed context
 | `--timeout <dur>` | whole-run budget (default 5m) |
 | `--report-only` | always exit 0; read the verdict from the report |
 
-Findings show the source lines being discussed, syntax-highlighted, and every
-report ends with a **How to resolve** section: one numbered step per finding
-with the code and the fix. A missing tool is never a failure — an auditor that
+Findings about the change show its diff hunk — colored in the terminal, a raw
+```diff block in markdown — while findings about untouched lines show the
+current source, syntax-highlighted. Every report ends with a **How to
+resolve** section: one numbered step per finding with the code and the fix. A missing tool is never a failure — an auditor that
 isn't installed or can't reach its database is reported as skipped evidence.
 
 ### As a CI gate
