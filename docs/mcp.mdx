@@ -4,7 +4,8 @@ description: Connect the gx MCP server to Claude Code, Cursor, Codex, and other 
 ---
 
 The MCP server ships with the CLI as a local stdio binary. It shells out to the
-CLI, so repo state stays on your machine. It exposes one tool: `gx_review`.
+CLI, so repo state stays on your machine. It exposes two tools: `gx_review`
+and `gx_constraints`.
 
 ## Install
 
@@ -70,6 +71,25 @@ a repository. May run up to 5 minutes.
 Saving and publishing are plain Git, not MCP calls: `git add` + `git commit`
 record the revision through the hooks, `git push` captures and publishes.
 
+## gx_constraints
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `prompt` | string | optional intent hint, e.g. `"fix auth timeout"` — the back-pressure gate judges scope against it |
+| `verbose` | boolean | list the source files behind each gate |
+| `cwd` | string | repository working directory (defaults to the MCP server process cwd) |
+
+The pre-ship exit gate: checks the current change against six constraints —
+correctness, security, code health, back-pressure, accessibility,
+performance — and returns a markdown report with a ship / no-ship verdict.
+Agents run it before opening a PR and relay the report.
+
+Always runs `gx constraints --report-only --md`, so a no-ship verdict is a
+successful tool call, not an error — the verdict lives in the report's final
+`Verdict:` / `Next:` lines, with a **How to resolve** section of per-finding
+fixes above them. Read-only and never initializes a repository. May run up to
+6 minutes when the project's test suite is slow.
+
 ## AGENTS.md instructions
 
 `gx init` offers to append these instructions to your repo's `AGENTS.md`. If you
@@ -89,4 +109,6 @@ Default flow:
 - To amend, use `git commit --amend` and preserve the gx revision trailer in the message.
 
 For AI review, run the `gx_review` MCP tool (or the `gx review` CLI) on the current change.
+Before shipping, run the `gx_constraints` MCP tool (or `gx constraints`) to check the change
+against the pre-ship constraint gates.
 ```

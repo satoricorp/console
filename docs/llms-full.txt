@@ -141,11 +141,12 @@ better context for review.
 ## gx CLI Overview
 
 ```bash
-gx init      # set up hooks in a repo (run once)
-gx review    # AI review of the current change (alias: gxr)
-gx auth      # sign in to gx Cloud
-gx doctor    # diagnose capture, hooks, and publishing
-gx version   # print the version
+gx init         # set up hooks in a repo (run once)
+gx review       # AI review of the current change (alias: gxr)
+gx constraints  # pre-ship exit gate for the current change (alias: gxc)
+gx auth         # sign in to gx Cloud
+gx doctor       # diagnose capture, hooks, and publishing
+gx version      # print the version
 ```
 
 ## gx init
@@ -257,6 +258,58 @@ Exit codes:
 Pair with `--no-publish` so CI never posts PR comments, and `--json` to parse
 findings yourself.
 
+## gx constraints
+
+```bash
+gx constraints                       # alias: gxc
+gx constraints "fix auth timeout"    # state the intent for the back-pressure gate
+gx constraints --verbose             # list the source files behind each gate
+gx constraints --md                  # markdown report (what agents relay)
+```
+
+The pre-ship exit gate. Checks the current change against six constraints and
+reports PASS, FAIL, or SKIPPED for each, plus a ship / no-ship verdict — run
+it before opening a PR. Deterministic checks decide what they can; one AI
+judgment call covers the rest, grounded in the same indexed context
+`gx review` uses.
+
+| Gate | What it checks |
+| --- | --- |
+| Correctness | the project's own tests and builds: `go test`, `tsc`, `cargo check`, `dotnet build`, `flutter analyze`, `pytest` |
+| Security | secrets in added lines; dependency audits (`govulncheck`, `npm audit`, `pip-audit`, `cargo audit`) |
+| Code health | linters, reviewability (large changes warn, they don't block), and whether tests accompany the sources |
+| Back-pressure | is every part of the change in service of the stated intent — scope creep, regenerated bloat, unjustified new dependencies |
+| Accessibility | added UI elements stay usable by keyboard and screen reader; auto-skips when no UI files changed |
+| Performance | hot-path regressions on perf-relevant changes; the model must justify a pass explicitly |
+
+| Flag | Meaning |
+| --- | --- |
+| `[intent]` | optional positional statement of what the change is meant to do |
+| `--base <ref>` | check the commit range `<ref>...HEAD` instead of the working tree |
+| `--verbose` | list the source files behind each gate |
+| `--md` | print the report as markdown |
+| `--json` | print the full report as JSON |
+| `--skip-gates <list>` | comma-separated gates to skip |
+| `--timeout <dur>` | whole-run budget (default 5m) |
+| `--report-only` | always exit 0; read the verdict from the report |
+
+Findings show the source lines being discussed, syntax-highlighted, and every
+report ends with a How to resolve section: one numbered step per finding with
+the code and the fix. A missing tool is never a failure — an auditor that
+isn't installed or can't reach its database is reported as skipped evidence.
+
+The exit code is the gate by default — no opt-in flag needed:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | ship — every gate passed or was legitimately skipped |
+| `3` | no-ship — at least one gate failed |
+| `4` | nothing to check — a gate should not pass without inspecting code |
+| `5` | degraded — the AI gates could not run, so a pass would be unearned |
+
+Use `--report-only` to opt out of the coded exits and read the verdict from
+the report instead.
+
 ## gx auth
 
 ```bash
@@ -285,10 +338,11 @@ gx version --json
 
 ## Shortcuts
 
-The installer links `gxr` to the same binary:
+The installer links `gxr` and `gxc` to the same binary:
 
 ```bash
 gxr   # gx review
+gxc   # gx constraints
 ```
 
 ---
@@ -296,7 +350,8 @@ gxr   # gx review
 # MCP
 
 The MCP server ships with the CLI as a local stdio binary. It shells out to the
-CLI, so repo state stays on your machine. It exposes one tool: `gx_review`.
+CLI, so repo state stays on your machine. It exposes two tools: `gx_review`
+and `gx_constraints`.
 
 ## Install
 
@@ -362,6 +417,25 @@ a repository. May run up to 5 minutes.
 Saving and publishing are plain Git, not MCP calls: `git add` + `git commit`
 record the revision through the hooks, `git push` captures and publishes.
 
+## gx_constraints
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `prompt` | string | optional intent hint, e.g. `"fix auth timeout"` — the back-pressure gate judges scope against it |
+| `verbose` | boolean | list the source files behind each gate |
+| `cwd` | string | repository working directory (defaults to the MCP server process cwd) |
+
+The pre-ship exit gate: checks the current change against six constraints —
+correctness, security, code health, back-pressure, accessibility,
+performance — and returns a markdown report with a ship / no-ship verdict.
+Agents run it before opening a PR and relay the report.
+
+Always runs `gx constraints --report-only --md`, so a no-ship verdict is a
+successful tool call, not an error — the verdict lives in the report's final
+`Verdict:` / `Next:` lines, with a How to resolve section of per-finding
+fixes above them. Read-only and never initializes a repository. May run up to
+6 minutes when the project's test suite is slow.
+
 ## AGENTS.md instructions
 
 `gx init` offers to append these instructions to your repo's `AGENTS.md`. If you
@@ -381,6 +455,8 @@ Default flow:
 - To amend, use `git commit --amend` and preserve the gx revision trailer in the message.
 
 For AI review, run the `gx_review` MCP tool (or the `gx review` CLI) on the current change.
+Before shipping, run the `gx_constraints` MCP tool (or `gx constraints`) to check the change
+against the pre-ship constraint gates.
 ```
 
 ---

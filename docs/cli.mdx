@@ -10,11 +10,12 @@ better context for review.
 ## gx CLI Overview
 
 ```bash
-gx init      # set up hooks in a repo (run once)
-gx review    # AI review of the current change (alias: gxr)
-gx auth      # sign in to gx Cloud
-gx doctor    # diagnose capture, hooks, and publishing
-gx version   # print the version
+gx init         # set up hooks in a repo (run once)
+gx review       # AI review of the current change (alias: gxr)
+gx constraints  # pre-ship exit gate for the current change (alias: gxc)
+gx auth         # sign in to gx Cloud
+gx doctor       # diagnose capture, hooks, and publishing
+gx version      # print the version
 ```
 
 ## gx init
@@ -126,6 +127,60 @@ Exit codes:
 Pair with `--no-publish` so CI never posts PR comments, and `--json` to parse
 findings yourself.
 
+## gx constraints
+
+```bash
+gx constraints                       # alias: gxc
+gx constraints "fix auth timeout"    # state the intent for the back-pressure gate
+gx constraints --verbose             # list the source files behind each gate
+gx constraints --md                  # markdown report (what agents relay)
+```
+
+The pre-ship exit gate. Checks the current change against six constraints and
+reports PASS, FAIL, or SKIPPED for each, plus a ship / no-ship verdict — run
+it before opening a PR. Deterministic checks decide what they can; one AI
+judgment call covers the rest, grounded in the same indexed context
+`gx review` uses.
+
+| Gate | What it checks |
+| --- | --- |
+| Correctness | the project's own tests and builds: `go test`, `tsc`, `cargo check`, `dotnet build`, `flutter analyze`, `pytest` |
+| Security | secrets in added lines; dependency audits (`govulncheck`, `npm audit`, `pip-audit`, `cargo audit`) |
+| Code health | linters, reviewability (large changes warn, they don't block), and whether tests accompany the sources |
+| Back-pressure | is every part of the change in service of the stated intent — scope creep, regenerated bloat, unjustified new dependencies |
+| Accessibility | added UI elements stay usable by keyboard and screen reader; auto-skips when no UI files changed |
+| Performance | hot-path regressions on perf-relevant changes; the model must justify a pass explicitly |
+
+| Flag | Meaning |
+| --- | --- |
+| `[intent]` | optional positional statement of what the change is meant to do |
+| `--base <ref>` | check the commit range `<ref>...HEAD` instead of the working tree |
+| `--verbose` | list the source files behind each gate |
+| `--md` | print the report as markdown |
+| `--json` | print the full report as JSON |
+| `--skip-gates <list>` | comma-separated gates to skip |
+| `--timeout <dur>` | whole-run budget (default 5m) |
+| `--report-only` | always exit 0; read the verdict from the report |
+
+Findings show the source lines being discussed, syntax-highlighted, and every
+report ends with a **How to resolve** section: one numbered step per finding
+with the code and the fix. A missing tool is never a failure — an auditor that
+isn't installed or can't reach its database is reported as skipped evidence.
+
+### As a CI gate
+
+The exit code is the gate by default — no opt-in flag needed:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | ship — every gate passed or was legitimately skipped |
+| `3` | no-ship — at least one gate failed |
+| `4` | nothing to check — a gate should not pass without inspecting code |
+| `5` | degraded — the AI gates could not run, so a pass would be unearned |
+
+Use `--report-only` to opt out of the coded exits and read the verdict from
+the report instead.
+
 ## gx auth
 
 ```bash
@@ -154,8 +209,9 @@ gx version --json
 
 ## Shortcuts
 
-The installer links `gxr` to the same binary:
+The installer links `gxr` and `gxc` to the same binary:
 
 ```bash
 gxr   # gx review
+gxc   # gx constraints
 ```
