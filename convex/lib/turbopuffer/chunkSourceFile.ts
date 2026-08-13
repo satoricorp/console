@@ -1,6 +1,8 @@
+import { clampToTokens, countTokens } from "./tokenClamp";
 import {
   detectDocType,
   documentId,
+  isProbablyBinary,
   languageFromPath,
   type DocType,
 } from "./utils";
@@ -29,6 +31,18 @@ const CHUNK_LINES = 100;
  * embed time would leave a row whose content the vector does not describe.
  */
 const CHUNK_MAX_CHARS = 16000;
+/**
+ * Token ceiling on one chunk, measured with the embedding model's own
+ * tokenizer.
+ *
+ * The character ceiling above assumes at least two characters per token, and
+ * most source clears that. What doesn't: CJK prose (about one token per
+ * character) and anything dense enough to defeat BPE. The API's hard limit is
+ * 8192 per input; 7500 leaves margin. Clamping here rather than only at embed
+ * time keeps the text stored in TurboPuffer the text the vector was computed
+ * from.
+ */
+const CHUNK_MAX_TOKENS = 7500;
 const OVERLAP_LINES = 15;
 const MIN_SYMBOL_LINES = 6;
 
@@ -59,6 +73,11 @@ export function chunkSourceFile(
   const chunks: SourceChunk[] = [];
 
   if (lines.length === 0) return chunks;
+  // A binary file that slipped past the extension filter embeds as garbage
+  // and, worse, tokenizes past the embedding model's request limit — one such
+  // file fails its whole batch and with it the entire index run. No chunks is
+  // the correct index of a binary file.
+  if (isProbablyBinary(source)) return chunks;
 
   const ranges = symbolRanges(lines, language);
   let chunkIndex = 0;
@@ -290,8 +309,15 @@ function buildChunk(args: {
   // and language a citation is built from, so truncating it would cost the
   // chunk its identity to save characters the model barely reads.
   const room = CHUNK_MAX_CHARS - header.length - 5;
-  const clampedBody = body.length > room ? body.slice(0, Math.max(room, 0)) : body;
-  const content = `${header}\n---\n${clampedBody}`;
+  let clampedBody = body.length > room ? body.slice(0, Math.max(room, 0)) : body;
+
+  // Characters first (cheap, bounds the encode below), then tokens (what the
+  // embedding API actually enforces).
+  const framing = `${header}\n---\n`;
+  const bodyTokenBudget = CHUNK_MAX_TOKENS - countTokens(framing);
+  clampedBody = clampToTokens(clampedBody, bodyTokenBudget);
+
+  const content = `${framing}${clampedBody}`;
 
   return {
     id: documentId(args.fullName, args.commitId, args.filePath, args.chunkIndex),

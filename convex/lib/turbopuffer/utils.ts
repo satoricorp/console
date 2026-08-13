@@ -80,7 +80,39 @@ export const SKIP_EXTENSIONS = new Set([
   ".so",
   ".dylib",
   ".lock",
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  ".vscdb",
+  ".wasm",
+  ".bin",
 ]);
+
+/**
+ * Binary sniff on UTF-8-decoded file content.
+ *
+ * The extension list cannot enumerate every binary shape a repository carries
+ * — satoricorp/gx shipped a 12KB SQLite fixture as `.vscdb` — and binary is
+ * the one content class that breaks the character-based chunk clamp: decoded
+ * bytes tokenize near one token per character, so a 16000-character chunk
+ * lands far past the embedding model's 8192-token limit and fails the whole
+ * index run.
+ *
+ * NUL is decisive: it cannot appear in text a person wrote, and real binary
+ * (SQLite, ELF, UTF-16 mistaken for UTF-8) is full of them. U+FFFD is the
+ * replacement character `Buffer.toString("utf8")` substitutes for invalid
+ * byte sequences; a few can appear in a mostly-text file with one bad byte,
+ * so only a density past 2% of the sample counts as binary.
+ */
+export function isProbablyBinary(source: string): boolean {
+  const sample = source.slice(0, 8192);
+  if (sample.includes("\u0000")) return true;
+  let replacements = 0;
+  for (let i = 0; i < sample.length; i += 1) {
+    if (sample.charCodeAt(i) === 0xfffd) replacements += 1;
+  }
+  return replacements > sample.length * 0.02;
+}
 
 export const MAX_FILE_BYTES = 100 * 1024;
 export const MAX_FILES = 5000;
