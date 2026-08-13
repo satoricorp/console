@@ -7,6 +7,10 @@ import { Menu } from "lucide-react";
 import { DiscordIcon } from "@/components/discord-icon";
 import { AppCommandPalette } from "@/components/app-command-palette";
 import { GetStartedButton } from "@/components/get-started-button";
+import {
+  GettingStartedAnnouncement,
+  useGettingStartedAnnouncement,
+} from "@/components/getting-started-announcement";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxWordmark } from "@/components/gx-wordmark";
 import { HeaderAuthActions } from "@/components/header-auth-actions";
@@ -242,6 +246,7 @@ function MobileNavMenu() {
 export function SiteHeader() {
   const pathname = usePathname();
   const { data: session, isPending } = authClient.useSession();
+  const announcement = useGettingStartedAnnouncement();
   const isHome = pathname === "/";
   const [belowFold, setBelowFold] = useState(false);
 
@@ -312,12 +317,22 @@ export function SiteHeader() {
 
   if (session?.user) {
     return (
-      <header className="fixed right-5 top-4 z-50 sm:right-10">
-        <div className="flex justify-end gap-2">
-          <AppCommandPalette />
-          <UserMenu user={session.user} />
-        </div>
-      </header>
+      <>
+        {announcement.visible ? (
+          <GettingStartedAnnouncement onDismiss={announcement.dismiss} />
+        ) : null}
+        <header
+          className={cn(
+            "fixed right-5 z-50 sm:right-10",
+            announcement.visible ? "top-14" : "top-4",
+          )}
+        >
+          <div className="flex justify-end gap-2">
+            <AppCommandPalette />
+            <UserMenu user={session.user} />
+          </div>
+        </header>
+      </>
     );
   }
 
