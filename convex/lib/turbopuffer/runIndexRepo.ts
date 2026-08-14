@@ -1,8 +1,13 @@
 "use node";
 
 import { chunkSourceFile } from "./chunkSourceFile";
-import { deleteStaleDocuments } from "./deleteStaleDocuments";
+import {
+  countIndexedChunks,
+  deleteDocumentIds,
+  deleteStaleDocuments,
+} from "./deleteStaleDocuments";
 import { embedTextBatch } from "./embedTextBatch";
+import { fetchGithubCompare } from "./fetchGithubCompare";
 import { fetchGithubTarball } from "./fetchGithubTarball";
 import { fetchGithubTree } from "./fetchGithubTree";
 import { getGithubAppInstallationToken } from "./getGithubAppToken";
@@ -11,6 +16,7 @@ import { upsertDocuments } from "./upsertDocuments";
 import { CODE_FILE_SOURCE_KIND } from "./turbopufferClient";
 import { indexLogMessage } from "./indexLog";
 import {
+  codeRowIdRange,
   FILE_BATCH,
   MAX_CHUNKS_PER_FILE,
   MAX_FILES,
@@ -39,6 +45,22 @@ export type IndexPlan = {
   startedAt: number;
   chunksIndexed: number;
   filesIndexed: number;
+  /**
+   * Whether indexFiles is the changed subset rather than the whole repository.
+   *
+   * Carried on the plan, not recomputed, because a resumed batch has to finish
+   * the pass it started: the stale sweep is only correct after a full pass, and
+   * a resume that forgot which kind of pass this was would run it against a
+   * namespace where most rows still carry the previous commit id.
+   */
+  incremental: boolean;
+  /**
+   * Indexable files in the repository at this commit — not the count this pass
+   * is touching. An incremental pass writes a handful of files, and reporting
+   * that as the index size would tell the console a 3,500-file repository holds
+   * two.
+   */
+  repoFileCount: number;
 };
 
 export type JobStatusUpdate = {
@@ -56,6 +78,8 @@ export type JobStatusUpdate = {
   defaultBranch?: string;
   clearIndexFiles?: boolean;
   indexLog?: string;
+  /** Set only by finalizeIndex — see the schema comment on this field. */
+  lastIndexedCommitId?: string;
 };
 
 export type IndexRepoCallbacks = {
@@ -64,6 +88,13 @@ export type IndexRepoCallbacks = {
   scheduleStallWatchdog: (checkpoint: number) => Promise<void>;
   getPlan: () => Promise<IndexPlan | null>;
   savePlan: (plan: IndexPlan) => Promise<void>;
+  /**
+   * The commit this repository's namespace currently reflects, or null if no
+   * pass has ever finished. Only a completed pass counts: diffing from a commit
+   * whose pass died halfway would treat the files it never reached as unchanged
+   * and leave permanent holes in the index.
+   */
+  getLastIndexedCommit: () => Promise<string | null>;
   /** Starts the commit that landed mid-run, if one did. */
   drainQueuedCommit: () => Promise<void>;
 };
@@ -114,6 +145,10 @@ export async function runIndexRepo(
     }
 
     if (offset === 0) {
+      // Read before the status flips to "indexing": that write is what would
+      // otherwise erase the record of which commit the namespace reflects.
+      const lastIndexedCommit = await callbacks.getLastIndexedCommit();
+
       const startedAt = Date.now();
       await callbacks.updateStatus({ fullName, status: "indexing", startedAt });
 
@@ -126,24 +161,64 @@ export async function runIndexRepo(
       const indexable = sortIndexableEntries(
         tree.entries.filter((entry) => shouldIndexPath(entry.path, entry.size)),
       );
-      const indexFiles = indexable.slice(0, MAX_FILES).map((entry) => ({
+      const currentFiles = indexable.slice(0, MAX_FILES).map((entry) => ({
         path: entry.path,
         sha: entry.sha,
       }));
+      const filesSkipped = tree.entries.length - currentFiles.length;
+
+      // Only a merge onto an already-indexed commit can be a delta. A connect
+      // has nothing to diff against, and a truncated tree means the file list
+      // itself is incomplete, so "unchanged" would be a guess.
+      const delta =
+        lastIndexedCommit && lastIndexedCommit !== tree.commitId && !tree.truncated
+          ? await planIncremental(
+              fullName,
+              lastIndexedCommit,
+              tree.commitId,
+              accessToken,
+              currentFiles,
+            )
+          : null;
+
+      if (delta) {
+        // Retiring deleted and renamed-away files happens before any batch, so
+        // a pass that dies partway has still removed rows pointing at code that
+        // is gone — the failure that would otherwise serve deleted files as
+        // current until someone noticed.
+        await deleteDocumentIds(request.orgId, fullName, delta.retiredIds);
+        await log(
+          `Incremental index from ${lastIndexedCommit!.slice(0, 9)}: ` +
+            `${delta.indexFiles.length} changed file(s), ` +
+            `${delta.retiredIds.length / MAX_CHUNKS_PER_FILE} retired`,
+          { commitId: tree.commitId },
+        );
+      } else if (lastIndexedCommit) {
+        await log(
+          `Full index — ${deltaSkipReason(tree.truncated, lastIndexedCommit === tree.commitId)}`,
+          { commitId: tree.commitId },
+        );
+      }
+
+      const indexFiles = delta ? delta.indexFiles : currentFiles;
 
       plan = {
         commitId: tree.commitId,
         branch: tree.branch,
         indexFiles,
-        filesSkipped: tree.entries.length - indexFiles.length,
+        // Files this pass is not touching are not "skipped" in the sense the
+        // console reports — they are already indexed and still correct.
+        filesSkipped,
         treeTruncated: tree.truncated ?? false,
         startedAt,
         chunksIndexed: 0,
         filesIndexed: 0,
+        incremental: delta !== null,
+        repoFileCount: currentFiles.length,
       };
 
       await callbacks.savePlan(plan);
-      await log("Starting index", {
+      await log(plan.incremental ? "Starting incremental index" : "Starting index", {
         commitId: plan.commitId,
         filesIndexed: 0,
         filesTotal: indexFiles.length,
@@ -196,17 +271,28 @@ export async function runIndexRepo(
       new Set(batch.map((entry) => entry.path)),
     );
     let batchChunks = 0;
+    // Ids this batch's files no longer occupy. On a full pass the stale sweep
+    // covers these, because every current row is rewritten with the new commit
+    // id and a leftover tail keeps the old one. An incremental pass rewrites
+    // almost nothing, so it has to name them.
+    const trimmedIds: string[] = [];
 
     for (const entry of batch) {
       const source = contents.get(entry.path);
       if (!source) continue;
 
-      const chunks = chunkSourceFile(
-        fullName,
-        currentPlan.commitId,
-        entry.path,
-        source,
-      ).slice(0, MAX_CHUNKS_PER_FILE);
+      const chunks = chunkSourceFile(fullName, entry.path, source).slice(
+        0,
+        MAX_CHUNKS_PER_FILE,
+      );
+
+      if (currentPlan.incremental) {
+        // A file that shrank, or that now sniffs as binary and yields nothing,
+        // leaves rows behind at the indexes it used to fill.
+        trimmedIds.push(
+          ...codeRowIdRange(fullName, entry.path, chunks.length, MAX_CHUNKS_PER_FILE),
+        );
+      }
 
       if (chunks.length === 0) continue;
 
@@ -240,6 +326,10 @@ export async function runIndexRepo(
       await upsertDocuments(request.orgId, fullName, documents);
       batchChunks += documents.length;
     }
+
+    // After the upserts, so a run that dies between the two leaves a stale tail
+    // rather than a hole: the next pass over this file rewrites both.
+    await deleteDocumentIds(request.orgId, fullName, trimmedIds);
 
     const filesIndexed = offset + batch.length;
     const chunksIndexed = currentPlan.chunksIndexed + batchChunks;
@@ -310,6 +400,83 @@ export async function runIndexRepo(
   }
 }
 
+function deltaSkipReason(
+  treeTruncated: boolean | undefined,
+  sameCommit: boolean,
+): string {
+  if (sameCommit) {
+    // A re-index of the commit already indexed. Comparing it against itself
+    // would report nothing changed, turning an explicit rebuild into a no-op.
+    return "this commit is already the indexed one, so there is nothing to diff against";
+  }
+  return treeTruncated
+    ? "the tree is truncated, so the file list is incomplete"
+    : "no usable comparison against the last indexed commit";
+}
+
+/**
+ * Turn "what changed on GitHub" into "what this pass must write and unwrite".
+ *
+ * Returns null when the comparison cannot be trusted, and the caller falls back
+ * to a full pass. Every changed path lands in exactly one of two buckets: it is
+ * indexable at the new commit and gets re-chunked, or it is not — deleted,
+ * renamed away, grown past the size cap, or now a skipped extension — and its
+ * rows are retired. A path that changed but is not indexable in either
+ * generation retires ids that were never written, which TurboPuffer ignores.
+ */
+async function planIncremental(
+  fullName: string,
+  lastIndexedCommit: string,
+  headCommitId: string,
+  accessToken: string,
+  currentFiles: Array<{ path: string; sha: string }>,
+): Promise<{ indexFiles: Array<{ path: string; sha: string }>; retiredIds: string[] } | null> {
+  let compare;
+  try {
+    compare = await fetchGithubCompare(
+      fullName,
+      lastIndexedCommit,
+      headCommitId,
+      accessToken,
+    );
+  } catch (error) {
+    // A full pass is always correct, so a comparison that errors is a cost
+    // problem, not a correctness one — log it and rebuild.
+    console.warn(`compare failed for ${fullName}, indexing in full:`, error);
+    return null;
+  }
+  if (!compare.usable) {
+    console.info(`compare unusable for ${fullName} (${compare.reason}), indexing in full`);
+    return null;
+  }
+
+  const currentByPath = new Map(currentFiles.map((file) => [file.path, file]));
+  const indexFiles: Array<{ path: string; sha: string }> = [];
+  const seen = new Set<string>();
+  const retiredIds: string[] = [];
+
+  for (const file of compare.files) {
+    // A rename moves content to a new id; the old path's rows would otherwise
+    // survive forever, since nothing ever writes to them again.
+    if (file.previousPath && file.previousPath !== file.path) {
+      retiredIds.push(
+        ...codeRowIdRange(fullName, file.previousPath, 0, MAX_CHUNKS_PER_FILE),
+      );
+    }
+
+    const current = currentByPath.get(file.path);
+    if (!current || file.removed) {
+      retiredIds.push(...codeRowIdRange(fullName, file.path, 0, MAX_CHUNKS_PER_FILE));
+      continue;
+    }
+    if (seen.has(file.path)) continue;
+    seen.add(file.path);
+    indexFiles.push(current);
+  }
+
+  return { indexFiles, retiredIds };
+}
+
 async function finalizeIndex(
   orgId: string,
   fullName: string,
@@ -327,9 +494,24 @@ async function finalizeIndex(
     },
   ) => Promise<void>,
 ) {
-  await deleteStaleDocuments(orgId, fullName, plan.commitId);
+  // Full passes only. After an incremental pass most rows still carry the
+  // previous commit id — correctly, because their files did not change — and
+  // this filter would delete every one of them, leaving an index holding just
+  // the handful of files that happened to be touched.
+  if (!plan.incremental) {
+    await deleteStaleDocuments(orgId, fullName, plan.commitId);
+  }
 
-  await log("Index complete", {
+  // The console reports these as "how much of this repository is indexed", so
+  // once the pass is done they have to describe the index, not the pass. For a
+  // full pass the two are the same number; for an incremental one they are not
+  // remotely, and reporting the delta would say a 3,500-file repository holds
+  // the two files that changed.
+  const indexedChunks = plan.incremental
+    ? await countIndexedChunks(orgId, fullName)
+    : plan.chunksIndexed;
+
+  await log(plan.incremental ? "Incremental index complete" : "Index complete", {
     commitId: plan.commitId,
     filesIndexed: plan.indexFiles.length,
     filesTotal: plan.indexFiles.length,
@@ -340,15 +522,18 @@ async function finalizeIndex(
     fullName,
     status: "ready",
     commitId: plan.commitId,
-    filesTotal: plan.indexFiles.length,
-    filesIndexed: plan.indexFiles.length,
-    chunksIndexed: plan.chunksIndexed,
+    filesTotal: plan.repoFileCount,
+    filesIndexed: plan.repoFileCount,
+    chunksIndexed: indexedChunks ?? plan.chunksIndexed,
     filesSkipped: plan.filesSkipped,
     treeTruncated: plan.treeTruncated,
     defaultBranch: plan.branch,
     startedAt: plan.startedAt,
     completedAt: Date.now(),
     clearIndexFiles: true,
+    // Here and nowhere else: this is the moment the namespace is known to match
+    // a commit end to end, which is the only claim the next pass may diff from.
+    lastIndexedCommitId: plan.commitId,
   });
 
   // Last, and only once the pass is finalized: a merge that arrived mid-run is
@@ -357,7 +542,9 @@ async function finalizeIndex(
   await callbacks.drainQueuedCommit();
 
   console.log(
-    `[index] ${fullName}@${plan.commitId.slice(0, 7)} done · ${plan.indexFiles.length} files · ${plan.chunksIndexed} chunks · trigger=${trigger}`,
+    `[index] ${fullName}@${plan.commitId.slice(0, 7)} done · ` +
+      `${plan.indexFiles.length}/${plan.repoFileCount} files · ${plan.chunksIndexed} chunks written · ` +
+      `trigger=${trigger}${plan.incremental ? " (incremental)" : ""}`,
   );
 }
 

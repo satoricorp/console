@@ -69,7 +69,30 @@ export const getIndexPlan = internalQuery({
       startedAt: job.startedAt ?? Date.now(),
       chunksIndexed: job.chunksIndexed ?? 0,
       filesIndexed: job.filesIndexed ?? 0,
+      // Absent on rows written before incremental passes existed. Those plans
+      // were full passes, and false is what makes the resumed sweep correct.
+      incremental: job.incremental ?? false,
+      repoFileCount: job.repoFileCount ?? job.indexFiles.length,
     };
+  },
+});
+
+/**
+ * The commit this repository's namespace fully reflects, or null if no pass has
+ * ever completed.
+ *
+ * Deliberately not `commitId`, and deliberately not gated on the current status.
+ * `commitId` is set when a pass starts, so after a failure it names a commit the
+ * index only partly reached. And status is "pending" both after a failure and
+ * after a completed pass queued a newer commit — reading it would make every
+ * merge that lands during an index rebuild the whole repository.
+ */
+export const getLastIndexedCommit = internalQuery({
+  args: { orgId: v.string(), fullName: v.string() },
+  handler: async (ctx, { orgId, fullName }) => {
+    const job = await findJob(ctx, orgId, fullName);
+    const commitId = job?.lastIndexedCommitId;
+    return typeof commitId === "string" && commitId ? commitId : null;
   },
 });
 
@@ -180,6 +203,8 @@ export const saveIndexPlan = internalMutation({
     startedAt: v.number(),
     chunksIndexed: v.number(),
     filesIndexed: v.number(),
+    incremental: v.boolean(),
+    repoFileCount: v.number(),
   },
   handler: async (ctx, args) => {
     const job = await findJob(ctx, args.orgId, args.fullName);
@@ -198,6 +223,8 @@ export const saveIndexPlan = internalMutation({
       filesTotal: args.indexFiles.length,
       filesIndexed: args.filesIndexed,
       chunksIndexed: args.chunksIndexed,
+      incremental: args.incremental,
+      repoFileCount: args.repoFileCount,
     });
   },
 });
@@ -219,6 +246,7 @@ export const updateJobStatus = internalMutation({
     defaultBranch: v.optional(v.string()),
     clearIndexFiles: v.optional(v.boolean()),
     indexLog: v.optional(v.string()),
+    lastIndexedCommitId: v.optional(v.string()),
   },
   handler: async (ctx, { orgId, fullName, status, clearIndexFiles, ...fields }) => {
     const job = await findJob(ctx, orgId, fullName);

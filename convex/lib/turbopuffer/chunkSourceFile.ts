@@ -63,7 +63,6 @@ const RESERVED_WORDS = new Set([
 
 export function chunkSourceFile(
   fullName: string,
-  commitId: string,
   filePath: string,
   source: string,
 ): SourceChunk[] {
@@ -88,7 +87,6 @@ export function chunkSourceFile(
       chunks.push(
         buildChunk({
           fullName,
-          commitId,
           filePath,
           docType,
           language,
@@ -112,7 +110,6 @@ export function chunkSourceFile(
       chunks.push(
         buildChunk({
           fullName,
-          commitId,
           filePath,
           docType,
           language,
@@ -280,7 +277,6 @@ function detectSymbol(line: string, language: string): string | null {
 
 function buildChunk(args: {
   fullName: string;
-  commitId: string;
   filePath: string;
   docType: DocType;
   language: string;
@@ -320,7 +316,7 @@ function buildChunk(args: {
   const content = `${framing}${clampedBody}`;
 
   return {
-    id: documentId(args.fullName, args.commitId, args.filePath, args.chunkIndex),
+    id: documentId(args.fullName, args.filePath, args.chunkIndex),
     chunkIndex: args.chunkIndex,
     filePath: args.filePath,
     content,

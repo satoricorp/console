@@ -23,13 +23,22 @@ export function parseFullName(fullName: string) {
   return { owner, name };
 }
 
+/**
+ * The stable address of one chunk: (repo, path, chunk index).
+ *
+ * The commit id used to be part of this hash, which meant every chunk of every
+ * file got a brand-new id on each merge — so a one-line change rewrote and
+ * re-embedded the entire repository, and the stale sweep then deleted the
+ * previous generation. Addressing a chunk by where it lives rather than by when
+ * it was written is what makes an incremental pass possible at all: an
+ * unchanged file's rows are already correct and can simply be left alone.
+ */
 export function documentId(
   fullName: string,
-  commitId: string,
   filePath: string,
   chunkIndex: number,
 ) {
-  const input = `${fullName}:${commitId}:${filePath}:${chunkIndex}`;
+  const input = `${fullName}:${filePath}:${chunkIndex}`;
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (let i = 0; i < input.length; i++) {
@@ -43,6 +52,27 @@ export function documentId(
     (h1 >>> 0).toString(16).padStart(8, "0") +
     (h2 >>> 0).toString(16).padStart(8, "0")
   );
+}
+
+/**
+ * Every id a file could occupy from `from` up to (not including) `to`.
+ *
+ * Deleting a file's rows does not need to know how many chunks it actually had:
+ * MAX_CHUNKS_PER_FILE caps that, so naming the whole range is exact and costs at
+ * most twenty ids. Used to retire a deleted file and to trim the tail when a
+ * file shrinks to fewer chunks than it had before.
+ */
+export function codeRowIdRange(
+  fullName: string,
+  filePath: string,
+  from: number,
+  to: number,
+): string[] {
+  const ids: string[] = [];
+  for (let index = from; index < to; index += 1) {
+    ids.push(documentId(fullName, filePath, index));
+  }
+  return ids;
 }
 
 export const SKIP_DIR_PREFIXES = [

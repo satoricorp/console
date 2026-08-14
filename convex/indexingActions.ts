@@ -74,6 +74,11 @@ export const indexRepo = internalAction({
           orgId: args.orgId,
           fullName: args.fullName,
         }),
+      getLastIndexedCommit: () =>
+        ctx.runQuery(internal.indexing.getLastIndexedCommit, {
+          orgId: args.orgId,
+          fullName: args.fullName,
+        }),
       drainQueuedCommit: async () => {
         await ctx.runMutation(internal.indexing.drainQueuedCommit, {
           orgId: args.orgId,
@@ -92,6 +97,8 @@ export const indexRepo = internalAction({
           startedAt: plan.startedAt,
           chunksIndexed: plan.chunksIndexed,
           filesIndexed: plan.filesIndexed,
+          incremental: plan.incremental,
+          repoFileCount: plan.repoFileCount,
         });
       },
     });
