@@ -189,6 +189,20 @@ export default defineSchema({
     indexFiles: v.optional(
       v.array(v.object({ path: v.string(), sha: v.string() })),
     ),
+    // Whether the in-flight pass is indexing only the files that changed since
+    // commitId. A resumed batch reads this back, because the stale sweep at the
+    // end is only safe after a pass that rewrote everything.
+    incremental: v.optional(v.boolean()),
+    // The commit the namespace fully reflects, written only when a pass
+    // finalizes. `commitId` cannot answer this: it is set when a pass *starts*,
+    // so after a failure it names a commit the index only partly reached, and
+    // diffing from it would treat the files that pass never got to as already
+    // indexed and leave permanent holes. Absent until the first pass completes.
+    lastIndexedCommitId: v.optional(v.string()),
+    // Indexable files in the repository, as distinct from the count an
+    // incremental pass touched. Carried on the plan so a resumed batch can still
+    // report the index's real size when it finalizes.
+    repoFileCount: v.optional(v.number()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
