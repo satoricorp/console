@@ -11,7 +11,7 @@ export default function CommunityPage() {
             Extend trial
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            Star the repo, join Discord, or follow @satori_corp for +2 days each.
+            Join Discord or follow @satori_corp for +2 days each.
           </p>
         </div>
 

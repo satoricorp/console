@@ -8,11 +8,9 @@ import { ArrowUpRight, Check } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { DiscordIcon } from "@/components/discord-icon";
-import { GitHubIcon } from "@/components/github-icon";
 import { TwitterIcon } from "@/components/twitter-icon";
 import {
   DISCORD_URL,
-  GITHUB_REPO_URL,
   TWITTER_HANDLE,
   TWITTER_URL,
   withOnboardingParam,
@@ -71,19 +69,17 @@ export function CommunityBonusStep() {
   const searchParams = useSearchParams();
   const forceOnboarding = searchParams.get("onboarding") === "1";
   const appState = useQuery(api.userAppState.getMyAppState);
-  const claimGithubStarBonus = useMutation(api.userAppState.claimGithubStarBonus);
   const claimDiscordBonus = useMutation(api.userAppState.claimDiscordBonus);
   const claimTwitterBonus = useMutation(api.userAppState.claimTwitterBonus);
   const completeCommunityScreen = useMutation(
     api.userAppState.completeCommunityScreen,
   );
 
-  const [claimedGithub, setClaimedGithub] = useState(false);
   const [claimedDiscord, setClaimedDiscord] = useState(false);
   const [claimedTwitter, setClaimedTwitter] = useState(false);
 
-  const githubStarBonusClaimed =
-    Boolean(appState?.githubStarBonusClaimed) || claimedGithub;
+  // GitHub star is no longer offered, but earlier claims still count toward the total.
+  const githubStarBonusClaimed = Boolean(appState?.githubStarBonusClaimed);
   const discordBonusClaimed =
     Boolean(appState?.discordBonusClaimed) || claimedDiscord;
   const twitterBonusClaimed =
@@ -117,17 +113,6 @@ export function CommunityBonusStep() {
   return (
     <div className="space-y-4">
       <div className="space-y-3">
-        <BonusRow
-          bonusDays={GITHUB_STAR_BONUS_DAYS}
-          claimed={githubStarBonusClaimed}
-          href={GITHUB_REPO_URL}
-          icon={<GitHubIcon className="h-3.5 w-3.5" />}
-          label="Star on GitHub"
-          onClaim={() => {
-            setClaimedGithub(true);
-            void claimGithubStarBonus({});
-          }}
-        />
         <BonusRow
           bonusDays={DISCORD_BONUS_DAYS}
           claimed={discordBonusClaimed}
