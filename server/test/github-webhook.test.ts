@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, mock, test } from "bu
 import app from "../src/app";
 import { getSql, runMigrations } from "../src/db";
 import { BASE_TRIAL_DAYS, MS_PER_DAY } from "../src/metering/quota";
+import { resetIndexingFetch } from "../src/indexing/turbopuffer";
 import { validateSummary } from "../src/summary/validate";
 import { describeDb } from "./db-gate";
 
@@ -74,6 +75,12 @@ describeDb("GitHub webhook", () => {
       .export({ type: "pkcs1", format: "pem" })
       .toString()
       .replace(/\n/g, "\\n");
+
+    // The index-job assertions below watch globalThis.fetch. The indexer only
+    // uses globalThis.fetch when no test-only override is installed, so clear
+    // any override a previously-run file left behind: without this, a leaked
+    // override makes the job "complete" invisibly and waitForFetchCall times out.
+    resetIndexingFetch();
 
     globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();

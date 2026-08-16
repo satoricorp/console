@@ -14,18 +14,23 @@ const originalBroker = process.env.GX_CONTEXT_BROKER;
 const originalOpenAI = process.env.OPENAI_API_KEY;
 const originalTpuf = process.env.TURBOPUFFER_API_KEY;
 
-describe("retrieveReviewContext broker", () => {
-  afterEach(() => {
-    clearBrokerMemoForTests();
-    resetIndexingFetch();
-    if (originalBroker === undefined) delete process.env.GX_CONTEXT_BROKER;
-    else process.env.GX_CONTEXT_BROKER = originalBroker;
-    if (originalOpenAI === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = originalOpenAI;
-    if (originalTpuf === undefined) delete process.env.TURBOPUFFER_API_KEY;
-    else process.env.TURBOPUFFER_API_KEY = originalTpuf;
-  });
+// File-scoped on purpose: every describe below installs an indexing fetch
+// override and flips env. When this hook lived inside the first describe, the
+// "broker memo bounds" block leaked its override into whatever test file Bun
+// ran next — github-webhook.test.ts spied on globalThis.fetch and never saw
+// the indexer's calls, so its index-job assertions timed out at 5s.
+afterEach(() => {
+  clearBrokerMemoForTests();
+  resetIndexingFetch();
+  if (originalBroker === undefined) delete process.env.GX_CONTEXT_BROKER;
+  else process.env.GX_CONTEXT_BROKER = originalBroker;
+  if (originalOpenAI === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = originalOpenAI;
+  if (originalTpuf === undefined) delete process.env.TURBOPUFFER_API_KEY;
+  else process.env.TURBOPUFFER_API_KEY = originalTpuf;
+});
 
+describe("retrieveReviewContext broker", () => {
   test("returns empty when flag off", async () => {
     delete process.env.GX_CONTEXT_BROKER;
     const result = await retrieveReviewContext({} as never, {
