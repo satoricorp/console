@@ -34,13 +34,32 @@ describe("Bedrock model IDs are inference profiles", () => {
     assertInferenceProfile(SERVER_BEDROCK_ANTHROPIC_MODEL);
   });
 
-  test("every /gx/bedrock/fight model is an inference profile", () => {
+  test("every Anthropic /gx/bedrock/fight model is an inference profile", () => {
     // Guards against the list emptying, not against it growing. The real
     // check is the loop below; pinning an exact count only meant every model
     // addition failed here for no safety benefit.
+    //
+    // The profile requirement is an Anthropic fact: bedrock-runtime rejects
+    // bare anthropic.* IDs for on-demand invocation. Other vendors' models are
+    // on-demand under their bare IDs (zai.glm-5, nvidia.nemotron-super-3-120b)
+    // and have no us. profile at all — requiring one would forbid the very
+    // models the CLI's budget preset names. Inference-profile-only models
+    // from other vendors (us.openai.gpt-5.6-luna) still carry the prefix.
     expect(BEDROCK_FIGHT_MODELS.length).toBeGreaterThan(0);
     for (const model of BEDROCK_FIGHT_MODELS) {
-      assertInferenceProfile(model);
+      if (model.includes("anthropic.")) {
+        assertInferenceProfile(model);
+      }
+    }
+  });
+
+  test("non-Anthropic fight models are well-formed Bedrock IDs", () => {
+    // vendor.model, optionally with a regional profile prefix; never an ARN,
+    // never empty, never a plain anthropic. bare ID slipping past the test above.
+    const id = /^(?:(?:us|eu|apac|global|us-gov)\.)?[a-z0-9-]+\.[a-z0-9.:-]+$/;
+    for (const model of BEDROCK_FIGHT_MODELS) {
+      if (model.includes("anthropic.")) continue;
+      expect(model).toMatch(id);
     }
   });
 
