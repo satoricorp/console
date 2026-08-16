@@ -215,6 +215,27 @@ export async function searchIndex(args: {
 }
 
 /**
+ * TurboPuffer rejects a BM25 query longer than this many Unicode code points
+ * with a 400 ("BM25 query for field 'text' is too long"). The review CLI sends
+ * the change's diff text as the lexical query, and a moderately sized change
+ * clears the limit — production logged 15,869 on a five-file change — which
+ * turned every code-review-history search into a 500 and left the "prior
+ * review findings" evidence source unavailable on every review.
+ *
+ * Clipping keeps the request valid; the vector leg still sees the full query
+ * because it was embedded before this point. Counted in code points, not UTF-16
+ * units, because that is what the limit is measured in — a query with
+ * astral-plane characters would otherwise be clipped short or not enough.
+ */
+export const MAX_BM25_QUERY_CODE_POINTS = 8192;
+
+export function clipBM25Query(text: string): string {
+  const points = Array.from(text);
+  if (points.length <= MAX_BM25_QUERY_CODE_POINTS) return text;
+  return points.slice(0, MAX_BM25_QUERY_CODE_POINTS).join("");
+}
+
+/**
  * Build the query body: a vector leg, plus BM25 legs over `text` and (when the
  * query looks like it names an identifier) `symbol`, fused with reciprocal rank
  * fusion.
@@ -248,7 +269,7 @@ export function buildSearchBody(args: {
   }
 
   const legs: Record<string, unknown>[] = [vectorLeg, withFilters({
-    rank_by: ["text", "BM25", text],
+    rank_by: ["text", "BM25", clipBM25Query(text)],
     limit: args.limit,
     include_attributes: true,
   })];
@@ -256,7 +277,7 @@ export function buildSearchBody(args: {
   if (identifiers) {
     legs.push(
       withFilters({
-        rank_by: ["symbol", "BM25", identifiers],
+        rank_by: ["symbol", "BM25", clipBM25Query(identifiers)],
         limit: args.limit,
         include_attributes: true,
       }),

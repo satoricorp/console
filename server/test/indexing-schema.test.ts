@@ -7,7 +7,9 @@ import {
 } from "../src/indexing/config";
 import {
   buildSearchBody,
+  clipBM25Query,
   identifierTerms,
+  MAX_BM25_QUERY_CODE_POINTS,
   searchCodeReviewHistory,
   searchIndex,
 } from "../src/indexing/search";
@@ -157,6 +159,30 @@ describe("hybrid query construction", () => {
     for (const leg of legs) {
       expect(leg.limit).toEqual({ total: 8 });
     }
+  });
+
+  // Production logged a 15,869-code-point BM25 query (the CLI sends the diff
+  // text) and TurboPuffer answered 400 "too long, max 8192", which the route
+  // turned into a 500 on every review. The BM25 legs must never exceed it.
+  test("clips the BM25 legs to TurboPuffer's code-point limit", () => {
+    const long = "reconcileMergeStatus ".repeat(2000); // ~42k code points
+    const body = buildSearchBody({ vector, query: long, limit: 8, lexical: true });
+    const legs = body.queries as Array<Record<string, any>>;
+    for (const leg of legs.slice(1)) {
+      expect(leg.rank_by[1]).toBe("BM25");
+      expect(Array.from(leg.rank_by[2] as string).length).toBeLessThanOrEqual(MAX_BM25_QUERY_CODE_POINTS);
+    }
+    // The vector leg is untouched: it was embedded from the full query.
+    expect(legs[0]!.rank_by).toEqual(["vector", "ANN", vector]);
+  });
+
+  test("clipBM25Query counts code points, not UTF-16 units", () => {
+    const astral = "𝔘".repeat(MAX_BM25_QUERY_CODE_POINTS + 10); // each is 2 UTF-16 units
+    const clipped = clipBM25Query(astral);
+    expect(Array.from(clipped).length).toBe(MAX_BM25_QUERY_CODE_POINTS);
+    // No surrogate pair was split.
+    expect(clipped.endsWith("𝔘")).toBe(true);
+    expect(clipBM25Query("short")).toBe("short");
   });
 
   test("skips the symbol leg when the query names no identifier", () => {
