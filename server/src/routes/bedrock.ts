@@ -71,6 +71,17 @@ export const BEDROCK_FIGHT_MODELS = [
   // of Opus's price. Without it here the CLI's default configuration fails
   // closed against this endpoint with model_not_allowed.
   "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  // Open-weight and third-party models the CLI's GX_REVIEW_MODELS presets
+  // name. This route is a Converse passthrough, so nothing else changes for a
+  // non-Anthropic model — only this list and the IAM one gate it. GLM 5 and
+  // Nemotron 3 Super are on-demand foundation models (bare IDs are correct;
+  // they have no us. profile). GPT-5.6 Luna is inference-profile-only, so its
+  // ID carries the us. prefix, and it additionally needs model access granted
+  // to the account in the Bedrock console — without that Bedrock answers
+  // AccessDeniedException "not available for this account".
+  "zai.glm-5",
+  "nvidia.nemotron-super-3-120b",
+  "us.openai.gpt-5.6-luna",
 ] as const;
 
 /** Allowlist = the fight models plus whatever this server already calls itself. */
