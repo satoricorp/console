@@ -46,6 +46,15 @@ export const bedrockInferenceProfileIds = [
   // did not, and every default-configuration review failed in production while
   // every test passed locally.
   "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  // The CLI's open-weight / third-party presets. Bare IDs are on-demand
+  // foundation models — the foundation-model ARN below is what grants them
+  // (the inference-profile ARN this list also emits simply matches nothing
+  // for them, which is harmless in an allow policy). Luna is
+  // inference-profile-only and keeps its us. prefix. Keep in sync with
+  // BEDROCK_FIGHT_MODELS; the sync test fails the build if they drift.
+  "zai.glm-5",
+  "nvidia.nemotron-super-3-120b",
+  "us.openai.gpt-5.6-luna",
 ];
 
 export class GxServerStack extends Stack {
