@@ -1,6 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { getSql, runMigrations } from "../src/db";
-import { parseSessionContent, promoteSessionRaw } from "../src/ingest/promote";
+import {
+  parseSessionContent,
+  promoteSessionRaw,
+  type SessionsRawRow,
+} from "../src/ingest/promote";
 import { describeDb } from "./db-gate";
 
 describe("parseSessionContent", () => {
@@ -52,32 +57,44 @@ describeDb("promoteSessionRaw", () => {
   afterAll(async () => {
   });
 
-  test("promotes sessions_raw to session_events with raw_line lookup", async () => {
-    const db = getSql();
-    const content = "[cursor] edit src/foo.ts\nhello\n[cursor] message ctx";
-    const capturedAt = 1_700_000_001_000;
-
-    const [raw] = await db<{
-      id: string;
-      org_id: string;
-      session_id: string;
-      tool: string;
-      model: string | null;
-      content: string;
-      captured_at_ms: number;
-    }[]>`
+  /** Insert a sessions_raw row exactly as POST /v1/sessions does, id and all. */
+  async function stageRaw(
+    sessionId: string,
+    content: string,
+    options: { model?: string | null; capturedAt?: number } = {},
+  ): Promise<SessionsRawRow> {
+    const [raw] = await getSql()<SessionsRawRow[]>`
       INSERT INTO sessions_raw (
         org_id, session_id, tool, model, content, captured_at_ms
       ) VALUES (
         ${orgId},
-        'promote-test-1',
+        ${sessionId},
         'cursor',
-        'gpt-4',
+        ${options.model ?? null},
         ${content},
-        ${capturedAt}
+        ${options.capturedAt ?? 1_700_000_001_000}
       )
       RETURNING id, org_id, session_id, tool, model, content, captured_at_ms
     `;
+    return raw;
+  }
+
+  async function eventsFor(sessionId: string) {
+    return getSql()<{ raw_id: string | null; event_type: string; raw_line: number }[]>`
+      SELECT raw_id, event_type, raw_line
+      FROM session_events
+      WHERE org_id = ${orgId} AND session_id = ${sessionId}
+      ORDER BY raw_line
+    `;
+  }
+
+  test("promotes sessions_raw to session_events with raw_line lookup", async () => {
+    const db = getSql();
+    const raw = await stageRaw(
+      "promote-test-1",
+      "[cursor] edit src/foo.ts\nhello\n[cursor] message ctx",
+      { model: "gpt-4" },
+    );
 
     const first = await promoteSessionRaw(db, raw);
     expect(first.skipped).toBe(false);
@@ -109,49 +126,75 @@ describeDb("promoteSessionRaw", () => {
     const db = getSql();
     const sessionId = "promote-test-replace";
 
-    const [rawA] = await db<{
-      id: string;
-      org_id: string;
-      session_id: string;
-      tool: string;
-      model: string | null;
-      content: string;
-      captured_at_ms: number;
-    }[]>`
-      INSERT INTO sessions_raw (
-        org_id, session_id, tool, model, content, captured_at_ms
-      ) VALUES (
-        ${orgId}, ${sessionId}, 'cursor', null, '[cursor] message one', 1000
-      )
-      RETURNING id, org_id, session_id, tool, model, content, captured_at_ms
-    `;
+    const rawA = await stageRaw(sessionId, "[cursor] message one", { capturedAt: 1000 });
     await promoteSessionRaw(db, rawA);
 
-    const [rawB] = await db<{
-      id: string;
-      org_id: string;
-      session_id: string;
-      tool: string;
-      model: string | null;
-      content: string;
-      captured_at_ms: number;
-    }[]>`
-      INSERT INTO sessions_raw (
-        org_id, session_id, tool, model, content, captured_at_ms
-      ) VALUES (
-        ${orgId}, ${sessionId}, 'cursor', null, '[cursor] message two', 2000
-      )
-      RETURNING id, org_id, session_id, tool, model, content, captured_at_ms
-    `;
+    const rawB = await stageRaw(sessionId, "[cursor] message two", { capturedAt: 2000 });
     const repromote = await promoteSessionRaw(db, rawB);
     expect(repromote.skipped).toBe(false);
     expect(repromote.promoted).toBe(1);
 
-    const rows = await db<{ raw_id: string; event_type: string }[]>`
-      SELECT raw_id, event_type FROM session_events
-      WHERE org_id = ${orgId} AND session_id = ${sessionId}
-    `;
+    const rows = await eventsFor(sessionId);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.raw_id).toBe(rawB.id);
+  });
+
+  // The client retries a failed upload five times, and every attempt POSTs the
+  // same content, which inserts a *new* sessions_raw row. The old guard keyed on
+  // that brand-new row's id, so it never matched and every retry wiped and
+  // rebuilt the session's events.
+  test("skips a retry that re-uploads identical content under a new raw id", async () => {
+    const db = getSql();
+    const sessionId = "promote-test-retry";
+    const content = "[cursor] edit src/a.ts\npatch\n[cursor] message ctx";
+
+    const first = await stageRaw(sessionId, content);
+    expect((await promoteSessionRaw(db, first)).promoted).toBe(2);
+
+    const retry = await stageRaw(sessionId, content);
+    expect(retry.id).not.toBe(first.id);
+
+    const second = await promoteSessionRaw(db, retry);
+    expect(second.skipped).toBe(true);
+    expect(second.promoted).toBe(0);
+
+    // Skipping must leave the events readable: consumers resolve line text
+    // through (raw_id, raw_line), so the pointer has to stay valid.
+    const rows = await eventsFor(sessionId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((event) => event.raw_id === first.id)).toBe(true);
+  });
+
+  // Promotion deletes before it inserts. Unwrapped, a throw in between left the
+  // session with nothing — and the client's five retries repeated the wipe.
+  test("keeps existing events when the rebuild fails", async () => {
+    const db = getSql();
+    const sessionId = "promote-test-rollback";
+
+    const raw = await stageRaw(sessionId, "[cursor] message one\n[cursor] message two");
+    expect((await promoteSessionRaw(db, raw)).promoted).toBe(2);
+
+    // A raw row that is not in sessions_raw: the INSERT trips session_events'
+    // raw_id foreign key, after the DELETE has already run.
+    const orphan: SessionsRawRow = { ...raw, id: randomUUID(), content: "[cursor] message three" };
+    await expect(promoteSessionRaw(db, orphan)).rejects.toThrow();
+
+    const rows = await eventsFor(sessionId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((event) => event.raw_id === raw.id)).toBe(true);
+  });
+
+  test("promotes a transcript larger than one insert chunk", async () => {
+    const db = getSql();
+    const sessionId = "promote-test-chunked";
+    const lines = Array.from({ length: 1_200 }, (_, i) => `[cursor] message m${i}`);
+
+    const raw = await stageRaw(sessionId, lines.join("\n"));
+    expect((await promoteSessionRaw(db, raw)).promoted).toBe(lines.length);
+
+    const rows = await eventsFor(sessionId);
+    expect(rows).toHaveLength(lines.length);
+    expect(rows[0]?.raw_line).toBe(1);
+    expect(rows.at(-1)?.raw_line).toBe(lines.length);
   });
 });

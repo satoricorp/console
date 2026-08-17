@@ -142,7 +142,7 @@ ingestRoutes.post("/v1/sessions", async (c) => {
 
   return c.json({
     sessionRawId: row.id,
-    promotionStatus: promotion.skipped ? "done" : "done",
+    promotionStatus: promotion.skipped ? "skipped" : "done",
     eventsPromoted: promotion.promoted,
   });
 });
