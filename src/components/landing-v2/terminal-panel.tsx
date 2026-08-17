@@ -11,9 +11,27 @@ type Tone =
   | "low"
   | "magenta"
   | "green"
-  | "cyan";
+  | "cyan"
+  // The review report's own palette, lifted from the CLI so the demo and a
+  // real `gx review` read as the same program: internal/termstyle/theme.go
+  // for rail/dim/value/strong/command/warning/danger, and the review accent
+  // (rgb 61,220,151) for mint.
+  | "rail"
+  | "dim"
+  | "value"
+  | "strong"
+  | "mint"
+  | "command"
+  | "warning"
+  | "danger"
+  // Go syntax inside a finding's evidence snippet.
+  | "kw"
+  | "str"
+  | "num";
 
-type Line = { text: string; tone?: Tone };
+/** A line is either one uniformly-toned string or a run of tinted spans. */
+type Span = { text: string; tone?: Tone; bold?: boolean };
+type Line = { text: string; tone?: Tone } | Span[];
 
 const TONE_CLASS: Record<Tone, string> = {
   default: "text-zinc-300",
@@ -25,32 +43,222 @@ const TONE_CLASS: Record<Tone, string> = {
   magenta: "text-[#ff80ff]",
   green: "text-green-400",
   cyan: "text-cyan-400",
+  rail: "text-[#71717a]",
+  dim: "text-[#a1a1aa]",
+  value: "text-[#d4d4d8]",
+  strong: "text-[#fafafa]",
+  mint: "text-[#3ddc97]",
+  command: "text-[#818cf8]",
+  warning: "text-[#f59e0b]",
+  danger: "text-[#f87171]",
+  kw: "text-[#ff80ff]",
+  str: "text-[#3ddc97]",
+  num: "text-[#f59e0b]",
 };
 
+const s = (text: string, tone?: Tone, bold?: boolean): Span => ({
+  text,
+  tone,
+  bold,
+});
+
+/** The clack gutter every body row of the report hangs from. */
+const RAIL = s("│  ", "rail");
+/** A breathing row — the rail continues, so it must not collapse to a gap. */
+const GAP: Span[] = [s("│", "rail")];
+
 const GX_REVIEW: Line[] = [
-  { text: "gx · reviewing working tree — 3 files, +103 −7", tone: "heading" },
-  { text: "" },
-  { text: "  HIGH   security      src/auth.js:19", tone: "high" },
-  { text: "    Auth bypass: requireUser() calls jwt.decode(), which reads", tone: "default" },
-  { text: "    the token without verifying its signature. A forged token for", tone: "default" },
-  { text: "    any user id is accepted, so anyone can act as anyone.", tone: "default" },
-  { text: "" },
-  { text: "  HIGH   security      src/server.js:52", tone: "high" },
-  { text: "    SQL injection: /notes/search concatenates req.query.q straight", tone: "default" },
-  { text: "    into the query. q=' OR '1'='1 returns every user's notes, and a", tone: "default" },
-  { text: "    crafted value can read or drop any table.", tone: "default" },
-  { text: "" },
-  { text: "  MED    architecture  src/server.js", tone: "med" },
-  { text: "    HTTP handling, business logic, and SQLite access all live in", tone: "default" },
-  { text: "    one module against an import-time DB singleton. Nothing can be", tone: "default" },
-  { text: "    unit-tested or swapped without rewriting the route handlers.", tone: "default" },
-  { text: "" },
-  { text: "  LOW    quality       src/auth.js, src/server.js", tone: "low" },
-  { text: "    Debug console.log left in, no input validation, 30-day tokens,", tone: "default" },
-  { text: "    and passwords stored in plaintext. Small things, but they add", tone: "default" },
-  { text: "    up to a service you can't safely ship.", tone: "default" },
-  { text: "" },
-  { text: "4 findings — 2 high, 1 medium, 1 low", tone: "magenta" },
+  [
+    s("◆  ", "mint"),
+    s("gx review", "mint", true),
+    s(" — feature/checkout-retry → main · 9 files, +284/−61", "dim"),
+  ],
+  [RAIL, s('intent: "make checkout survive gateway blips"', "dim")],
+  GAP,
+
+  // The run ledger: what gx did, in the order it did it.
+  [
+    RAIL,
+    s("1  ", "rail"),
+    s("scope       ", "strong"),
+    s("9 files vs origin/main", "value"),
+  ],
+  [
+    RAIL,
+    s("2  ", "rail"),
+    s("your tools  ", "strong"),
+    s("go test ✓ 126", "mint"),
+    s("   ", "rail"),
+    s("go vet ✓", "mint"),
+    s("   ", "rail"),
+    s("govulncheck ✓", "mint"),
+  ],
+  [
+    RAIL,
+    s("3  ", "rail"),
+    s("det rules   ", "strong"),
+    s("14 ran · 13 pass · 1 finding", "value"),
+  ],
+  [
+    RAIL,
+    s("4  ", "rail"),
+    s("graded      ", "strong"),
+    s("11 asked · 7 cached · 4 graded · 3.9s", "value"),
+  ],
+  [
+    RAIL,
+    s("5  ", "rail"),
+    s("verify      ", "strong"),
+    s("2 confirmed by both graders · 1 demoted to advisory", "value"),
+  ],
+  GAP,
+
+  [
+    s("◇  ", "danger"),
+    s("Verdict: NO-SHIP", "danger", true),
+    s(" — 1 blocking finding (no-secrets-in-logs)", "value"),
+  ],
+  GAP,
+
+  [s("◆  ", "mint"), s("BLOCKING", "danger", true), s("  1 finding", "value")],
+  GAP,
+  [RAIL, s("  Secrets must not reach logs, traces, or error strings", "strong", true)],
+  [
+    RAIL,
+    s("  gx:recommended", "mint"),
+    s("/no-secrets-in-logs", "value"),
+    s("  ·  ", "rail"),
+    s("internal/checkout/session.go:88", "dim"),
+    s("  [graded]", "rail"),
+  ],
+  GAP,
+
+  // Evidence: the three lines that make the finding checkable at a glance.
+  [
+    RAIL,
+    s("   86 │  ", "rail"),
+    s("    ", "value"),
+    s("for", "kw"),
+    s(" attempt := ", "value"),
+    s("0", "num"),
+    s("; attempt < ", "value"),
+    s("maxRetries", "cyan"),
+    s("; attempt++ {", "value"),
+  ],
+  [
+    RAIL,
+    s("   87 │  ", "rail"),
+    s("        resp, err := gateway.", "value"),
+    s("Charge", "cyan"),
+    s("(ctx, idemKey, req)", "value"),
+  ],
+  [
+    RAIL,
+    s(" ", "rail"),
+    s("→", "danger"),
+    s(" 88 │  ", "rail"),
+    s("        log.", "value"),
+    s("Printf", "cyan"),
+    s("(", "value"),
+    s('"charge attempt %d failed: %+v"', "str"),
+    s(", attempt, req)", "value"),
+  ],
+  GAP,
+
+  [
+    RAIL,
+    s("Why  ", "warning"),
+    s("req embeds PaymentToken, and %+v prints it — the raw token", "value"),
+  ],
+  [
+    RAIL,
+    s("     reaches your log sink once per retry, up to 4× per checkout.", "value"),
+  ],
+  [
+    RAIL,
+    s("Fix  ", "mint"),
+    s("log req.ID and req.Amount instead of req.", "value"),
+  ],
+  GAP,
+  [RAIL, s("both graders agreed · judge confirmed 0.91", "dim")],
+  GAP,
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("[f]", "dim"),
+    s(" copy fix   ", "rail"),
+    s("[s]", "dim"),
+    s(" copy suppress line   ", "rail"),
+    s("[o]", "dim"),
+    s(" open in $EDITOR   ", "rail"),
+    s("[esc]", "dim"),
+    s(" back", "rail"),
+  ],
+  GAP,
+
+  // The accordion menu: every lane the report can open, and what is in it.
+  [
+    s("◆  ", "mint"),
+    s("Open a section", "strong", true),
+    s("   ↑↓ move · enter open · esc collapse · j json", "rail"),
+  ],
+  GAP,
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("● ", "mint"),
+    s("BLOCKING       ", "danger"),
+    s("1 finding   ", "value"),
+    s("no-secrets-in-logs", "dim"),
+  ],
+  [
+    RAIL,
+    s("❯ ", "mint"),
+    s("● ", "mint"),
+    s("ADVISORY       ", "warning"),
+    s("2 findings  ", "value"),
+    s("reuse-before-rewrite · comments-match-code", "dim"),
+  ],
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("○ ", "rail"),
+    s("FIX PLAN       ", "command"),
+    s("3 steps     ", "value"),
+    s("the agent's list — fix, then rerun", "dim"),
+  ],
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("○ ", "rail"),
+    s("WORTH KNOWING  ", "command"),
+    s("3 changes   ", "value"),
+    s("passed, and yours now · 2 high materiality", "dim"),
+  ],
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("○ ", "rail"),
+    s("RUN DETAILS    ", "strong"),
+    s("            ", "value"),
+    s("tools · cache · rules loaded", "dim"),
+  ],
+  [
+    RAIL,
+    s("  ", "rail"),
+    s("○ ", "rail"),
+    s("Done           ", "strong"),
+    s("            ", "value"),
+    s("exit 3 (no-ship)", "dim"),
+  ],
+  GAP,
+
+  [
+    s("└  ", "rail"),
+    s("gx:recommended v2", "dim"),
+    s(" + 4 rules from REVIEW.md · report ", "rail"),
+    s("https://gx.run/r/satoricorp/gx/8f2a19c", "command"),
+  ],
 ];
 
 const CAT_AUTH: Line[] = [
@@ -118,10 +326,21 @@ export function TerminalPanel({ className = "" }: { className?: string }) {
   const nextId = useRef(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const lastEntryRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    // A review report is taller than the panel, so scrolling to the bottom
+    // would land the reader on the footer. Anchor the newest command to the
+    // top instead — clamped, so short output still settles like a shell.
+    const last = lastEntryRef.current;
+    const top = last
+      ? last.getBoundingClientRect().top -
+        el.getBoundingClientRect().top +
+        el.scrollTop
+      : el.scrollHeight;
+    el.scrollTop = Math.max(0, Math.min(top, el.scrollHeight - el.clientHeight));
   }, [entries]);
 
   // Animate the spinner only while a review is "thinking".
@@ -187,13 +406,18 @@ export function TerminalPanel({ className = "" }: { className?: string }) {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3 text-[12px] leading-5"
+        className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3 text-[11px] leading-[17px]"
       >
         <div className="text-zinc-500">{"'help' for commands"}</div>
 
-        {entries.map((entry) => (
-          <div key={entry.id} className="space-y-0.5">
-            <div className="pt-1.5">
+        {/* Rows inside an entry sit flush so the report's `│` rail draws as one
+            unbroken line; the spacing lives on the command line above them. */}
+        {entries.map((entry, index) => (
+          <div
+            key={entry.id}
+            ref={index === entries.length - 1 ? lastEntryRef : null}
+          >
+            <div className="pb-0.5 pt-1.5">
               <Prompt />
               <span className="text-zinc-200">{entry.cmd}</span>
             </div>
@@ -201,7 +425,7 @@ export function TerminalPanel({ className = "" }: { className?: string }) {
               <Row
                 line={{
                   text: `${SPINNER[spinner]} Reviewing changes...`,
-                  tone: "magenta",
+                  tone: "mint",
                 }}
               />
             ) : (
@@ -249,6 +473,22 @@ function Prompt() {
 }
 
 function Row({ line }: { line: Line }) {
+  if (Array.isArray(line)) {
+    return (
+      <div className="whitespace-pre-wrap">
+        {line.map((span, i) => (
+          <span
+            key={i}
+            className={`${TONE_CLASS[span.tone ?? "default"]}${
+              span.bold ? " font-semibold" : ""
+            }`}
+          >
+            {span.text}
+          </span>
+        ))}
+      </div>
+    );
+  }
   if (line.text === "") return <div className="h-3" />;
   return (
     <div className={`whitespace-pre-wrap ${TONE_CLASS[line.tone ?? "default"]}`}>
