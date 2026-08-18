@@ -385,4 +385,54 @@ describeDb("publish artifact upsert", () => {
     `;
     expect(leftovers).toHaveLength(0);
   });
+  // A patch can legitimately carry NUL bytes: a diff of a file that contains
+  // them, or a fixture built to exercise binary detection. The whole bundle is
+  // stored in a jsonb column and jsonb rejects \u0000 with "unsupported Unicode
+  // escape sequence", so one such patch failed the entire publish with a bare
+  // 500 -- the same defect as the sessions_raw text column.
+  test("accepts a publish whose patch contains NUL bytes", async () => {
+    const db = getSql();
+    const now = Date.now();
+    const [org] = await db<{ id: string }[]>`
+      INSERT INTO orgs (plan, created_at_ms) VALUES ('free', ${now}) RETURNING id
+    `;
+    const branchName = `nul-patch-${crypto.randomUUID()}`;
+
+    const res = await app.request("http://localhost/v1/publish", {
+      method: "POST",
+      headers: {
+        ...authHeaders("publish-nul-user", org.id),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        event: "gx.pr",
+        schema_version: 1,
+        created_at: now,
+        gx_version: "test",
+        repo: {
+          root_path: "/tmp/nul-checkout",
+          backend: "git",
+          default_branch: "main",
+          remote_url: "https://github.com/acme/nul-patch.git",
+          branch_name: branchName,
+        },
+        push: { branch_name: branchName, head_commit_id: `head-${branchName}` },
+        revisions: [
+          {
+            branch_name: branchName,
+            base_branch_name: "main",
+            patch:
+              'diff --git a/bin.ts b/bin.ts\n+const header = "SQLite format 3\u0000";\n',
+            description: "Add binary detection",
+            files: ["bin.ts"],
+          },
+        ],
+        sessions: [],
+      }),
+    });
+
+    // 201 Created, as the route returns for a new bookmark; before the fix a
+    // NUL anywhere in the bundle made this 500.
+    expect(res.status).toBe(201);
+  });
 });

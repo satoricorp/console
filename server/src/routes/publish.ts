@@ -18,6 +18,7 @@ import {
 } from "../publish/bookmark";
 import { reconcilePublishBookmarkWithPullRequest } from "../publish/reconcile";
 import { publishRevisions } from "../publish/revisions";
+import { replaceNullCharsDeep } from "../ingest/sanitize";
 import { postMissingPrSummaryAfterPublish } from "../publish/summary-post";
 import { capture, Events } from "../telemetry/posthog";
 import type { AuthContext, PublishRegistration, PushBundle } from "../types";
@@ -49,6 +50,9 @@ async function handleArtifactPublish(c: Context<AppEnv>, body: unknown) {
     const message = error instanceof Error ? error.message : "Invalid publish payload";
     return c.json({ error: message }, 400);
   }
+  // Before anything stores or derives from it: the bundle goes into a jsonb
+  // column whole, and one NUL in one patch rejects the entire publish.
+  payload = replaceNullCharsDeep(payload);
 
   const now = Date.now();
   const repoFullName = repoFullNameFromPayload(payload, auth.githubUserLogin);

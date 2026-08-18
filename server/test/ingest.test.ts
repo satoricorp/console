@@ -91,6 +91,46 @@ describeDb("ingest routes", () => {
     expect(raw.content).toContain("redacted content");
   });
 
+  // A transcript that discusses binary detection quotes real NULs, and Postgres
+  // `text` cannot hold one: the insert threw, the route caught nothing, and the
+  // client saw a bare 500 it retried five times before quarantining the session
+  // for good. Sessions about handling binary data were the ones being lost.
+  test("POST /v1/sessions accepts content containing NUL bytes", async () => {
+    const content = [
+      "[claude] message probe",
+      '[claude] edit convex/lib/turbopuffer/utils.ts',
+      '  if (sample.includes("\u0000")) return true;',
+    ].join("\n");
+
+    const res = await app.request("http://localhost/v1/sessions", {
+      method: "POST",
+      headers: {
+        ...authHeaders("ingest-test-user", orgId),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId: "nul-byte-session",
+        tool: "claude",
+        content,
+        capturedAtMs: Date.now(),
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { sessionRawId: string; eventsPromoted?: number };
+    expect(json.eventsPromoted).toBeGreaterThan(0);
+
+    const db = getSql();
+    const [raw] = await db<{ content: string }[]>`
+      SELECT content FROM sessions_raw WHERE id = ${json.sessionRawId}
+    `;
+    // Stored, readable, and marked where the byte was rather than silently
+    // closing the quotes.
+    expect(raw.content).not.toContain("\u0000");
+    expect(raw.content).toContain("sample.includes");
+    expect(raw.content).toContain("\uFFFD");
+  });
+
   test("rejects missing auth", async () => {
     const res = await app.request("http://localhost/v1/sessions", {
       method: "POST",
