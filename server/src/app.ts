@@ -60,4 +60,23 @@ app.route("/gx/bedrock", bedrockRoutes);
 app.route("/", githubWebhookRoutes);
 app.route("/", watchRoutes);
 
+/**
+ * Log and shape unhandled route errors.
+ *
+ * Hono's default turns a throw into a bare `500 Internal Server Error` with
+ * nothing recorded anywhere. That is how a NUL byte in one session transcript
+ * stayed invisible through five client retries and an empty CloudWatch log
+ * group: the only evidence anywhere was a status code. A 500 is a bug in this
+ * service by definition, so the detail needed to find it gets written down.
+ */
+app.onError((err, c) => {
+  console.error("unhandled route error", {
+    method: c.req.method,
+    path: c.req.path,
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+  return c.json({ error: "internal server error" }, 500);
+});
+
 export default app;
