@@ -41,16 +41,29 @@ Agent-written code breaks two of Git's assumptions:
 commits against its base — and reviews it with two independent AI reviewers
 plus repo context: the indexed codebase, captured sessions, review history, and
 your repo's review policy. A judge model then verifies and dedupes the
-findings.
+findings. Alongside them it runs what the project already has — the compiler,
+the linter, the test suite, a secret scan over added lines, and the dependency
+audits when a manifest moved — and reports those results as evidence rather
+than as a separate command.
 
-Each surviving finding is printed with **Why** (the defect), **Do next** (the
-concrete fix), and its sources. When both reviewers raised the same issue
-independently, the report says so — that agreement is the strongest confidence
-signal a two-model panel produces.
+Findings land in two lanes, and the split is what makes the verdict worth
+trusting. A finding is **blocking** only when both reviewers raised it
+independently *and* the verification model confirmed it; anything one model
+raised alone is **advisory** — reported, but it will not stop you. Agreement
+between independent readers is the strongest confidence signal a panel
+produces, so gx spends it on the only decision that matters: ship or don't.
 
-The command writes nothing — no hooks, no repo state, no index mutation — so it
-runs anywhere, including CI (`--fail-on` turns it into a gate) and checkouts
-you do not own. See the [CLI reference](/docs/cli#gx-review).
+The run ends in that verdict — `SHIP`, `NO-SHIP`, `DEGRADED` when the panel
+could not fully run, or `NOTHING-TO-REVIEW`. Because a pass is a claim about
+code that was actually inspected, the last two cases are failures rather than
+quiet zeros.
+
+The command touches no Git state — no hooks, no commits, no index mutation, and
+no `~/.gx` on a machine that never ran `gx init` — so it runs anywhere,
+including CI (the exit code gates by default) and checkouts you do not own. The
+one file it writes is the report itself, saved to `review/` and added to your
+local Git excludes so it never shows up as a change. See the
+[CLI reference](/docs/cli#gx-review).
 
 ## How PR summaries work
 
