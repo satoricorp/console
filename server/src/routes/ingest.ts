@@ -3,6 +3,7 @@ import type postgres from "postgres";
 import { getSql } from "../db";
 import { resolveHunkFileLines } from "../ingest/parse-hunk";
 import { promoteSessionRaw } from "../ingest/promote";
+import { replaceNullChars } from "../ingest/sanitize";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 import { capture, Events } from "../telemetry/posthog";
 import type { ExtractBody, SessionBody } from "../types";
@@ -102,6 +103,12 @@ ingestRoutes.post("/v1/sessions", async (c) => {
 
   const db = getSql();
   const capturedAt = body.capturedAtMs ?? Date.now();
+  // Sanitized after the required-field check, so a field that is nothing but
+  // NULs still reads as absent rather than becoming replacement characters.
+  const content = replaceNullChars(body.content);
+  const sessionId = replaceNullChars(body.sessionId);
+  const tool = replaceNullChars(body.tool);
+  const model = body.model ? replaceNullChars(body.model) : null;
 
   const [row] = await db<{
     id: string;
@@ -116,10 +123,10 @@ ingestRoutes.post("/v1/sessions", async (c) => {
       org_id, session_id, tool, model, content, captured_at_ms
     ) VALUES (
       ${auth.orgId},
-      ${body.sessionId},
-      ${body.tool},
-      ${body.model ?? null},
-      ${body.content},
+      ${sessionId},
+      ${tool},
+      ${model},
+      ${content},
       ${capturedAt}
     )
     RETURNING id, org_id, session_id, tool, model, content, captured_at_ms
