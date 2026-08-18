@@ -11,10 +11,10 @@ import { DOCS_URL } from "@/lib/site-links";
 
 const DISMISSED_STORAGE_KEY = "gx-getting-started-announcement-dismissed";
 
-/** Hidden on docs (already the destination) and the self-branded /new preview. */
+/** Hidden on docs (already the destination) and the self-branded landing. */
 function isHiddenPath(pathname: string) {
   return (
-    pathname === "/new" ||
+    pathname === "/" ||
     pathname === DOCS_URL ||
     pathname.startsWith(`${DOCS_URL}/`)
   );

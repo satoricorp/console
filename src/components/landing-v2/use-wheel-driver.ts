@@ -16,13 +16,16 @@ export type WheelDriver = {
   spinToIndex: (index: number) => void;
 };
 
-export function useWheelDriver(): WheelDriver {
+/** `enabled` is false when the wheel has no room on screen: the landing falls
+ * back to plain scrolling, and Lenis must not be hijacking the page. */
+export function useWheelDriver(enabled = true): WheelDriver {
   const [rotation, setRotation] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
   const [moving, setMoving] = useState(false);
   const spinRef = useRef<(index: number) => void>(() => {});
 
   useEffect(() => {
+    if (!enabled) return;
     const wheel = createLenisWheel({
       onRotation: setRotation,
       onMoving: () => setMoving(true),
@@ -38,7 +41,7 @@ export function useWheelDriver(): WheelDriver {
       spinRef.current = () => {};
       wheel.destroy();
     };
-  }, []);
+  }, [enabled]);
 
   return {
     rotation,

@@ -297,8 +297,8 @@ export function SiteHeader() {
 
   const showNavLogo = !isHome || belowFold;
 
-  // The v2 landing preview carries its own branding and links.
-  if (pathname === "/new") {
+  // The landing carries its own branding and links.
+  if (isHome) {
     return null;
   }
 

@@ -1,57 +1,201 @@
 "use client";
 
+import { Fragment } from "react";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { SignInLink } from "@/components/sign-in-link";
 import { berkeleyMono } from "@/components/landing-v2/fonts";
 import { TerminalPanel } from "@/components/landing-v2/terminal-panel";
-import { TextWheel } from "@/components/landing-v2/text-wheel";
+import {
+  SLIDE_NAMES,
+  type SlideName,
+  TextWheel,
+  slideIndexFor,
+} from "@/components/landing-v2/text-wheel";
 import { useWheelDriver } from "@/components/landing-v2/use-wheel-driver";
-import { POST_SIGN_IN_URL, githubSignInUrl } from "@/lib/site-links";
+import { useWheelFits } from "@/components/landing-v2/use-wheel-fits";
+import {
+  DOCS_URL,
+  FOUNDER_CALL_URL,
+  POST_SIGN_IN_URL,
+  SUPPORT_EMAIL_URL,
+  githubSignInUrl,
+} from "@/lib/site-links";
+
+/** One block of copy. Several lines means hard breaks between them — the copy
+ * is written to specific line endings, not left to wrap where it lands.
+ *
+ * Two inline marks are available, and they are deliberately separate: some
+ * phrases are stressed, some are coloured, and they are not the same phrases.
+ *   `*italic*`   — emphasis, in the body colour
+ *   `~accent~`   — the magenta accent, upright */
+type Paragraph = readonly string[];
+
+/** Splits on the marks; `split` keeps the captured delimiters, so the marked
+ * runs come back inline with the plain ones. */
+const MARKED = /(\*[^*]+\*|~[^~]+~)/;
+
+function Copy({ line }: { line: string }) {
+  return (
+    <>
+      {line.split(MARKED).map((part, i) => {
+        const marked = part.length > 2 && part.at(0) === part.at(-1);
+        if (marked && part.startsWith("*")) {
+          return (
+            <em key={i} className="italic">
+              {part.slice(1, -1)}
+            </em>
+          );
+        }
+        if (marked && part.startsWith("~")) {
+          // Written out rather than built from a constant: Tailwind only emits
+          // an arbitrary value it can see spelled out in the source.
+          return (
+            <span key={i} className="text-[#b06ab5]">
+              {part.slice(1, -1)}
+            </span>
+          );
+        }
+        return <Fragment key={i}>{part}</Fragment>;
+      })}
+    </>
+  );
+}
 
 type Screen =
-  | { kind: "text"; lines: readonly string[] }
+  | {
+      kind: "text";
+      paragraphs: readonly Paragraph[];
+      /** Index of the paragraph the sign-up button follows, when the slide
+       * carries one — the button reads as part of the copy, so it sits where
+       * the copy calls for it rather than always at the end. */
+      signUpAfter?: number;
+      /** Closing link, in the bracketed style of the footer links. */
+      cta?: { label: string; href: string };
+    }
   | { kind: "terminal" };
 
+/** The sign-up button. `full` is the one anchoring the left column; `compact`
+ * is the lighter one that sits inside a slide, where it follows body copy
+ * rather than heading a column. */
+const SIGN_UP_SIZES = {
+  full: { box: "px-16 py-3.5 text-xs", icon: "h-3.5 w-3.5" },
+  // `leading-4` is load-bearing: an arbitrary text size carries no line-height
+  // of its own, so without it the button inherits the slide's `leading-6` and
+  // comes out exactly as tall as the full-size one.
+  compact: { box: "px-8 py-2.5 text-[11px] leading-4", icon: "h-3 w-3" },
+} as const;
+
+function GetStartedFree({
+  size,
+  className = "",
+}: {
+  size: keyof typeof SIGN_UP_SIZES;
+  className?: string;
+}) {
+  const { box, icon } = SIGN_UP_SIZES[size];
+  return (
+    <a
+      href={githubSignInUrl(POST_SIGN_IN_URL)}
+      className={`group inline-flex cursor-pointer items-center justify-center gap-2.5 bg-zinc-100 font-medium text-zinc-950 transition-colors hover:bg-white ${box} ${className}`}
+    >
+      <GitHubIcon className={`${icon} shrink-0`} />
+      Get Started Free
+      <span
+        aria-hidden
+        className="transition-transform duration-150 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+      >
+        &#8599;
+      </span>
+    </a>
+  );
+}
+
 /**
- * Right-column screens, selected by the wheel's highlighted word. The first is
- * the manifesto; the second is a live terminal running gx against the demo
- * repo; the rest are stubs until the wheel words become real entries.
+ * The deck, keyed by the wheel word that selects it — so a renamed or missing
+ * slide is a type error rather than a screen the wheel can't reach.
  */
-const SCREENS: readonly Screen[] = [
-  {
+const SCREENS: Readonly<Record<SlideName, Screen>> = {
+  "The Problem": {
     kind: "text",
-    lines: [
-      "We’re tired of reviewing slop.",
-      "AI over-engineers basic features, misses common edge cases, & hallucinates.",
-      "The worst part is it looks plausible.",
-      "We need ways to produce better code.",
+    paragraphs: [
+      ["We’re tired of reviewing AI slop."],
+      [
+        "Hallucinations are rampant with newer frontier models.",
+        "The worst part is that models are confidently plausible.",
+      ],
+      ["Code is now abundant, and it’s difficult to review changes confidently."],
+      ["*Human attention is now the scarce resource.*"],
     ],
   },
-  { kind: "terminal" },
-  { kind: "text", lines: ["(another screen placeholder)"] },
-];
+  "The Solution": {
+    kind: "text",
+    paragraphs: [
+      [
+        "In human review, developers look for bugs and code quality based on coding standards.",
+        "So, our agentic review needs rules.",
+      ],
+      [
+        "The other half of the equation is understanding the code.",
+        "*This is now the bottleneck.*",
+      ],
+      [
+        "GX automates best in class rulesets, and ~helps you understand the most important changes~ so you’re not left in the dark.",
+      ],
+    ],
+  },
+  Example: { kind: "terminal" },
+  "Proof & Benchmarks": {
+    kind: "text",
+    paragraphs: [
+      [
+        "GX identifies bugs using a unique workflow resulting in ~finding twice the real issues of GPT 5.6~, increasing the efficacy of your review.",
+      ],
+      [
+        "GX also uses a unique, weighted ruleset of 33 foundational rules, based in computer science principles and industry-wide best practices.",
+      ],
+      [
+        "GX returns 55% fewer false positives than leading rabbit-based competitors.",
+      ],
+    ],
+  },
+  "Get Started": {
+    kind: "text",
+    paragraphs: [
+      ["Try GX right now."],
+      ["Setup takes 2 minutes, and you get ~free review for your first week~."],
+      [
+        "If you have questions or want the founder to set GX up for you, say hello.",
+      ],
+    ],
+    signUpAfter: 1,
+    cta: { label: "[Say hello]", href: FOUNDER_CALL_URL },
+  },
+};
 
-const STUB_LINKS = [
-  { label: "[Documentation]", href: "#" },
-  { label: "[Say hi]", href: "#" },
+const FOOTER_LINKS = [
+  { label: "[Documentation]", href: DOCS_URL },
+  { label: "[Say hi]", href: SUPPORT_EMAIL_URL },
 ] as const;
 
 export function LandingV2() {
-  const { rotation, activeStep, moving, spinToIndex } = useWheelDriver();
+  // Too small for the ring and the copy to coexist: drop the wheel and let the
+  // deck scroll like an ordinary page instead of hijacking the gesture.
+  const hasWheel = useWheelFits();
+  const { rotation, activeStep, moving, spinToIndex } = useWheelDriver(hasWheel);
 
-  const activeScreen =
-    ((activeStep % SCREENS.length) + SCREENS.length) % SCREENS.length;
+  // The ring repeats the deck, so every pocket folds back onto a slide.
+  const activeScreen = slideIndexFor(activeStep);
 
   return (
     <main
-      className={`${berkeleyMono.className} relative h-dvh overflow-hidden bg-[#181716] text-zinc-100`}
+      className={`${berkeleyMono.className} relative bg-[#181716] text-zinc-100 ${
+        hasWheel ? "h-dvh overflow-hidden" : "min-h-dvh pb-32"
+      }`}
     >
-      <TextWheel
-        rotation={rotation}
-        onWordClick={spinToIndex}
-        className="hidden lg:block"
-      />
+      {hasWheel ? (
+        <TextWheel rotation={rotation} onWordClick={spinToIndex} />
+      ) : null}
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-14 px-8 pt-24 sm:pt-36 lg:grid-cols-[1fr_1.8fr] lg:gap-12">
         <div className="flex min-w-0 flex-col items-start">
@@ -73,7 +217,7 @@ export function LandingV2() {
           </p>
 
           <div className="mt-2 flex flex-col items-start gap-1.5 text-xs">
-            {STUB_LINKS.map((link) => (
+            {FOOTER_LINKS.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
@@ -84,19 +228,7 @@ export function LandingV2() {
             ))}
           </div>
 
-          <a
-            href={githubSignInUrl(POST_SIGN_IN_URL)}
-            className="group mt-7 inline-flex cursor-pointer items-center justify-center gap-2.5 bg-zinc-100 px-16 py-3.5 text-xs font-medium text-zinc-950 transition-colors hover:bg-white"
-          >
-            <GitHubIcon className="h-3.5 w-3.5 shrink-0" />
-            Get Started Free
-            <span
-              aria-hidden
-              className="transition-transform duration-150 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-            >
-              &#8599;
-            </span>
-          </a>
+          <GetStartedFree size="full" className="mt-7" />
           <p className="mt-3 text-xs leading-6 text-zinc-400">
             <span className="text-[#ff80ff]">One week free.</span> Already have
             an account?{" "}
@@ -104,31 +236,73 @@ export function LandingV2() {
           </p>
         </div>
 
-        <div className="relative text-xs leading-6 text-zinc-100 lg:mt-14">
-          {SCREENS.map((screen, index) => (
+        <div
+          className={`relative text-xs leading-6 text-zinc-100 lg:mt-14 ${
+            hasWheel ? "" : "space-y-20"
+          }`}
+        >
+          {SLIDE_NAMES.map((name, index) => {
+            const screen = SCREENS[name];
+            return (
             <div
-              key={index}
-              className={`transition-opacity duration-300 ${
-                screen.kind === "terminal"
-                  ? "h-[620px]"
-                  : "max-w-md space-y-6"
+              key={name}
+              className={`${
+                screen.kind === "terminal" ? "h-[620px]" : "max-w-md space-y-6"
               } ${
-                index === activeScreen
-                  ? moving
-                    ? "opacity-0"
-                    : "opacity-100"
-                  : "pointer-events-none absolute inset-x-0 top-0 opacity-0"
+                hasWheel
+                  ? `transition-opacity duration-300 ${
+                      index === activeScreen
+                        ? moving
+                          ? "opacity-0"
+                          : "opacity-100"
+                        : "pointer-events-none absolute inset-x-0 top-0 opacity-0"
+                    }`
+                  : ""
               }`}
             >
+              {/* Without the wheel there is nothing else naming the slides. */}
+              {hasWheel ? null : (
+                <p className="mb-6 text-xs tracking-[0.08em] text-[#ea580c]">
+                  {name}
+                </p>
+              )}
               {screen.kind === "terminal" ? (
                 <TerminalPanel className="h-full" />
               ) : (
-                screen.lines.map((line) => <p key={line}>{line}</p>)
+                <>
+                  {screen.paragraphs.map((lines, paragraphIndex) => (
+                    <Fragment key={lines[0]}>
+                      <p>
+                        {lines.map((line, lineIndex) => (
+                          <Fragment key={line}>
+                            {lineIndex > 0 ? <br /> : null}
+                            <Copy line={line} />
+                          </Fragment>
+                        ))}
+                      </p>
+                      {screen.signUpAfter === paragraphIndex ? (
+                        <GetStartedFree size="compact" />
+                      ) : null}
+                    </Fragment>
+                  ))}
+                  {screen.cta ? (
+                    <a
+                      href={screen.cta.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block text-[#b06ab5] transition-colors hover:text-[#cfa3d3] hover:underline"
+                    >
+                      {screen.cta.label}
+                    </a>
+                  ) : null}
+                </>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>
   );
 }
+

@@ -12,8 +12,13 @@ export const TWITTER_URL =
   process.env.NEXT_PUBLIC_TWITTER_URL ?? "https://x.com/satori_corp";
 export const TWITTER_HANDLE = "@satori_corp";
 
-export const SUPPORT_EMAIL = "hi@satori.sh";
+export const SUPPORT_EMAIL = "joe@satori.sh";
 export const SUPPORT_EMAIL_URL = `mailto:${SUPPORT_EMAIL}`;
+
+/** Founder booking link behind the landing CTA. */
+export const FOUNDER_CALL_URL =
+  process.env.NEXT_PUBLIC_FOUNDER_CALL_URL ??
+  "https://cal.com/meet-with-satori/15min";
 
 /** First-time OAuth lands here; completed users are redirected to the app home. */
 export const POST_SIGN_IN_URL = "/download";
@@ -41,8 +46,6 @@ export function githubSignInUrl(callbackURL = POST_SIGN_IN_URL) {
 
 export const DOCS_URL = "/docs";
 
-export const HOW_IT_WORKS_DOCS_URL = "https://gx.run/docs/how-it-works";
-
 export type NavLink = {
   label: string;
   href: string;
@@ -50,7 +53,5 @@ export type NavLink = {
 };
 
 export const NAV_LINKS: NavLink[] = [
-  { label: "How it works", href: "/#how-it-works" },
-  { label: "FAQ", href: "/#faq" },
   { label: "Documentation", href: DOCS_URL },
 ];
