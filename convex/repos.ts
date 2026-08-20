@@ -219,6 +219,54 @@ export const touchRepoAccessVerified = internalMutation({
   },
 });
 
+/**
+ * Every connected row for a repository, across users.
+ *
+ * The webhook path has no user — it knows an installation and a repository —
+ * so this is how it answers "did anyone opt this repository in?". Indexing
+ * stays opt-in, and this is what the opt-in is read from when the person who
+ * opted in isn't the one triggering the work.
+ */
+export const listConnectedByFullName = internalQuery({
+  args: { fullName: v.string() },
+  handler: async (ctx, { fullName }) => {
+    return await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+      .collect();
+  },
+});
+
+/**
+ * Stamps the covering installation onto connected rows that have none.
+ *
+ * connectRepos can only fill installationId if the App is already installed on
+ * the owner, so connecting first and installing second leaves a row with no
+ * installation — and therefore no org, no index job, and no way back except a
+ * manual re-index. An installation delivery is the moment that becomes
+ * knowable, so it is where the repair belongs.
+ *
+ * Rows that already carry an installation are left alone: this fills a gap, it
+ * does not re-home a repository someone else's delivery already resolved.
+ */
+export const backfillInstallationId = internalMutation({
+  args: { fullName: v.string(), installationId: v.number() },
+  handler: async (ctx, { fullName, installationId }) => {
+    const rows = await ctx.db
+      .query("connectedRepos")
+      .withIndex("by_fullName", (q) => q.eq("fullName", fullName))
+      .collect();
+
+    let stamped = 0;
+    for (const row of rows) {
+      if (typeof row.installationId === "number") continue;
+      await ctx.db.patch(row._id, { installationId });
+      stamped += 1;
+    }
+    return stamped;
+  },
+});
+
 export const getConnectedRepo = internalQuery({
   args: {
     userId: v.string(),

@@ -50,6 +50,16 @@ async function fetchUserInstallations(accessToken: string) {
  * account login matters: a user commonly has both a personal installation and
  * one on their company org, and picking the wrong one would file the
  * repository under the wrong org.
+ *
+ * Only an account-login match counts. Falling back to "their only installation"
+ * was worse than returning nothing: a user with one installation on their
+ * personal account who connects an org repository would have it filed under the
+ * personal org and written to gx-{personalOrg}-{owner}-{repo}-v2 — the exact
+ * cross-org namespace mix-up orgId exists to prevent, and silent, because the
+ * index looks healthy from every angle except the org it landed in. Returning
+ * null instead leaves the repository unindexed until the App is installed on
+ * the owner, which the installation webhook then repairs
+ * (indexingActions.handleGithubWebhook).
  */
 export async function installationIdForOwner(
   accessToken: string,
@@ -72,8 +82,7 @@ export async function installationIdForOwner(
         ?.trim()
         .toLowerCase() === wanted,
   );
-  const chosen = match ?? (ours.length === 1 ? ours[0] : undefined);
-  const id = (chosen as { id?: number } | undefined)?.id;
+  const id = (match as { id?: number } | undefined)?.id;
   return typeof id === "number" ? id : null;
 }
 

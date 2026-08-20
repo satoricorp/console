@@ -10,7 +10,6 @@
 
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
-import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
 import type * as githubAccess from "../githubAccess.js";
 import type * as githubAppInstall from "../githubAppInstall.js";
@@ -26,12 +25,14 @@ import type * as lib_trialDays from "../lib/trialDays.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
+import type * as lib_turbopuffer_fetchGithubCompare from "../lib/turbopuffer/fetchGithubCompare.js";
 import type * as lib_turbopuffer_fetchGithubTarball from "../lib/turbopuffer/fetchGithubTarball.js";
 import type * as lib_turbopuffer_fetchGithubTree from "../lib/turbopuffer/fetchGithubTree.js";
 import type * as lib_turbopuffer_getGithubAppToken from "../lib/turbopuffer/getGithubAppToken.js";
 import type * as lib_turbopuffer_indexLog from "../lib/turbopuffer/indexLog.js";
 import type * as lib_turbopuffer_retry from "../lib/turbopuffer/retry.js";
 import type * as lib_turbopuffer_runIndexRepo from "../lib/turbopuffer/runIndexRepo.js";
+import type * as lib_turbopuffer_tokenClamp from "../lib/turbopuffer/tokenClamp.js";
 import type * as lib_turbopuffer_turbopufferClient from "../lib/turbopuffer/turbopufferClient.js";
 import type * as lib_turbopuffer_upsertDocuments from "../lib/turbopuffer/upsertDocuments.js";
 import type * as lib_turbopuffer_utils from "../lib/turbopuffer/utils.js";
@@ -41,8 +42,6 @@ import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
 import type * as userAppState from "../userAppState.js";
-import type * as watchlist from "../watchlist.js";
-import type * as watchlistActions from "../watchlistActions.js";
 
 import type {
   ApiFromModules,
@@ -53,7 +52,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
-  crons: typeof crons;
   devices: typeof devices;
   githubAccess: typeof githubAccess;
   githubAppInstall: typeof githubAppInstall;
@@ -69,12 +67,14 @@ declare const fullApi: ApiFromModules<{
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;
+  "lib/turbopuffer/fetchGithubCompare": typeof lib_turbopuffer_fetchGithubCompare;
   "lib/turbopuffer/fetchGithubTarball": typeof lib_turbopuffer_fetchGithubTarball;
   "lib/turbopuffer/fetchGithubTree": typeof lib_turbopuffer_fetchGithubTree;
   "lib/turbopuffer/getGithubAppToken": typeof lib_turbopuffer_getGithubAppToken;
   "lib/turbopuffer/indexLog": typeof lib_turbopuffer_indexLog;
   "lib/turbopuffer/retry": typeof lib_turbopuffer_retry;
   "lib/turbopuffer/runIndexRepo": typeof lib_turbopuffer_runIndexRepo;
+  "lib/turbopuffer/tokenClamp": typeof lib_turbopuffer_tokenClamp;
   "lib/turbopuffer/turbopufferClient": typeof lib_turbopuffer_turbopufferClient;
   "lib/turbopuffer/upsertDocuments": typeof lib_turbopuffer_upsertDocuments;
   "lib/turbopuffer/utils": typeof lib_turbopuffer_utils;
@@ -84,8 +84,6 @@ declare const fullApi: ApiFromModules<{
   repos: typeof repos;
   stripeWebhookActions: typeof stripeWebhookActions;
   userAppState: typeof userAppState;
-  watchlist: typeof watchlist;
-  watchlistActions: typeof watchlistActions;
 }>;
 
 /**
