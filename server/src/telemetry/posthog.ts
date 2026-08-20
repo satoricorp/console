@@ -1,4 +1,4 @@
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+const DEFAULT_POSTHOG_HOST = "https://f.gx.run";
 
 /** V1 server PostHog event names (no "brief"). */
 export const Events = {

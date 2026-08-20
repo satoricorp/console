@@ -55,7 +55,7 @@ const completeCliAuthArgs = {
 };
 
 const CLI_SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+const DEFAULT_POSTHOG_HOST = "https://f.gx.run";
 
 function newCliSessionToken() {
   return `gxcs_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;

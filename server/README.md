@@ -74,7 +74,7 @@ org.
 | `GX_CLOUD_API_KEY` | deployed/internal auth bypass |
 | `AWS_PROFILE`, `AWS_REGION` | Bedrock local dev |
 | `GX_POSTHOG_KEY` | telemetry (CLI, server, menubar) |
-| `GX_POSTHOG_HOST` | PostHog ingest host (default `https://us.i.posthog.com`) |
+| `GX_POSTHOG_HOST` | PostHog ingest host (default `https://f.gx.run`) |
 | `OPENAI_API_KEY` | WP-5c+ |
 | `TURBOPUFFER_API_KEY` | WP-5e |
 | `STRIPE_SECRET_KEY` | WP-5f |
