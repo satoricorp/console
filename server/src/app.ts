@@ -14,7 +14,6 @@ import { reportedLogsRoutes } from "./routes/reported-logs";
 import { reviewSearchRoutes } from "./routes/search";
 import { reviewHistoryRoutes } from "./routes/review-history";
 import { reviewsRoutes } from "./routes/reviews";
-import { watchRoutes } from "./routes/watch";
 
 const app = new Hono<AppEnv>();
 
@@ -24,7 +23,7 @@ const app = new Hono<AppEnv>();
  * Only /gx/bedrock/fight had a size check, and it ran after
  * `c.req.arrayBuffer()` had already materialised the whole body in process
  * memory — then `TextDecoder().decode()` roughly doubled it again before
- * JSON.parse. Every other route (publish, ingest, summary, watch, index-chunks,
+ * JSON.parse. Every other route (publish, ingest, summary, index-chunks,
  * review-history, reviews, reported-logs, and the unauthenticated GitHub
  * webhook) buffered with no check at all. A chunked body with no
  * Content-Length could therefore drive an ECS task past its 2048 MiB limit and
@@ -58,7 +57,6 @@ app.route("/", reportedLogsRoutes);
 app.route("/gx/openai", openAIRoutes);
 app.route("/gx/bedrock", bedrockRoutes);
 app.route("/", githubWebhookRoutes);
-app.route("/", watchRoutes);
 
 /**
  * Log and shape unhandled route errors.

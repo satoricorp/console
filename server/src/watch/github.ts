@@ -1,10 +1,15 @@
 /**
- * GitHub REST helpers for the OSS "watch" rail.
+ * GitHub REST helpers for sessionless PR summaries (summary/external.ts).
  *
  * The server has no `gh` binary, so these replace the `gh pr view` / `gh pr diff`
- * calls that scripts/outreach.ts uses. Everything reads with the gx bot user's
- * token (GX_WATCH_GITHUB_TOKEN) — a classic `public_repo` PAT or a fine-grained
- * token with read on the watched repos plus pull-request write for posting.
+ * calls that scripts/outreach.ts uses. Every call takes its token as an argument
+ * rather than reading one from the environment, so a caller can use whichever
+ * identity it has.
+ *
+ * Written for the OSS "watch" rail, which has since been removed; the poll-side
+ * helpers (listOpenPulls, isPublicRepo) went with it. The read helpers below
+ * outlived it because generating a summary for a PR nobody has a session for is
+ * useful on its own.
  */
 
 function headers(token: string, accept = "application/vnd.github+json"): Record<string, string> {
@@ -15,12 +20,6 @@ function headers(token: string, accept = "application/vnd.github+json"): Record<
     "User-Agent": "gx-watch",
   };
 }
-
-export type OpenPull = {
-  number: number;
-  headSha: string;
-  updatedAt: string;
-};
 
 export type PullMeta = {
   number: number;
@@ -47,25 +46,6 @@ async function ghJson<T>(url: string, token: string): Promise<T> {
     throw new Error(`GitHub GET ${url} failed (${res.status}): ${text.slice(0, 300)}`);
   }
   return JSON.parse(text) as T;
-}
-
-/** Open PRs, newest-updated first — the poll entrypoint. */
-export async function listOpenPulls(
-  token: string,
-  repoFullName: string,
-  perPage = 30,
-): Promise<OpenPull[]> {
-  const rows = await ghJson<
-    Array<{ number: number; updated_at: string; head?: { sha?: string } }>
-  >(
-    `https://api.github.com/repos/${repoFullName}/pulls?state=open&sort=updated&direction=desc&per_page=${perPage}`,
-    token,
-  );
-  return rows.flatMap((r) =>
-    typeof r.number === "number" && r.head?.sha
-      ? [{ number: r.number, headSha: r.head.sha, updatedAt: r.updated_at }]
-      : [],
-  );
 }
 
 export async function fetchPullMeta(
@@ -152,18 +132,5 @@ export async function fetchIssueComments(
     return rows.map((c) => ({ author: c.user?.login ?? "", body: c.body ?? "" }));
   } catch {
     return [];
-  }
-}
-
-/** True when the repo is public — the free rail only ever touches public repos. */
-export async function isPublicRepo(token: string, repoFullName: string): Promise<boolean> {
-  try {
-    const repo = await ghJson<{ private?: boolean }>(
-      `https://api.github.com/repos/${repoFullName}`,
-      token,
-    );
-    return repo.private === false;
-  } catch {
-    return false;
   }
 }
