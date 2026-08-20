@@ -19,6 +19,7 @@ import {
   codeRowIdRange,
   FILE_BATCH,
   MAX_CHUNKS_PER_FILE,
+  MAX_ERROR_CHARS,
   MAX_FILES,
   shouldIndexPath,
   sortIndexableEntries,
@@ -77,6 +78,8 @@ export type JobStatusUpdate = {
   completedAt?: number;
   defaultBranch?: string;
   clearIndexFiles?: boolean;
+  /** Drops a stale `error` from an earlier attempt — see the mutation's args. */
+  clearError?: boolean;
   indexLog?: string;
   /** Set only by finalizeIndex — see the schema comment on this field. */
   lastIndexedCommitId?: string;
@@ -385,7 +388,9 @@ export async function runIndexRepo(
     await callbacks.updateStatus({
       fullName,
       status: "failed",
-      error: message,
+      // Truncated, not stored whole: this string is read by a client-subscribed
+      // query, and Convex errors can carry the entire rejected argument object.
+      error: message.slice(0, MAX_ERROR_CHARS),
       indexLog: line,
       completedAt: Date.now(),
     });
@@ -531,6 +536,11 @@ async function finalizeIndex(
     startedAt: plan.startedAt,
     completedAt: Date.now(),
     clearIndexFiles: true,
+    // A pass that succeeded is not carrying a failure. Without this the error
+    // from an earlier attempt sits on a "ready" row forever, invisible in the
+    // UI — which only renders it for status "failed" — while still being read
+    // and shipped on every subscription re-execution.
+    clearError: true,
     // Here and nowhere else: this is the moment the namespace is known to match
     // a commit end to end, which is the only claim the next pass may diff from.
     lastIndexedCommitId: plan.commitId,

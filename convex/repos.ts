@@ -7,6 +7,7 @@ import {
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import type { Doc } from "./_generated/dataModel";
+import { MAX_ERROR_CHARS } from "./lib/turbopuffer/utils";
 
 const repoInput = v.object({
   githubId: v.number(),
@@ -110,7 +111,13 @@ export const getMyConnectedRepos = query({
           indexedAt: job?.completedAt ?? null,
           indexedFiles: job?.filesIndexed ?? null,
           indexedChunks: job?.chunksIndexed ?? null,
-          indexError: job?.error ?? null,
+          // Truncated on the way out as well as on the way in. This query is
+          // subscribed by the repositories page and the onboarding step, so
+          // whatever is in this field crosses the wire to every open tab on
+          // every re-execution — and the row it comes from is written ~9 times
+          // per index batch. The UI shows this only for a failed index, where
+          // the first line is the part worth reading.
+          indexError: job?.error ? job.error.slice(0, MAX_ERROR_CHARS) : null,
         };
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));

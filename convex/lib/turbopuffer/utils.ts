@@ -243,3 +243,14 @@ export function shouldIndexPath(path: string, size?: number): boolean {
   if (size !== undefined && size > MAX_FILE_BYTES) return false;
   return true;
 }
+
+/**
+ * Cap on the `error` string stored on a job row.
+ *
+ * Convex's ArgumentValidationError echoes the whole rejected argument object,
+ * and `saveIndexPlan`'s arguments carry the entire indexFiles manifest — one
+ * such failure wrote a 76,909-byte error onto satoricorp/gx and left it there.
+ * That field is read by getMyConnectedRepos, a client-subscribed query, so the
+ * blob was scanned and shipped to every open tab on every re-execution.
+ */
+export const MAX_ERROR_CHARS = 1000;

@@ -245,10 +245,19 @@ export const updateJobStatus = internalMutation({
     completedAt: v.optional(v.number()),
     defaultBranch: v.optional(v.string()),
     clearIndexFiles: v.optional(v.boolean()),
+    // Drops a stale `error` from an earlier attempt. `error: undefined` cannot
+    // do this over the wire — Convex omits undefined args, so the field is not
+    // in `fields` at all and the patch leaves the old value in place. Without
+    // it a failure outlives the pass that fixed it: satoricorp/gx carried a
+    // 77KB ArgumentValidationError while sitting at status "ready".
+    clearError: v.optional(v.boolean()),
     indexLog: v.optional(v.string()),
     lastIndexedCommitId: v.optional(v.string()),
   },
-  handler: async (ctx, { orgId, fullName, status, clearIndexFiles, ...fields }) => {
+  handler: async (
+    ctx,
+    { orgId, fullName, status, clearIndexFiles, clearError, ...fields },
+  ) => {
     const job = await findJob(ctx, orgId, fullName);
 
     if (!job) {
@@ -275,6 +284,7 @@ export const updateJobStatus = internalMutation({
       ...adopt,
       ...fields,
       ...(clearIndexFiles ? { indexFiles: undefined } : {}),
+      ...(clearError ? { error: undefined } : {}),
     });
   },
 });
