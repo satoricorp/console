@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { SignInLink } from "@/components/sign-in-link";
@@ -10,6 +10,7 @@ import {
   SLIDE_NAMES,
   type SlideName,
   TextWheel,
+  type TextWheelHandle,
   slideIndexFor,
 } from "@/components/landing-v2/text-wheel";
 import { useWheelDriver } from "@/components/landing-v2/use-wheel-driver";
@@ -182,7 +183,8 @@ export function LandingV2() {
   // Too small for the ring and the copy to coexist: drop the wheel and let the
   // deck scroll like an ordinary page instead of hijacking the gesture.
   const hasWheel = useWheelFits();
-  const { rotation, activeStep, moving, spinToIndex } = useWheelDriver(hasWheel);
+  const wheelRef = useRef<TextWheelHandle>(null);
+  const { activeStep, moving, spinToIndex } = useWheelDriver(wheelRef, hasWheel);
 
   // The ring repeats the deck, so every pocket folds back onto a slide.
   const activeScreen = slideIndexFor(activeStep);
@@ -194,7 +196,7 @@ export function LandingV2() {
       }`}
     >
       {hasWheel ? (
-        <TextWheel rotation={rotation} onWordClick={spinToIndex} />
+        <TextWheel ref={wheelRef} onWordClick={spinToIndex} />
       ) : null}
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-14 px-8 pt-24 sm:pt-36 lg:grid-cols-[1fr_1.8fr] lg:gap-12">

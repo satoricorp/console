@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
+import type { TextWheelHandle } from "@/components/landing-v2/text-wheel";
 import { createLenisWheel } from "@/components/landing-v2/wheel-lenis";
 
 /** React binding for the landing wheel. The motion itself is Lenis; see
  * wheel-lenis.ts. */
 export type WheelDriver = {
-  /** Wheel rotation in degrees. */
-  rotation: number;
   /** Pocket the wheel last came to rest in. */
   activeStep: number;
   /** True while the wheel is turning; the screens fade out until it stops. */
@@ -16,18 +15,28 @@ export type WheelDriver = {
   spinToIndex: (index: number) => void;
 };
 
-/** `enabled` is false when the wheel has no room on screen: the landing falls
- * back to plain scrolling, and Lenis must not be hijacking the page. */
-export function useWheelDriver(enabled = true): WheelDriver {
-  const [rotation, setRotation] = useState(0);
+/**
+ * `wheel` is the ring being turned. Its rotation goes to it directly, every
+ * frame, from inside Lenis's rAF — not through React state, which would reach
+ * the DOM a task later and re-render the whole ring on the way. Only what the
+ * slides need — which pocket the wheel rests in, and whether it is moving —
+ * is state.
+ *
+ * `enabled` is false when the wheel has no room on screen: the landing falls
+ * back to plain scrolling, and Lenis must not be hijacking the page.
+ */
+export function useWheelDriver(
+  wheel: RefObject<TextWheelHandle | null>,
+  enabled = true,
+): WheelDriver {
   const [activeStep, setActiveStep] = useState(0);
   const [moving, setMoving] = useState(false);
   const spinRef = useRef<(index: number) => void>(() => {});
 
   useEffect(() => {
     if (!enabled) return;
-    const wheel = createLenisWheel({
-      onRotation: setRotation,
+    const lenisWheel = createLenisWheel({
+      onRotation: (degrees) => wheel.current?.setRotation(degrees),
       onMoving: () => setMoving(true),
       onSettled: (step) => {
         // The slide only changes — and fades back in — once the wheel has
@@ -36,15 +45,14 @@ export function useWheelDriver(enabled = true): WheelDriver {
         setMoving(false);
       },
     });
-    spinRef.current = wheel.spinToIndex;
+    spinRef.current = lenisWheel.spinToIndex;
     return () => {
       spinRef.current = () => {};
-      wheel.destroy();
+      lenisWheel.destroy();
     };
-  }, [enabled]);
+  }, [enabled, wheel]);
 
   return {
-    rotation,
     activeStep,
     moving,
     spinToIndex: (index: number) => spinRef.current(index),
