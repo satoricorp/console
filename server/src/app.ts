@@ -59,6 +59,32 @@ app.route("/gx/bedrock", bedrockRoutes);
 app.route("/", githubWebhookRoutes);
 
 /**
+ * Coarse, non-leaking classification of an unhandled error.
+ *
+ * The raw message is deliberately not returned: it carries provider payloads,
+ * connection strings, and occasionally a key. The code is a hint that usually
+ * identifies the fault from a screenshot alone; `error_id` is the part that
+ * always works, because it appears verbatim in the log line beside the stack.
+ *
+ * Matching on message text is best-effort and will drift as upstream wording
+ * changes. That is acceptable for a hint — an unrecognized error still gets an
+ * id, and the id is what closes the loop.
+ */
+function classifyRouteError(message: string): string {
+  const text = message.toLowerCase();
+  if (text.includes("maximum input length") || text.includes("maximum context length")) {
+    return "embedding_input_too_large";
+  }
+  if (text.includes("request openai embeddings")) return "embedding_request_failed";
+  if (text.includes("turbopuffer")) return "vector_store_request_failed";
+  if (text.includes("econnrefused") || text.includes("etimedout")) return "upstream_unreachable";
+  if (text.includes("statement timeout") || text.includes("connection terminated")) {
+    return "database_error";
+  }
+  return "internal_error";
+}
+
+/**
  * Log and shape unhandled route errors.
  *
  * Hono's default turns a throw into a bare `500 Internal Server Error` with
@@ -66,15 +92,39 @@ app.route("/", githubWebhookRoutes);
  * stayed invisible through five client retries and an empty CloudWatch log
  * group: the only evidence anywhere was a status code. A 500 is a bug in this
  * service by definition, so the detail needed to find it gets written down.
+ *
+ * The body carries a code and an id as well, because the log line alone only
+ * helps someone who already knows to go looking. What actually reaches a
+ * maintainer is a user's screenshot of `gx review`, and the CLI prints this
+ * body verbatim in the evidence line for the failed source. "internal server
+ * error" in that screenshot cost a full CloudWatch expedition to learn that a
+ * diff had overrun the embedding token limit; `embedding_input_too_large`
+ * plus an id that greps straight to the stack would have cost one line.
  */
+export function describeRouteError(err: unknown): {
+  message: string;
+  code: string;
+  errorId: string;
+} {
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    message,
+    code: classifyRouteError(message),
+    errorId: crypto.randomUUID().slice(0, 8),
+  };
+}
+
 app.onError((err, c) => {
+  const { message, code, errorId } = describeRouteError(err);
   console.error("unhandled route error", {
+    error_id: errorId,
+    code,
     method: c.req.method,
     path: c.req.path,
-    message: err instanceof Error ? err.message : String(err),
+    message,
     stack: err instanceof Error ? err.stack : undefined,
   });
-  return c.json({ error: "internal server error" }, 500);
+  return c.json({ error: "internal server error", code, error_id: errorId }, 500);
 });
 
 export default app;

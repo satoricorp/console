@@ -12,6 +12,7 @@ import {
 // through an EmbeddingProfile so the model and width always travel together.
 import { publishRevisions } from "../publish/revisions";
 import type { PushBundle } from "../types";
+import { clampToTokens } from "./tokenClamp";
 
 // Byte budget for one embedded chunk. Diffs are split into per-file parts
 // rather than truncated at this cap (see splitPatchIntoParts), so it bounds a
@@ -657,11 +658,37 @@ async function buildIncrementalChunks(
   return chunks;
 }
 
+/**
+ * OpenAI rejects an embedding input over 8192 tokens with a 400, and the 400
+ * fails the whole request — every input in the batch, not just the long one.
+ *
+ * The clamp lives here rather than at any call site because all five callers
+ * can exceed it and none of them bounds tokens: three embed chunk text held to
+ * maxChunkBytes, which is a byte budget and so carries the same one-byte-one-
+ * token assumption that already failed on a minified bundle and on a binary
+ * fixture; the other two embed a search query, which for a review is the
+ * change's whole diff and is bounded by nothing. That is how a five-file
+ * change turned every
+ * /v1/code-review-history/search into a 500 and silently dropped the "prior
+ * review findings" evidence source from reviews. The BM25 legs were clipped
+ * for the same reason (clipBM25Query) and the vector leg was deliberately left
+ * out of that fix, which is the half this closes.
+ *
+ * The budget sits under the API's 8192 because clampToTokens counts slice-wise
+ * (see SLICE_CHARS): a slice boundary can undercount by a token or two, and a
+ * large input has hundreds of boundaries. The headroom covers that on inputs
+ * far larger than anything sent here; the cost of being wrong is a failed
+ * request, and the cost of the headroom is a truncated tail on text that was
+ * already being truncated.
+ */
+const EMBEDDING_INPUT_MAX_TOKENS = 7600;
+
 export async function embedTexts(
   cfg: IndexingConfig,
   inputs: string[],
   profile: EmbeddingProfile = primaryEmbeddingProfile,
 ): Promise<number[][]> {
+  const clamped = inputs.map((input) => clampToTokens(input, EMBEDDING_INPUT_MAX_TOKENS));
   const response = await fetchImpl(`${cfg.openAIBaseURL}/embeddings`, {
     method: "POST",
     headers: {
@@ -670,7 +697,7 @@ export async function embedTexts(
     },
     body: JSON.stringify({
       model: profile.model,
-      input: inputs,
+      input: clamped,
       encoding_format: "float",
       dimensions: profile.dimensions,
     }),

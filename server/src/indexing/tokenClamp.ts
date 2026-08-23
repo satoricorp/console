@@ -6,10 +6,6 @@ import { createTokenClamp } from "../../../shared/tokenClamp";
  * cl100k_base is what text-embedding-3-small counts with, so bounds computed
  * here are the bounds the API enforces. The clamp itself is in shared/ — see
  * the header there for why naming the tokenizer is all that lives on this side.
- *
- * This module keeps its path because convex/_generated/api.d.ts lists every
- * module under convex/ by path; moving it would churn generated code for no
- * behaviour change.
  */
 export const { countTokens, clampToTokens } = createTokenClamp(
   () => new Tiktoken(cl100k_base),

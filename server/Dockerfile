@@ -11,6 +11,11 @@ COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY server/migrations ./server/migrations
 COPY server/package.json server/tsconfig.json ./server/
 COPY server/src ./server/src
+# shared/ holds the token clamp that server/src/indexing imports. It carries no
+# dependencies of its own, so it needs no node_modules beside it — only the
+# same repo-root layout, so ../../../shared resolves in the image exactly as it
+# does in a checkout.
+COPY shared ./shared
 
 WORKDIR /app/server
 EXPOSE 3201
