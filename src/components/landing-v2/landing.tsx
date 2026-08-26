@@ -4,6 +4,7 @@ import { Fragment, useRef } from "react";
 import { GitHubIcon } from "@/components/github-icon";
 import { GxLogo } from "@/components/gx-logo";
 import { SignInLink } from "@/components/sign-in-link";
+import { BenchmarkCharts } from "@/components/landing-v2/benchmark-charts";
 import { berkeleyMono } from "@/components/landing-v2/fonts";
 import { TerminalPanel } from "@/components/landing-v2/terminal-panel";
 import {
@@ -73,6 +74,8 @@ type Screen =
       signUpAfter?: number;
       /** Closing link, in the bracketed style of the footer links. */
       cta?: { label: string; href: string };
+      /** The benchmark bar charts, rendered after the copy. */
+      benchmarks?: boolean;
     }
   | { kind: "terminal" };
 
@@ -159,12 +162,13 @@ const SCREENS: Readonly<Record<SlideName, Screen>> = {
         "GX returns 55% fewer false positives than leading rabbit-based competitors.",
       ],
     ],
+    benchmarks: true,
   },
   "Get Started": {
     kind: "text",
     paragraphs: [
       ["Try GX right now."],
-      ["Setup takes 2 minutes, and you get ~free review for your first week~."],
+      ["Setup takes 2 minutes, and ~your first 7 runs are free~."],
       [
         "If you have questions or want the founder to set GX up for you, say hello.",
       ],
@@ -214,7 +218,7 @@ export function LandingV2() {
                 aria-hidden
                 className="h-2.5 w-2.5 shrink-0 rounded-full bg-current"
               />
-              Rhythm Computer Co.
+              Quasi Computer Co.
             </span>
           </p>
 
@@ -232,8 +236,9 @@ export function LandingV2() {
 
           <GetStartedFree size="full" className="mt-7" />
           <p className="mt-3 text-xs leading-6 text-zinc-400">
-            <span className="text-[#ff80ff]">One week free.</span> Already have
-            an account?{" "}
+            <span className="text-[#ff80ff]">7 runs free, then $20/mth.</span>
+            <br />
+            Already have an account?{" "}
             <SignInLink className="text-zinc-300 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-100" />
           </p>
         </div>
@@ -287,6 +292,7 @@ export function LandingV2() {
                       ) : null}
                     </Fragment>
                   ))}
+                  {screen.benchmarks ? <BenchmarkCharts /> : null}
                   {screen.cta ? (
                     <a
                       href={screen.cta.href}
