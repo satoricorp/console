@@ -72,7 +72,8 @@ done
 
 conn="postgresql://$db_user:$db_pass@127.0.0.1:$local_port/gx?sslmode=require"
 if [[ -n "$sql" ]]; then
-  psql "$conn" -c "$sql"
+  # -At: tuples only, unaligned — so scripts can parse JSON/CSV
+  psql "$conn" -At -c "$sql"
 else
   psql "$conn"
 fi
