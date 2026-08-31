@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import "./globals.css";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
+import { ApolloTracker } from "@/components/apollo-tracker";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { OnboardingGate } from "@/components/onboarding-gate";
 import { PostHogIdentifier } from "@/components/posthog-identifier";
@@ -58,6 +59,7 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <GoogleAnalytics />
           </Suspense>
+          <ApolloTracker />
           <ConvexClientProvider>
             <PostHogIdentifier />
             <SiteHeader />
