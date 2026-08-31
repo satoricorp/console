@@ -14,6 +14,7 @@ import { reportedLogsRoutes } from "./routes/reported-logs";
 import { reviewSearchRoutes } from "./routes/search";
 import { reviewHistoryRoutes } from "./routes/review-history";
 import { reviewsRoutes } from "./routes/reviews";
+import { runsRoutes } from "./routes/runs";
 
 const app = new Hono<AppEnv>();
 
@@ -54,6 +55,7 @@ app.route("/", reviewsRoutes);
 app.route("/", reviewListRoutes);
 app.route("/", publishRoutes);
 app.route("/", reportedLogsRoutes);
+app.route("/", runsRoutes);
 app.route("/gx/openai", openAIRoutes);
 app.route("/gx/bedrock", bedrockRoutes);
 app.route("/", githubWebhookRoutes);

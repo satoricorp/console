@@ -43,23 +43,27 @@ describeDb("GitHub webhook", () => {
   const originalConvexSiteUrl = process.env.CONVEX_SITE_URL;
   const originalCloudApiKey = process.env.GX_CLOUD_API_KEY;
   const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
-  let trialEntitlement: {
+  let runReservation: {
     status: number;
     body: {
       allowed: boolean;
       reason: string;
-      trialDaysTotal: number | null;
-      trialEndsAt: number | null;
-      startedAt: number | null;
+      subscribed: boolean;
+      used: number;
+      limit: number;
+      remaining: number;
+      checkout_url: string;
     };
   } = {
     status: 200,
     body: {
       allowed: true,
       reason: "subscribed",
-      trialDaysTotal: null,
-      trialEndsAt: null,
-      startedAt: null,
+      subscribed: true,
+      used: 0,
+      limit: 7,
+      remaining: 0,
+      checkout_url: "https://gx.run/checkout",
     },
   };
 
@@ -90,9 +94,9 @@ describeDb("GitHub webhook", () => {
         return new Response(null, { status: convexWebhookStatus });
       }
 
-      if (url === "https://convex.test/cx/trial/entitlement") {
-        return new Response(JSON.stringify(trialEntitlement.body), {
-          status: trialEntitlement.status,
+      if (url === "https://convex.test/cx/runs/reserve") {
+        return new Response(JSON.stringify(runReservation.body), {
+          status: runReservation.status,
           headers: { "Content-Type": "application/json" },
         });
       }
@@ -268,14 +272,16 @@ describeDb("GitHub webhook", () => {
 
   afterEach(() => {
     fetchCalls.length = 0;
-    trialEntitlement = {
+    runReservation = {
       status: 200,
       body: {
         allowed: true,
         reason: "subscribed",
-        trialDaysTotal: null,
-        trialEndsAt: null,
-        startedAt: null,
+        subscribed: true,
+        used: 0,
+        limit: 7,
+        remaining: 0,
+        checkout_url: "https://gx.run/checkout",
       },
     };
     // The indexing tests arm these for one test each and used to delete them
@@ -408,12 +414,13 @@ describeDb("GitHub webhook", () => {
     });
 
     expect(res.status).toBe(200);
-    const entitlementCall = fetchCalls.find(
-      (c) => c.url === "https://convex.test/cx/trial/entitlement",
+    const reserveCall = fetchCalls.find(
+      (c) => c.url === "https://convex.test/cx/runs/reserve",
     );
-    expect(entitlementCall).toBeDefined();
-    expect(JSON.parse(String(entitlementCall?.init?.body))).toEqual({
+    expect(reserveCall).toBeDefined();
+    expect(JSON.parse(String(reserveCall?.init?.body))).toMatchObject({
       user_id: "webhook-test-user",
+      kind: "pr_summary",
     });
     expect(fetchCalls.some((c) => c.url.includes("/access_tokens"))).toBe(true);
     expect(
@@ -525,7 +532,7 @@ describeDb("GitHub webhook", () => {
     expect(res.status).toBe(200);
     expect(
       fetchCalls.some(
-        (c) => c.url === "https://convex.test/cx/trial/entitlement",
+        (c) => c.url === "https://convex.test/cx/runs/reserve",
       ),
     ).toBe(false);
     expect(
@@ -552,14 +559,16 @@ describeDb("GitHub webhook", () => {
     await db`DELETE FROM github_post_skips WHERE org_id = ${orgId}`;
     await db`DELETE FROM summaries WHERE org_id = ${orgId}`;
     fetchCalls.length = 0;
-    trialEntitlement = {
+    runReservation = {
       status: 200,
       body: {
         allowed: false,
-        reason: "trial",
-        trialDaysTotal: BASE_TRIAL_DAYS,
-        trialEndsAt: expired + BASE_TRIAL_DAYS * MS_PER_DAY,
-        startedAt: expired,
+        reason: "free_runs_exhausted",
+        subscribed: false,
+        used: 7,
+        limit: 7,
+        remaining: 0,
+        checkout_url: "https://gx.run/checkout",
       },
     };
 
@@ -599,7 +608,7 @@ describeDb("GitHub webhook", () => {
       ORDER BY created_at_ms DESC
     `;
     expect(skips.length).toBe(1);
-    expect(skips[0]!.reason).toBe("trial_expired");
+    expect(skips[0]!.reason).toBe("free_runs_exhausted");
     expect(skips[0]!.source).toBe("github_webhook");
     expect(skips[0]!.pr_number).toBe(PR_NUMBER);
 

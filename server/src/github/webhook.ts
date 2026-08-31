@@ -247,7 +247,7 @@ async function handlePullRequest(db: postgres.Sql, payload: WebhookPayload) {
       console.info("PR Summary skipped: not posting to GitHub", {
         orgId,
         bookmarkId: resolved.id,
-        reason: "trial_expired",
+        reason: error.message,
         source: "github_webhook",
       });
       return;

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adminStats from "../adminStats.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as devices from "../devices.js";
@@ -21,7 +22,7 @@ import type * as gxAuthUtils from "../gxAuthUtils.js";
 import type * as http from "../http.js";
 import type * as indexing from "../indexing.js";
 import type * as indexingActions from "../indexingActions.js";
-import type * as lib_trialDays from "../lib/trialDays.js";
+import type * as lib_freeRuns from "../lib/freeRuns.js";
 import type * as lib_turbopuffer_chunkSourceFile from "../lib/turbopuffer/chunkSourceFile.js";
 import type * as lib_turbopuffer_deleteStaleDocuments from "../lib/turbopuffer/deleteStaleDocuments.js";
 import type * as lib_turbopuffer_embedTextBatch from "../lib/turbopuffer/embedTextBatch.js";
@@ -40,6 +41,8 @@ import type * as orgs from "../orgs.js";
 import type * as profile from "../profile.js";
 import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
+import type * as runs from "../runs.js";
+import type * as stripeCheckout from "../stripeCheckout.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
 import type * as userAppState from "../userAppState.js";
 
@@ -50,6 +53,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminStats: typeof adminStats;
   auth: typeof auth;
   billing: typeof billing;
   devices: typeof devices;
@@ -63,7 +67,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   indexing: typeof indexing;
   indexingActions: typeof indexingActions;
-  "lib/trialDays": typeof lib_trialDays;
+  "lib/freeRuns": typeof lib_freeRuns;
   "lib/turbopuffer/chunkSourceFile": typeof lib_turbopuffer_chunkSourceFile;
   "lib/turbopuffer/deleteStaleDocuments": typeof lib_turbopuffer_deleteStaleDocuments;
   "lib/turbopuffer/embedTextBatch": typeof lib_turbopuffer_embedTextBatch;
@@ -82,6 +86,8 @@ declare const fullApi: ApiFromModules<{
   profile: typeof profile;
   repoActions: typeof repoActions;
   repos: typeof repos;
+  runs: typeof runs;
+  stripeCheckout: typeof stripeCheckout;
   stripeWebhookActions: typeof stripeWebhookActions;
   userAppState: typeof userAppState;
 }>;

@@ -1,22 +1,19 @@
-import { v } from "convex/values";
 import {
   internalQuery,
   mutation,
   query,
   type MutationCtx,
-  type QueryCtx,
 } from "./_generated/server";
 import { authComponent } from "./auth";
 import {
-  BASE_TRIAL_DAYS,
-  computeTrialDays,
-  computeTrialEndsAt,
-  DISCORD_BONUS_DAYS,
-  GITHUB_STAR_BONUS_DAYS,
-  TWITTER_BONUS_DAYS,
-} from "./lib/trialDays";
+  BASE_FREE_RUNS,
+  computeFreeRuns,
+  DISCORD_BONUS_RUNS,
+  GITHUB_STAR_BONUS_RUNS,
+  TWITTER_BONUS_RUNS,
+} from "./lib/freeRuns";
 
-async function getOrCreateUserAppState(ctx: MutationCtx, userId: string) {
+export async function getOrCreateUserAppState(ctx: MutationCtx, userId: string) {
   const existing = await ctx.db
     .query("userAppStates")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -67,80 +64,11 @@ function formatAppState(state: {
     discordBonusClaimed: Boolean(state.discordBonusClaimedAt),
     twitterBonusClaimed: Boolean(state.twitterBonusClaimedAt),
     windowsCliRequested: Boolean(state.windowsCliRequestedAt),
-    baseTrialDays: BASE_TRIAL_DAYS,
-    githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
-    discordBonusDays: DISCORD_BONUS_DAYS,
-    twitterBonusDays: TWITTER_BONUS_DAYS,
-    trialDaysTotal: computeTrialDays(state),
-  };
-}
-
-/**
- * Paywall kill switch — OFF by default, so every signed-in user has full gx
- * Cloud AI access regardless of subscription or trial age.
- *
- * Set `GX_PAYWALL_ENABLED=1` in the Convex dashboard to turn billing back on;
- * that is the only step, which is why the trial/subscription logic below is
- * left fully intact rather than deleted. This is the decisive gate: the server
- * short-circuits on this answer and never reaches its Postgres org-trial
- * fallback for users that exist in Convex (server/src/metering/quota.ts:162-184).
- */
-function paywallEnabled(): boolean {
-  const raw = process.env.GX_PAYWALL_ENABLED?.trim().toLowerCase();
-  return raw === "1" || raw === "true";
-}
-
-async function trialEntitlementForUser(ctx: QueryCtx, userId: string) {
-  const user = await authComponent.getAnyUserById(ctx, userId);
-  if (!user) {
-    return null;
-  }
-
-  const subscription = await ctx.db
-    .query("subscriptions")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .order("desc")
-    .first();
-
-  if (
-    subscription &&
-    (subscription.status === "active" || subscription.status === "trialing")
-  ) {
-    return {
-      allowed: true,
-      reason: "subscribed" as const,
-      trialDaysTotal: null,
-      trialEndsAt: null,
-      startedAt: user.createdAt ?? null,
-    };
-  }
-
-  const state = await ctx.db
-    .query("userAppStates")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-
-  const startedAt = user.createdAt ?? state?.createdAt ?? Date.now();
-  const trialDaysTotal = computeTrialDays(state ?? {});
-  const trialEndsAt = computeTrialEndsAt(startedAt, state ?? {});
-
-  // Paywall off: report the real trial figures for the UI, but never deny.
-  if (!paywallEnabled()) {
-    return {
-      allowed: true,
-      reason: "unrestricted" as const,
-      trialDaysTotal,
-      trialEndsAt,
-      startedAt,
-    };
-  }
-
-  return {
-    allowed: Date.now() < trialEndsAt,
-    reason: "trial" as const,
-    trialDaysTotal,
-    trialEndsAt,
-    startedAt,
+    baseFreeRuns: BASE_FREE_RUNS,
+    githubStarBonusRuns: GITHUB_STAR_BONUS_RUNS,
+    discordBonusRuns: DISCORD_BONUS_RUNS,
+    twitterBonusRuns: TWITTER_BONUS_RUNS,
+    freeRunsTotal: computeFreeRuns(state),
   };
 }
 
@@ -169,22 +97,15 @@ export const getMyAppState = query({
         discordBonusClaimed: false,
         twitterBonusClaimed: false,
         windowsCliRequested: false,
-        baseTrialDays: BASE_TRIAL_DAYS,
-        githubStarBonusDays: GITHUB_STAR_BONUS_DAYS,
-        discordBonusDays: DISCORD_BONUS_DAYS,
-        twitterBonusDays: TWITTER_BONUS_DAYS,
-        trialDaysTotal: BASE_TRIAL_DAYS,
+        baseFreeRuns: BASE_FREE_RUNS,
+        githubStarBonusRuns: GITHUB_STAR_BONUS_RUNS,
+        discordBonusRuns: DISCORD_BONUS_RUNS,
+        twitterBonusRuns: TWITTER_BONUS_RUNS,
+        freeRunsTotal: BASE_FREE_RUNS,
       };
     }
 
     return formatAppState(state);
-  },
-});
-
-export const getTrialEntitlement = internalQuery({
-  args: { userId: v.string() },
-  handler: async (ctx, { userId }) => {
-    return await trialEntitlementForUser(ctx, userId);
   },
 });
 

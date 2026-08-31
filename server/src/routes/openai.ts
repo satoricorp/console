@@ -7,6 +7,7 @@ import {
 } from "../metering/llm-usage";
 import {
   checkCloudAIQuota,
+  paymentRequiredBody,
   TrialEntitlementUnavailableError,
 } from "../metering/quota";
 import type { AppEnv } from "../middleware/auth";
@@ -17,14 +18,20 @@ export const openAIRoutes = new Hono<AppEnv>();
 
 openAIRoutes.use("*", requireAuth);
 
-// Cloud AI is a paid feature (with a free-trial window). Past-trial free orgs
-// get a clean 402 the CLI can turn into an upgrade hint instead of burning
-// tokens on the shared key.
+// Cloud AI is a paid feature with a free-run allowance. Every call reserves
+// under the CLI's run key (X-GX-Run), so one `gx review` costs one run however
+// many model calls it makes; once the runs are spent, a clean 402 carries the
+// checkout URL instead of burning tokens on the shared key.
 openAIRoutes.use("*", async (c, next) => {
   const auth = c.get("auth");
   let quota;
   try {
-    quota = await checkCloudAIQuota(getSql(), auth.orgId, auth.userId);
+    quota = await checkCloudAIQuota(
+      getSql(),
+      auth.orgId,
+      auth.userId,
+      c.req.header("X-GX-Run"),
+    );
   } catch (error) {
     if (error instanceof TrialEntitlementUnavailableError) {
       return c.json(
@@ -38,17 +45,7 @@ openAIRoutes.use("*", async (c, next) => {
     throw error;
   }
   if (!quota.allowed) {
-    return c.json(
-      {
-        error: "payment_required",
-        reason: quota.reason ?? "trial_expired",
-        message:
-          "gx free trial has ended for this org. Upgrade to keep using gx Cloud AI, or set your own model key with `gx set key`.",
-        upgrade_url: quota.upgradeUrl,
-        trial_ends_at: quota.trialEndsAt ?? null,
-      },
-      402,
-    );
+    return c.json(paymentRequiredBody(quota), 402);
   }
   await next();
 });

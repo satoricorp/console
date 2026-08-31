@@ -16,6 +16,7 @@ import {
 import { recordLLMUsage } from "../metering/llm-usage";
 import {
   checkCloudAIQuota,
+  paymentRequiredBody,
   TrialEntitlementUnavailableError,
 } from "../metering/quota";
 import type { AppEnv } from "../middleware/auth";
@@ -47,20 +48,19 @@ export const bedrockRoutes = new Hono<AppEnv>();
  * `modelId` would let one hand a review-priced request to whatever the most
  * expensive model in the account happens to be.
  *
- * The composition (kept in sync with internal/codereview/ai.go):
- *   reviewer A  opus-4-6   ┐ two flagship reviewers run concurrently in the CLI,
- *   reviewer B  opus-4-5   ┘ so the pair costs max(A,B) wall clock, not A+B, and
- *                            two Opus models from DIFFERENT generations
- *                            decorrelate failure modes far better than one Opus
- *                            plus a smaller same-generation sibling would.
- *   judge       sonnet-4-6  a third model, so it is never grading its own
- *                            output; it also sits on the sequential path after
- *                            both reviewers return, which is where latency
- *                            hurts, hence the smaller model.
+ * The composition (kept in sync with internal/codereview/ai.go, 2026-08-23):
+ *   reviewer A  haiku-4-5   ┐ two reviewers run concurrently in the CLI, so the
+ *   reviewer B  sonnet-4-6  ┘ pair costs max(A,B) wall clock, not A+B, and a
+ *                             cross-tier pair decorrelates failure modes.
+ *   judge       haiku-4-5    the per-finding verification call — the slot
+ *                             where cost concentrates, hence the small model.
+ * Both reviewer legs move to GPT-5.6 Luna (gx#139) once its Bedrock use
+ * agreement is accepted on this AWS account; the other entries below back the
+ * CLI's named presets (budget, luna, glm) and per-slot overrides.
  *
- * Every ID must be the `us.`-prefixed inference profile form — bedrock-runtime
- * rejects bare `anthropic.*` IDs for on-demand invocation. Adding a model is one
- * edit here.
+ * Anthropic IDs must be the `us.`-prefixed inference profile form —
+ * bedrock-runtime rejects bare `anthropic.*` IDs for on-demand invocation.
+ * Adding a model is one edit here.
  */
 export const BEDROCK_FIGHT_MODELS = [
   "us.anthropic.claude-opus-4-6-v1",
@@ -123,14 +123,20 @@ function requestTimeoutMs(): number {
 
 bedrockRoutes.use("*", requireAuth);
 
-// Cloud AI is a paid feature (with a free-trial window). Same gate as
-// /gx/openai — past-trial free orgs get a clean 402 the CLI turns into an
-// upgrade hint instead of burning tokens on gx's account.
+// Cloud AI is a paid feature with a free-run allowance. Same gate as
+// /gx/openai: every call reserves under the CLI's run key (X-GX-Run), so one
+// `gx review` costs one run, and spent runs get a clean 402 with the checkout
+// URL instead of burning tokens on gx's account.
 bedrockRoutes.use("*", async (c, next) => {
   const auth = c.get("auth");
   let quota;
   try {
-    quota = await checkCloudAIQuota(getSql(), auth.orgId, auth.userId);
+    quota = await checkCloudAIQuota(
+      getSql(),
+      auth.orgId,
+      auth.userId,
+      c.req.header("X-GX-Run"),
+    );
   } catch (error) {
     if (error instanceof TrialEntitlementUnavailableError) {
       return c.json(
@@ -144,17 +150,7 @@ bedrockRoutes.use("*", async (c, next) => {
     throw error;
   }
   if (!quota.allowed) {
-    return c.json(
-      {
-        error: "payment_required",
-        reason: quota.reason ?? "trial_expired",
-        message:
-          "gx free trial has ended for this org. Upgrade to keep using gx Cloud AI, or set your own model key with `gx set key`.",
-        upgrade_url: quota.upgradeUrl,
-        trial_ends_at: quota.trialEndsAt ?? null,
-      },
-      402,
-    );
+    return c.json(paymentRequiredBody(quota), 402);
   }
   await next();
 });

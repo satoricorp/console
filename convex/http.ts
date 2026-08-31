@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
+import { checkoutUrl } from "./runs";
 
 function jsonError(message: string, status: number) {
   return new Response(message, { status });
@@ -205,8 +206,11 @@ http.route({
   handler: httpAction(verifyCliAuth),
 });
 
+// Called by the gx Cloud server before every Cloud AI run (a `gx review` or a
+// PR Summary). Subscribers always pass; everyone else spends one of their free
+// runs, and is refused with the checkout URL once they are gone.
 http.route({
-  path: "/cx/trial/entitlement",
+  path: "/cx/runs/reserve",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const expected = process.env.GX_CLOUD_API_KEY?.trim();
@@ -219,7 +223,7 @@ http.route({
       return jsonError("Unauthorized", 401);
     }
 
-    let body: { user_id?: string };
+    let body: { user_id?: string; kind?: string; run_key?: string };
     try {
       body = await request.json();
     } catch {
@@ -230,17 +234,42 @@ http.route({
     if (!userId) {
       return jsonError("Missing user_id", 400);
     }
-
-    const entitlement = await ctx.runQuery(
-      internal.userAppState.getTrialEntitlement,
-      { userId },
-    );
-
-    if (!entitlement) {
-      return Response.json({ allowed: false, reason: "unknown_user" });
+    const kind = body.kind?.trim();
+    if (kind !== "review" && kind !== "pr_summary") {
+      return jsonError("kind must be review or pr_summary", 400);
+    }
+    const runKey = body.run_key?.trim();
+    if (!runKey) {
+      return jsonError("Missing run_key", 400);
     }
 
-    return Response.json(entitlement);
+    const reservation = await ctx.runMutation(internal.runs.reserveRun, {
+      userId,
+      kind,
+      runKey,
+    });
+
+    if (!reservation) {
+      return Response.json({
+        allowed: false,
+        reason: "unknown_user",
+        subscribed: false,
+        used: 0,
+        limit: 0,
+        remaining: 0,
+        checkout_url: checkoutUrl(),
+      });
+    }
+
+    return Response.json({
+      allowed: reservation.allowed,
+      reason: reservation.reason,
+      subscribed: reservation.subscribed,
+      used: reservation.used,
+      limit: reservation.limit,
+      remaining: reservation.remaining,
+      checkout_url: reservation.checkoutUrl,
+    });
   }),
 });
 

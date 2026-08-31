@@ -12,9 +12,14 @@ export type BonusClaims = {
   githubStarBonusClaimedAt?: number;
   discordBonusClaimedAt?: number;
   twitterBonusClaimedAt?: number;
+  /** Operator override: when set, this is the whole allowance — no base, no bonuses. */
+  freeRunsOverride?: number;
 };
 
 export function computeFreeRuns(state: BonusClaims) {
+  if (state.freeRunsOverride !== undefined) {
+    return Math.max(0, Math.floor(state.freeRunsOverride));
+  }
   let runs = BASE_FREE_RUNS;
   if (state.githubStarBonusClaimedAt) {
     runs += GITHUB_STAR_BONUS_RUNS;

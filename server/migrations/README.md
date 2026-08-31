@@ -97,7 +97,7 @@ FROM review_usage
 GROUP BY org_id;
 ```
 
-Supports free-trial metering (unlimited PR Summaries during the trial window).
+One row per PR Summary posted, so a bookmark never spends a second run; the free-run ledger itself lives in Convex (runUsage).
 
 ## `session_events` text retrieval (Option A)
 

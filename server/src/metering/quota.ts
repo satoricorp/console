@@ -1,10 +1,13 @@
 import type postgres from "postgres";
-import { getUpgradeCheckoutUrl } from "../billing/stripe";
+import { getCheckoutUrl } from "../billing/stripe";
+
+export type RunKind = "review" | "pr_summary";
 
 export type QuotaCheckResult = {
   allowed: boolean;
   used: number;
   limit: number;
+  /** Where to subscribe. Named for the CLI's existing 402 parser. */
   upgradeUrl: string;
   trialEndsAt?: number | null;
   reason?: string;
@@ -18,9 +21,11 @@ export class QuotaExceededError extends Error {
 
   constructor(result: QuotaCheckResult) {
     super(
-      result.reason === "trial_expired"
-        ? "gx free trial has ended"
-        : `PR Summary quota exceeded (${result.used}/${result.limit})`,
+      result.reason === "free_runs_exhausted"
+        ? `gx free runs used up (${result.used}/${result.limit})`
+        : result.reason === "trial_expired"
+          ? "gx free trial has ended"
+          : `PR Summary quota exceeded (${result.used}/${result.limit})`,
     );
     this.name = "QuotaExceededError";
     this.used = result.used;
@@ -37,16 +42,23 @@ export class TrialEntitlementUnavailableError extends Error {
   }
 }
 
-/** Free trial length when Convex entitlement is unavailable. */
+/**
+ * Free trial length for the Postgres org fallback, which only applies to
+ * identities Convex does not know (service tokens, local dev). Real users are
+ * Convex users and are metered in runs there.
+ */
 export const BASE_TRIAL_DAYS = 7;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-type TrialEntitlement = {
+/** The gx Cloud server's view of one Convex run reservation. */
+export type RunReservation = {
   allowed: boolean;
   reason?: string;
-  trialDaysTotal?: number | null;
-  trialEndsAt?: number | null;
-  startedAt?: number | null;
+  subscribed?: boolean;
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  checkout_url?: string;
 };
 
 function convexSiteURL(): string {
@@ -68,9 +80,17 @@ export function looksLikeConvexUserId(
   return true;
 }
 
-async function fetchTrialEntitlement(
-  userId: string,
-): Promise<TrialEntitlement | null> {
+/**
+ * Ask Convex to reserve one run for the user. Subscribers always pass; free
+ * users spend one of their runs, and the same runKey never spends twice.
+ * Returns null when Convex is not configured, so callers fall back to the
+ * Postgres org window.
+ */
+export async function reserveRun(input: {
+  userId: string;
+  kind: RunKind;
+  runKey: string;
+}): Promise<RunReservation | null> {
   const base = convexSiteURL();
   const apiKey = process.env.GX_CLOUD_API_KEY?.trim();
   if (!base || !apiKey) {
@@ -79,7 +99,7 @@ async function fetchTrialEntitlement(
 
   let response: Response;
   try {
-    response = await fetch(`${base.replace(/\/+$/, "")}/cx/trial/entitlement`, {
+    response = await fetch(`${base.replace(/\/+$/, "")}/cx/runs/reserve`, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -87,11 +107,15 @@ async function fetchTrialEntitlement(
         "Content-Type": "application/json",
         "User-Agent": "gx-cloud",
       },
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({
+        user_id: input.userId,
+        kind: input.kind,
+        run_key: input.runKey,
+      }),
     });
   } catch (error) {
     throw new TrialEntitlementUnavailableError(
-      `Convex trial entitlement request failed: ${
+      `Convex run reservation request failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -99,11 +123,38 @@ async function fetchTrialEntitlement(
 
   if (!response.ok) {
     throw new TrialEntitlementUnavailableError(
-      `Convex trial entitlement returned ${response.status}`,
+      `Convex run reservation returned ${response.status}`,
     );
   }
 
-  return (await response.json()) as TrialEntitlement;
+  return (await response.json()) as RunReservation;
+}
+
+function resultFromReservation(
+  reservation: RunReservation,
+  fallbackUrl: string,
+): QuotaCheckResult {
+  const upgradeUrl = reservation.checkout_url?.trim() || fallbackUrl;
+  const used = reservation.used ?? 0;
+  const limit = reservation.limit ?? 0;
+  if (!reservation.allowed) {
+    return {
+      allowed: false,
+      used,
+      limit,
+      upgradeUrl,
+      trialEndsAt: null,
+      reason: reservation.reason ?? "free_runs_exhausted",
+    };
+  }
+  return {
+    allowed: true,
+    used,
+    limit,
+    upgradeUrl,
+    trialEndsAt: null,
+    reason: reservation.reason ?? "free_run",
+  };
 }
 
 async function orgTrialAllowed(
@@ -137,14 +188,50 @@ async function orgTrialAllowed(
   };
 }
 
-/** Allow unlimited PR Summaries during the free trial window. */
+async function orgFallback(
+  db: postgres.Sql,
+  orgId: string,
+  upgradeUrl: string,
+): Promise<QuotaCheckResult> {
+  const orgTrial = await orgTrialAllowed(db, orgId);
+  if (orgTrial.allowed) {
+    return {
+      allowed: true,
+      used: 0,
+      limit: 0,
+      upgradeUrl,
+      trialEndsAt: orgTrial.trialEndsAt,
+      reason: orgTrial.plan === "free" ? "org_trial" : "paid_plan",
+    };
+  }
+
+  return {
+    allowed: false,
+    used: 0,
+    limit: 0,
+    upgradeUrl,
+    trialEndsAt: orgTrial.trialEndsAt,
+    reason: "trial_expired",
+  };
+}
+
+/** The run key a PR Summary reserves under: one run per bookmark, however many times GitHub delivers it. */
+export function prSummaryRunKey(orgId: string, bookmarkId: string): string {
+  return `pr_summary:${orgId}:${bookmarkId}`;
+}
+
+/**
+ * Gate one PR Summary. A bookmark already counted in review_usage never
+ * re-spends; otherwise a Convex user spends one run (or is a subscriber), and
+ * identities Convex does not know fall back to the org's Postgres window.
+ */
 export async function checkPrSummaryQuota(
   db: postgres.Sql,
   orgId: string,
   bookmarkId?: string,
   userId?: string,
 ): Promise<QuotaCheckResult> {
-  const upgradeUrl = getUpgradeCheckoutUrl(orgId);
+  const upgradeUrl = getCheckoutUrl();
 
   let alreadyCounted = false;
   if (bookmarkId) {
@@ -168,62 +255,46 @@ export async function checkPrSummaryQuota(
   }
 
   if (looksLikeConvexUserId(userId)) {
-    const entitlement = await fetchTrialEntitlement(userId);
-    if (entitlement && entitlement.reason !== "unknown_user") {
-      if (!entitlement.allowed) {
-        return {
-          allowed: false,
-          used: 0,
-          limit: 0,
-          upgradeUrl,
-          trialEndsAt: entitlement.trialEndsAt,
-          reason: "trial_expired",
-        };
-      }
-      return {
-        allowed: true,
-        used: 0,
-        limit: 0,
-        upgradeUrl,
-        trialEndsAt: entitlement.trialEndsAt,
-        reason: entitlement.reason ?? "trial",
-      };
+    const reservation = await reserveRun({
+      userId,
+      kind: "pr_summary",
+      runKey: bookmarkId
+        ? prSummaryRunKey(orgId, bookmarkId)
+        : `pr_summary:${orgId}:${crypto.randomUUID()}`,
+    });
+    if (reservation && reservation.reason !== "unknown_user") {
+      return resultFromReservation(reservation, upgradeUrl);
     }
   }
 
-  const orgTrial = await orgTrialAllowed(db, orgId);
-  if (orgTrial.allowed) {
-    return {
-      allowed: true,
-      used: 0,
-      limit: 0,
-      upgradeUrl,
-      trialEndsAt: orgTrial.trialEndsAt,
-      reason: orgTrial.plan === "free" ? "org_trial" : "paid_plan",
-    };
-  }
-
-  return {
-    allowed: false,
-    used: 0,
-    limit: 0,
-    upgradeUrl,
-    trialEndsAt: orgTrial.trialEndsAt,
-    reason: "trial_expired",
-  };
+  return orgFallback(db, orgId, upgradeUrl);
 }
 
 /**
- * Cloud-AI access gate for the OpenAI proxy routes. Same entitlement chain as
- * PR Summaries (Convex trial entitlement, then org plan/trial window) without
- * the per-bookmark usage bookkeeping.
+ * Cloud-AI gate for the model proxy routes. Every call reserves under the
+ * run key the CLI sends (X-GX-Run), so the several model calls inside one
+ * `gx review` cost one run. A client that sends no key spends a run per call.
  */
 export async function checkCloudAIQuota(
   db: postgres.Sql,
   orgId: string,
   userId?: string,
+  runKey?: string,
 ): Promise<QuotaCheckResult> {
-  return checkPrSummaryQuota(db, orgId, undefined, userId);
+  const upgradeUrl = getCheckoutUrl();
+
+  if (looksLikeConvexUserId(userId)) {
+    const reservation = await reserveRun({
+      userId,
+      kind: "review",
+      runKey: runKey?.trim() || `call:${crypto.randomUUID()}`,
+    });
+    if (reservation && reservation.reason !== "unknown_user") {
+      return resultFromReservation(reservation, upgradeUrl);
+    }
+  }
+
+  return orgFallback(db, orgId, upgradeUrl);
 }
 
 export async function assertPrSummaryQuota(
@@ -263,17 +334,27 @@ export async function recordPrSummaryUsage(
   `;
 }
 
-export function upgradeMessage(result: QuotaCheckResult): string {
-  if (result.reason === "trial_expired") {
-    return [
-      "gx free trial has ended for this org.",
-      "Unlimited reviews during your trial week — upgrade to keep going.",
-      `Upgrade: ${result.upgradeUrl}`,
-    ].join("\n");
-  }
+/** The 402 body every gated route returns, so the CLI sees one shape. */
+export function paymentRequiredBody(result: QuotaCheckResult) {
+  return {
+    error: "payment_required",
+    reason: result.reason ?? "free_runs_exhausted",
+    message: upgradeMessage(result),
+    upgrade_url: result.upgradeUrl,
+    checkout_url: result.upgradeUrl,
+    used: result.used,
+    limit: result.limit,
+    trial_ends_at: result.trialEndsAt ?? null,
+  };
+}
 
-  return [
-    "gx PR Summary quota reached for this org.",
-    `Upgrade: ${result.upgradeUrl}`,
-  ].join("\n");
+export function upgradeMessage(result: QuotaCheckResult): string {
+  if (result.reason === "free_runs_exhausted") {
+    const count = result.limit > 0 ? `all ${result.limit}` : "all your";
+    return `You've used ${count} free gx runs. Subscribe to keep using gx Cloud AI: ${result.upgradeUrl}`;
+  }
+  if (result.reason === "trial_expired") {
+    return `gx free trial has ended for this org. Subscribe to keep using gx Cloud AI: ${result.upgradeUrl}`;
+  }
+  return `gx Cloud AI needs a subscription. Subscribe: ${result.upgradeUrl}`;
 }

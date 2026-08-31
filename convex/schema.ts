@@ -37,6 +37,19 @@ export default defineSchema({
     .index("by_stripeSubscriptionId", ["stripeSubscriptionId"])
     .index("by_stripeCustomerId", ["stripeCustomerId"]),
 
+  // One row per gx Cloud AI run a user has started: a `gx review` or a PR
+  // Summary. runKey makes a reservation idempotent (a review's several model
+  // calls, or a PR re-delivered by GitHub, count once); the by_userId count is
+  // what the free-run gate compares against computeFreeRuns().
+  runUsage: defineTable({
+    userId: v.string(),
+    kind: v.union(v.literal("review"), v.literal("pr_summary")),
+    runKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_runKey", ["userId", "runKey"]),
+
   userAppStates: defineTable({
     userId: v.string(),
     createdAt: v.number(),
@@ -48,6 +61,10 @@ export default defineSchema({
     discordBonusClaimedAt: v.optional(v.number()),
     twitterBonusClaimedAt: v.optional(v.number()),
     windowsCliRequestedAt: v.optional(v.number()),
+    // Operator-set free-run allowance. When present it IS the user's limit —
+    // base and community bonuses no longer apply. Set/cleared by hand from
+    // the Convex dashboard via runs.setFreeRunsOverride.
+    freeRunsOverride: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 
