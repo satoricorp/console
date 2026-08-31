@@ -8,10 +8,10 @@ export default function CommunityPage() {
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4 py-4">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-            Extend trial
+            Extra free runs
           </h1>
           <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
-            Join Discord or follow @satori_corp for +2 days each.
+            Join Discord or follow @satori_corp for +2 free runs each.
           </p>
         </div>
 

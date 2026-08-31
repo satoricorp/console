@@ -16,21 +16,21 @@ import {
   withOnboardingParam,
 } from "@/lib/site-links";
 import {
-  BASE_TRIAL_DAYS,
-  DISCORD_BONUS_DAYS,
-  GITHUB_STAR_BONUS_DAYS,
-  TWITTER_BONUS_DAYS,
-} from "../../../convex/lib/trialDays";
+  BASE_FREE_RUNS,
+  DISCORD_BONUS_RUNS,
+  GITHUB_STAR_BONUS_RUNS,
+  TWITTER_BONUS_RUNS,
+} from "../../../convex/lib/freeRuns";
 
 function BonusRow({
-  bonusDays,
+  bonusRuns,
   claimed,
   href,
   icon,
   label,
   onClaim,
 }: {
-  bonusDays: number;
+  bonusRuns: number;
   claimed: boolean;
   href: string;
   icon: ReactNode;
@@ -42,7 +42,7 @@ function BonusRow({
       <p className="flex min-w-0 items-center gap-1.5 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         <span className="text-zinc-950 dark:text-zinc-50">{icon}</span>
         {label}
-        <span className="text-[11px] text-zinc-500">+{bonusDays} days</span>
+        <span className="text-[11px] text-zinc-500">+{bonusRuns} runs</span>
       </p>
       {claimed ? (
         <p className="flex shrink-0 items-center gap-1.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400">
@@ -86,11 +86,11 @@ export function CommunityBonusStep() {
     Boolean(appState?.twitterBonusClaimed) || claimedTwitter;
 
   // Compute from claimed flags × shared +2 constants only.
-  const trialDaysTotal =
-    BASE_TRIAL_DAYS +
-    (githubStarBonusClaimed ? GITHUB_STAR_BONUS_DAYS : 0) +
-    (discordBonusClaimed ? DISCORD_BONUS_DAYS : 0) +
-    (twitterBonusClaimed ? TWITTER_BONUS_DAYS : 0);
+  const freeRunsTotal =
+    BASE_FREE_RUNS +
+    (githubStarBonusClaimed ? GITHUB_STAR_BONUS_RUNS : 0) +
+    (discordBonusClaimed ? DISCORD_BONUS_RUNS : 0) +
+    (twitterBonusClaimed ? TWITTER_BONUS_RUNS : 0);
 
   function markCommunityScreenComplete() {
     void completeCommunityScreen({}).catch((error: unknown) => {
@@ -114,7 +114,7 @@ export function CommunityBonusStep() {
     <div className="space-y-4">
       <div className="space-y-3">
         <BonusRow
-          bonusDays={DISCORD_BONUS_DAYS}
+          bonusRuns={DISCORD_BONUS_RUNS}
           claimed={discordBonusClaimed}
           href={DISCORD_URL}
           icon={<DiscordIcon className="h-3.5 w-3.5" />}
@@ -125,7 +125,7 @@ export function CommunityBonusStep() {
           }}
         />
         <BonusRow
-          bonusDays={TWITTER_BONUS_DAYS}
+          bonusRuns={TWITTER_BONUS_RUNS}
           claimed={twitterBonusClaimed}
           href={TWITTER_URL}
           icon={<TwitterIcon className="h-3.5 w-3.5" />}
@@ -138,7 +138,7 @@ export function CommunityBonusStep() {
       </div>
 
       <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
-        Current trial: {trialDaysTotal} day{trialDaysTotal === 1 ? "" : "s"} · optional
+        Free runs: {freeRunsTotal} · optional
       </p>
 
       <div className="flex justify-end">
