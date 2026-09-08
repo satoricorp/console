@@ -20,6 +20,10 @@ new GxDownloadsStack(app, "gx-downloads", {
   domainName,
 });
 
+// Staging stack definition kept so it can be re-created with
+// `cdk deploy gx-server-staging -c domainName=...`. Live staging was destroyed
+// 2026-09-08 for cost (snapshot gx-staging-pre-destroy-20260908).
+// ApplicationLoadBalancedFargateService requires desiredCount > 0.
 new GxServerStack(app, "gx-server-staging", {
   env,
   domainName,
@@ -36,7 +40,8 @@ new GxServerStack(app, "gx-server-production", {
   domainName,
   environmentName: "production",
   recordName: "api",
-  desiredCount: 2,
+  // Cost cut 2026-09-08: single task (was 2).
+  desiredCount: 1,
   maxCapacity: 6,
   rdsDeletionProtection: true,
   rdsBackupRetentionDays: 14,

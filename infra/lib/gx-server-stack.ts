@@ -75,7 +75,7 @@ export class GxServerStack extends Stack {
 
     const vpc = new ec2.Vpc(this, "Vpc", {
       maxAzs: 2,
-      natGateways: props.environmentName === "production" ? 2 : 1,
+      natGateways: 1,
       subnetConfiguration: [
         {
           cidrMask: 24,
@@ -106,7 +106,7 @@ export class GxServerStack extends Stack {
       maxAllocatedStorage: props.environmentName === "production" ? 500 : 100,
       backupRetention: Duration.days(props.rdsBackupRetentionDays),
       deletionProtection: props.rdsDeletionProtection,
-      multiAz: props.environmentName === "production",
+      multiAz: false, // cost cut 2026-09-08: was Multi-AZ in production
       publiclyAccessible: false,
       storageEncrypted: true,
       vpc,
