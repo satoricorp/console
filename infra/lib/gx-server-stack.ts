@@ -92,6 +92,10 @@ export class GxServerStack extends Stack {
       ],
     });
 
+    // Prod RDS deleted 2026-09-11; restore from gx-prod-pre-hibernate-20260911.
+    // Keep this construct for restore-shaped unpark — a naive `cdk deploy` would
+    // create an EMPTY new database (CFN drift). Unpark: restore-db-instance-from-
+    // db-snapshot (same identifier if possible), then cdk deploy for NAT/ECS.
     const database = new rds.DatabaseInstance(this, "Database", {
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_16_4,

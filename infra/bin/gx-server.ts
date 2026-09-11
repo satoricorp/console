@@ -22,7 +22,7 @@ new GxDownloadsStack(app, "gx-downloads", {
 
 // Staging stack definition kept so it can be re-created with
 // `cdk deploy gx-server-staging -c domainName=...`. Live staging was destroyed
-// 2026-09-08 for cost (snapshot gx-staging-pre-destroy-20260908).
+// 2026-09-08 for cost; snapshot gx-staging-pre-destroy-20260908 deleted 2026-09-11.
 // ApplicationLoadBalancedFargateService requires desiredCount > 0.
 new GxServerStack(app, "gx-server-staging", {
   env,
@@ -42,9 +42,12 @@ new GxServerStack(app, "gx-server-production", {
   recordName: "api",
   // Cost cut 2026-09-08: single task (was 2).
   // Hibernated 2026-09-11 CDT out-of-band: ECS desired set to 0 (construct cannot be 0),
-  // RDS stopped (snapshot gx-prod-pre-hibernate-20260911), NAT deleted live.
-  // Next `cdk deploy` would recreate NAT and set desiredCount back to 1.
-  // Keep desiredCount: 1 here — do not set 0. Unpark = cdk deploy + start RDS (+ wait NAT).
+  // NAT deleted live. Prod RDS DELETED 2026-09-11 (SkipFinalSnapshot + delete
+  // automated backups); data retained only in snapshot gx-prod-pre-hibernate-20260911.
+  // Keep Database construct for restore-shaped unpark. A naive `cdk deploy` would
+  // create an EMPTY new database (CFN drift) — restore from that snapshot first
+  // (same identifier if possible), THEN cdk deploy to recreate NAT / ECS desired 1.
+  // Keep desiredCount: 1 here — do not set 0.
   desiredCount: 1,
   maxCapacity: 6,
   rdsDeletionProtection: true,
