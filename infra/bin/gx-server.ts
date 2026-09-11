@@ -41,6 +41,10 @@ new GxServerStack(app, "gx-server-production", {
   environmentName: "production",
   recordName: "api",
   // Cost cut 2026-09-08: single task (was 2).
+  // Hibernated 2026-09-11 CDT out-of-band: ECS desired set to 0 (construct cannot be 0),
+  // RDS stopped (snapshot gx-prod-pre-hibernate-20260911), NAT deleted live.
+  // Next `cdk deploy` would recreate NAT and set desiredCount back to 1.
+  // Keep desiredCount: 1 here — do not set 0. Unpark = cdk deploy + start RDS (+ wait NAT).
   desiredCount: 1,
   maxCapacity: 6,
   rdsDeletionProtection: true,

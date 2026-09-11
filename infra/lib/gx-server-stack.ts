@@ -75,6 +75,8 @@ export class GxServerStack extends Stack {
 
     const vpc = new ec2.Vpc(this, "Vpc", {
       maxAzs: 2,
+      // Hibernated 2026-09-11 CDT: NAT deleted live for cost. Keep natGateways: 1
+      // so next `cdk deploy` recreates it (do not set 0). Unpark = cdk deploy + start RDS.
       natGateways: 1,
       subnetConfiguration: [
         {
