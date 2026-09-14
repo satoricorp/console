@@ -200,16 +200,20 @@ export function LandingV2() {
     spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
   };
 
-  /** Sequential crossfade — no overlap, so white text never composites to gray. */
+  /** Only settled + committed adjacent page may be visible — never intermediates. */
   const slideOpacity = (index: number): number => {
-    if (!moving) return index === activeScreen ? 1 : 0;
-    if (incomingSlide === null) return index === activeScreen ? 0 : 0;
+    if (!moving || incomingSlide === null) {
+      return index === activeScreen ? 1 : 0;
+    }
+    const from = activeScreen;
+    const to = incomingSlide;
+    if (index !== from && index !== to) return 0;
     const p = settleProgress;
-    if (index === activeScreen && index !== incomingSlide) {
+    if (index === from && from !== to) {
       return p < 0.5 ? 1 - p * 2 : 0;
     }
-    if (index === incomingSlide) {
-      return p < 0.5 ? 0 : (p - 0.5) * 2;
+    if (index === to) {
+      return from === to ? 1 : p < 0.5 ? 0 : (p - 0.5) * 2;
     }
     return 0;
   };
@@ -287,7 +291,7 @@ export function LandingV2() {
                 screen.kind === "terminal" ? "h-[620px]" : "max-w-md space-y-6"
               }               ${
                 hasWheel
-                  ? "pointer-events-none absolute inset-x-0 top-0 transition-opacity duration-200"
+                  ? "pointer-events-none absolute inset-x-0 top-0"
                   : ""
               }`}
               style={hasWheel ? { opacity: slideOpacity(index) } : undefined}

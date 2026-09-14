@@ -30,7 +30,6 @@ export function useWheelDriver(
       onRotation: (degrees) => wheel.current?.setRotation(degrees),
       onMoving: () => {
         setMoving(true);
-        setIncomingSlide(null);
         setSettleProgress(0);
       },
       onLandingCommitted: (slideIndex) => {
