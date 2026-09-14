@@ -190,13 +190,22 @@ export function LandingV2() {
   // deck scroll like an ordinary page instead of hijacking the gesture.
   const hasWheel = useWheelFits();
   const wheelRef = useRef<TextWheelHandle>(null);
-  const { activeStep, moving, spinToIndex } = useWheelDriver(wheelRef, hasWheel);
+  const { activeStep, incomingSlide, moving, settleProgress, spinToIndex } =
+    useWheelDriver(wheelRef, hasWheel);
 
   // The ring repeats the deck, so every pocket folds back onto a slide.
   const activeScreen = slideIndexFor(activeStep);
 
   const spinToSlide = (slideIndex: number) => {
     spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
+  };
+
+  const slideOpacity = (index: number): number => {
+    if (!moving) return index === activeScreen ? 1 : 0;
+    if (incomingSlide === null) return index === activeScreen ? 0 : 0;
+    if (index === incomingSlide) return settleProgress;
+    if (index === activeScreen) return 1 - settleProgress;
+    return 0;
   };
 
   return (
@@ -210,7 +219,9 @@ export function LandingV2() {
           <TextWheel ref={wheelRef} />
           <WheelNav
             activeSlide={activeScreen}
+            incomingSlide={incomingSlide}
             moving={moving}
+            settleProgress={settleProgress}
             onSlideClick={spinToSlide}
           />
         </>
@@ -268,17 +279,12 @@ export function LandingV2() {
               key={name}
               className={`${
                 screen.kind === "terminal" ? "h-[620px]" : "max-w-md space-y-6"
-              } ${
+              }               ${
                 hasWheel
-                  ? `transition-opacity duration-300 ${
-                      index === activeScreen
-                        ? moving
-                          ? "opacity-0"
-                          : "opacity-100"
-                        : "pointer-events-none absolute inset-x-0 top-0 opacity-0"
-                    }`
+                  ? "pointer-events-none absolute inset-x-0 top-0 transition-opacity duration-200"
                   : ""
               }`}
+              style={hasWheel ? { opacity: slideOpacity(index) } : undefined}
             >
               {/* Without the wheel there is nothing else naming the slides. */}
               {hasWheel ? null : (

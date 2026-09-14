@@ -1,42 +1,63 @@
 "use client";
 
 import {
-  CENTER_BOTTOM_PX,
-  CENTER_OFFSET_PX,
   HIGHLIGHT_COLOR,
+  NAV_BOTTOM_PX,
   NAV_LIST_GAP_PX,
+  CENTER_OFFSET_PX,
   RADIUS_PX,
   SLIDE_NAMES,
 } from "@/components/landing-v2/text-wheel";
 
-/** Berkeley Mono at text-xs — line box must equal cap height with no leading. */
 const NAV_FONT_SIZE_PX = 12;
 const NAV_LINE_HEIGHT_PX = 12;
-/** Idle / fading label colour — site body white (`zinc-100`), never muted gray. */
-const NAV_IDLE_COLOR = "#f4f4f5";
-/** Active label fading out during a spin — white at reduced opacity. */
-const NAV_FADE_OPACITY = 0.35;
+const NAV_WHITE = "#f4f4f5";
+
+/** Blend white (t=0) → orange (t=1). No gray in between. */
+function mixOrangeWhite(t: number): string {
+  const clamped = Math.min(1, Math.max(0, t));
+  const r = Math.round(244 + (234 - 244) * clamped);
+  const g = Math.round(244 + (88 - 244) * clamped);
+  const b = Math.round(245 + (12 - 245) * clamped);
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 type WheelNavProps = {
   activeSlide: number;
+  incomingSlide: number | null;
   moving: boolean;
+  settleProgress: number;
   onSlideClick: (slideIndex: number) => void;
 };
 
-/**
- * Vertical page list beside the wheel. Orange highlights the active slide and
- * fades out while the wheel is spinning, then fades in on the landed slide.
- */
-export function WheelNav({ activeSlide, moving, onSlideClick }: WheelNavProps) {
+export function WheelNav({
+  activeSlide,
+  incomingSlide,
+  moving,
+  settleProgress,
+  onSlideClick,
+}: WheelNavProps) {
   const listLeft = CENTER_OFFSET_PX + RADIUS_PX + NAV_LIST_GAP_PX;
+
+  function labelColor(index: number): string {
+    if (!moving) {
+      return index === activeSlide ? HIGHLIGHT_COLOR : NAV_WHITE;
+    }
+    if (index === incomingSlide) {
+      return mixOrangeWhite(settleProgress);
+    }
+    if (index === activeSlide) {
+      return mixOrangeWhite(incomingSlide === null ? 0 : 1 - settleProgress);
+    }
+    return NAV_WHITE;
+  }
 
   return (
     <nav
       className="pointer-events-auto absolute z-0 select-none"
       style={{
         left: listLeft,
-        top: `calc(100dvh - ${CENTER_BOTTOM_PX}px)`,
-        transform: "translateY(-50%)",
+        bottom: NAV_BOTTOM_PX,
         fontSize: NAV_FONT_SIZE_PX,
         lineHeight: `${NAV_LINE_HEIGHT_PX}px`,
       }}
@@ -44,47 +65,38 @@ export function WheelNav({ activeSlide, moving, onSlideClick }: WheelNavProps) {
     >
       <ol
         className="m-0 p-0"
-        style={{
-          margin: 0,
-          padding: 0,
-          listStyle: "none",
-        }}
+        style={{ margin: 0, padding: 0, listStyle: "none" }}
       >
-        {SLIDE_NAMES.map((name, index) => {
-          const isActive = index === activeSlide;
-          const showHighlight = isActive && !moving;
-          const fadingOut = isActive && moving;
-
-          return (
-            <li
-              key={name}
+        {SLIDE_NAMES.map((name, index) => (
+          <li
+            key={name}
+            style={{
+              margin: 0,
+              padding: 0,
+              height: NAV_LINE_HEIGHT_PX,
+              lineHeight: `${NAV_LINE_HEIGHT_PX}px`,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => onSlideClick(index)}
+              aria-current={
+                !moving && index === activeSlide ? "true" : undefined
+              }
+              className="m-0 block cursor-pointer border-0 bg-transparent p-0 text-left tracking-[0.08em] transition-colors duration-200"
               style={{
                 margin: 0,
                 padding: 0,
                 height: NAV_LINE_HEIGHT_PX,
                 lineHeight: `${NAV_LINE_HEIGHT_PX}px`,
+                fontSize: NAV_FONT_SIZE_PX,
+                color: labelColor(index),
               }}
             >
-              <button
-                type="button"
-                onClick={() => onSlideClick(index)}
-                aria-current={showHighlight ? "true" : undefined}
-                className="m-0 block cursor-pointer border-0 bg-transparent p-0 text-left tracking-[0.08em] transition-[color,opacity] duration-300 hover:text-white"
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  height: NAV_LINE_HEIGHT_PX,
-                  lineHeight: `${NAV_LINE_HEIGHT_PX}px`,
-                  fontSize: NAV_FONT_SIZE_PX,
-                  color: showHighlight ? HIGHLIGHT_COLOR : NAV_IDLE_COLOR,
-                  opacity: fadingOut ? NAV_FADE_OPACITY : 1,
-                }}
-              >
-                {name}
-              </button>
-            </li>
-          );
-        })}
+              {name}
+            </button>
+          </li>
+        ))}
       </ol>
     </nav>
   );

@@ -36,6 +36,13 @@ export const CENTER_BOTTOM_PX = 96;
 /** Gap between the wheel's right edge and the page list. */
 export const NAV_LIST_GAP_PX = 24;
 
+/** Page list anchor above the viewport bottom. */
+export const NAV_BOTTOM_PX = 36;
+
+/** Visual tick marks on the wheel (denser than Lenis pockets). */
+const VISUAL_TICK_COUNT = 200;
+const VISUAL_STEP_DEG = 360 / VISUAL_TICK_COUNT;
+
 /** The slide a given pocket on the ring belongs to. */
 export function slideIndexFor(pocket: number): number {
   return ((pocket % SLIDE_COUNT) + SLIDE_COUNT) % SLIDE_COUNT;
@@ -96,8 +103,8 @@ export const TextWheel = forwardRef<
 
   const ticks = useMemo(
     () =>
-      Array.from({ length: WORD_COUNT }, (_, i) => {
-        const angleDeg = i * WHEEL_STEP_DEG;
+      Array.from({ length: VISUAL_TICK_COUNT }, (_, i) => {
+        const angleDeg = i * VISUAL_STEP_DEG;
         const angleRad = (angleDeg * Math.PI) / 180;
         const length =
           MIN_TICK_PX + tickLengthFactor(i) * (MAX_TICK_PX - MIN_TICK_PX);
