@@ -289,12 +289,18 @@ export function LandingV2() {
               key={name}
               className={`${
                 screen.kind === "terminal" ? "h-[620px]" : "max-w-md space-y-6"
-              }               ${
+              } ${hasWheel ? "absolute inset-x-0 top-0" : ""}`}
+              style={
                 hasWheel
-                  ? "pointer-events-none absolute inset-x-0 top-0"
-                  : ""
-              }`}
-              style={hasWheel ? { opacity: slideOpacity(index) } : undefined}
+                  ? {
+                      opacity: slideOpacity(index),
+                      // Example terminal (and CTAs) must receive clicks on the
+                      // active slide; inactive slides stay inert.
+                      pointerEvents:
+                        slideOpacity(index) > 0.5 ? "auto" : "none",
+                    }
+                  : undefined
+              }
             >
               {/* Without the wheel there is nothing else naming the slides. */}
               {hasWheel ? null : (
