@@ -54,3 +54,4 @@ outreach-out/
 # to .git/info/exclude, but that file is per-machine — listed here so everyone
 # gets it, not just whoever ran the review.
 /review/
+.demo-wheel/
