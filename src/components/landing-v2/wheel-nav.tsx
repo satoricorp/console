@@ -12,6 +12,10 @@ import {
 /** Berkeley Mono at text-xs — line box must equal cap height with no leading. */
 const NAV_FONT_SIZE_PX = 12;
 const NAV_LINE_HEIGHT_PX = 12;
+/** Idle / fading label colour — site body white (`zinc-100`), never muted gray. */
+const NAV_IDLE_COLOR = "#f4f4f5";
+/** Active label fading out during a spin — white at reduced opacity. */
+const NAV_FADE_OPACITY = 0.35;
 
 type WheelNavProps = {
   activeSlide: number;
@@ -49,6 +53,7 @@ export function WheelNav({ activeSlide, moving, onSlideClick }: WheelNavProps) {
         {SLIDE_NAMES.map((name, index) => {
           const isActive = index === activeSlide;
           const showHighlight = isActive && !moving;
+          const fadingOut = isActive && moving;
 
           return (
             <li
@@ -71,8 +76,8 @@ export function WheelNav({ activeSlide, moving, onSlideClick }: WheelNavProps) {
                   height: NAV_LINE_HEIGHT_PX,
                   lineHeight: `${NAV_LINE_HEIGHT_PX}px`,
                   fontSize: NAV_FONT_SIZE_PX,
-                  color: showHighlight ? HIGHLIGHT_COLOR : "#a1a1aa",
-                  opacity: moving && isActive ? 0.25 : 1,
+                  color: showHighlight ? HIGHLIGHT_COLOR : NAV_IDLE_COLOR,
+                  opacity: fadingOut ? NAV_FADE_OPACITY : 1,
                 }}
               >
                 {name}

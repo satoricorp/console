@@ -107,10 +107,10 @@ function landingPocket(
  * momentum tail arrives as a steady stream of small deltas, so this has to
  * outlast the gaps between those and leave room for the lerp coast to run down
  * before the pocket nudge. */
-const IDLE_MS = 420;
-/** Lerp intensity for gesture tracking and coast-down. Very low = heavy wheel:
- * animated scroll trails target for a long glide before the pocket settles. */
-const ROLL_LERP = 0.014;
+const IDLE_MS = 300;
+/** Lerp intensity for gesture tracking and coast-down. Low = heavy wheel with a
+ * long glide; ~0.023 lands near 40% of the 0.014 coast duration. */
+const ROLL_LERP = 0.023;
 /** Amplifies wheel delta before it hits the virtual scroller — harder flicks
  * carry more virtual distance without changing pocket geometry. */
 const WHEEL_MULTIPLIER = 1.35;
