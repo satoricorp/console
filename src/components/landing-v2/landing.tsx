@@ -12,7 +12,6 @@ import {
   type SlideName,
   TextWheel,
   type TextWheelHandle,
-  nearestPocketForSlide,
   slideIndexFor,
 } from "@/components/landing-v2/text-wheel";
 import { useWheelDriver } from "@/components/landing-v2/use-wheel-driver";
@@ -197,17 +196,19 @@ export function LandingV2() {
   const activeScreen = slideIndexFor(activeStep);
 
   const spinToSlide = (slideIndex: number) => {
-    spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
+    spinToIndex(slideIndex);
   };
 
-  /** Wheel spin is visual-only until coast; then only settled ↔ target fade. */
+  /** Fade out current and fade in the committed adjacent page only — never intermediates. */
   const slideOpacity = (index: number): number => {
-    if (!moving) return index === activeScreen ? 1 : 0;
-    if (incomingSlide === null) return index === activeScreen ? 1 : 0;
+    if (!moving || incomingSlide === null) {
+      return index === activeScreen ? 1 : 0;
+    }
     const from = activeScreen;
     const to = incomingSlide;
     if (index !== from && index !== to) return 0;
-    const p = settleProgress;
+    if (from === to) return index === from ? 1 : 0;
+    const p = Math.min(1, Math.max(0, settleProgress));
     if (index === from) return 1 - p;
     if (index === to) return p;
     return 0;
