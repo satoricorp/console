@@ -8,17 +8,19 @@ import {
 
 /**
  * Lenis drives rotation only through our scrollTo calls. The `virtualScroll`
- * option returns false so Lenis never free-scrolls from the wheel — that was
- * fighting one-step commits and skipping/sticking pages.
+ * option returns false so Lenis never free-scrolls from the wheel.
  *
- * Each accepted gesture: settledPocket ± 1 (+ coast laps for show).
+ * Each gesture advances exactly one slide (±1 pocket). Fortune-wheel spin is
+ * visual-only (extra turns on the tick ring) so page content never passes
+ * through intermediate slides.
  */
 
 const PX_PER_STEP = 18;
 const LAP_PX = PX_PER_STEP * WORD_COUNT;
 const WRAP_LAPS = 60;
 const TRACK_PX = LAP_PX * WRAP_LAPS;
-const COAST_LAPS = 2;
+/** Extra full rotations of the tick wheel during a one-step page change. */
+const VISUAL_EXTRA_TURNS = 2;
 
 export type LenisWheelCallbacks = {
   onRotation: (rotation: number) => void;
@@ -71,32 +73,50 @@ export function createLenisWheel({
   let rolling = false;
   let landingSlide: number | null = null;
   let coastStartDistance = 0;
+  let coastDir: 1 | -1 = 1;
+  /** Baked-in visual spin from completed coasts (degrees). */
+  let visualSpinOffset = 0;
+
+  const emitRotation = (lenis: Lenis, progress: number) => {
+    const base = rotationFor(lenis.scroll) + visualSpinOffset;
+    if (!rolling || coastStartDistance <= 0) {
+      onRotation(base);
+      return;
+    }
+    // Ease extra turns across the coast; baked into visualSpinOffset on settle.
+    const eased = 1 - Math.pow(1 - progress, 2);
+    onRotation(base - coastDir * VISUAL_EXTRA_TURNS * 360 * eased);
+  };
 
   const settle = () => {
     if (committedLandingPocket !== null) {
       settledPocket = committedLandingPocket;
+    }
+    if (rolling) {
+      visualSpinOffset -= coastDir * VISUAL_EXTRA_TURNS * 360;
     }
     rolling = false;
     landingSlide = null;
     committedLandingPocket = null;
     coastStartDistance = 0;
     onSettleProgress(1);
+    emitRotation(lenis, 1);
     if (!moving) return;
     moving = false;
     onSettled(settledPocket);
   };
 
-  const atRest = (lenis: Lenis) =>
-    !lenis.isScrolling &&
-    Math.abs(lenis.animatedScroll - lenis.targetScroll) < REST_EPSILON_PX;
+  const atRest = (instance: Lenis) =>
+    !instance.isScrolling &&
+    Math.abs(instance.animatedScroll - instance.targetScroll) < REST_EPSILON_PX;
 
-  // Declared before Lenis so virtualScroll can call it.
   let lenis: Lenis;
 
-  const commitDir = (dir: 1 | -1) => {
+  const beginCoast = (dir: 1 | -1, pocketDelta: number, duration: number) => {
     if (rolling || committedLandingPocket !== null) return;
     rolling = true;
-    const landing = settledPocket + dir * (1 + SLIDE_COUNT * COAST_LAPS);
+    coastDir = dir;
+    const landing = settledPocket + pocketDelta;
     committedLandingPocket = landing;
     landingSlide = slideIndexFor(landing);
     if (!moving) {
@@ -105,14 +125,18 @@ export function createLenisWheel({
     }
     onSettleProgress(0);
     onLandingCommitted(landingSlide);
-    const pocketDelta = landing - settledPocket;
     const target = lenis.animatedScroll + pocketDelta * PX_PER_STEP;
     coastStartDistance = Math.max(Math.abs(pocketDelta) * PX_PER_STEP, PX_PER_STEP);
     lenis.scrollTo(target, {
-      duration: COAST_DURATION_S,
+      duration,
       easing: (t) => 1 - Math.pow(1 - t, 3),
       force: true,
     });
+  };
+
+  const commitDir = (dir: 1 | -1) => {
+    // Exactly one slide — no intermediate pages.
+    beginCoast(dir, dir, COAST_DURATION_S);
   };
 
   lenis = new Lenis({
@@ -124,7 +148,6 @@ export function createLenisWheel({
     smoothWheel: true,
     syncTouch: false,
     prevent: () => false,
-    // Swallow native Lenis wheel scrolling — we only move via commitDir/scrollTo.
     virtualScroll: ({ deltaY }) => {
       if (rolling || committedLandingPocket !== null) return false;
       if (deltaY === 0) return false;
@@ -136,7 +159,12 @@ export function createLenisWheel({
   (window as Window & { __wheelLenis?: Lenis }).__wheelLenis = lenis;
 
   const unsubscribeScroll = lenis.on("scroll", () => {
-    onRotation(rotationFor(lenis.scroll));
+    const remaining = Math.abs(lenis.animatedScroll - lenis.targetScroll);
+    const progress =
+      rolling && coastStartDistance > 0
+        ? Math.min(1, Math.max(0, 1 - remaining / coastStartDistance))
+        : 1;
+    emitRotation(lenis, progress);
   });
 
   let frame = requestAnimationFrame(function raf(time: number) {
@@ -149,6 +177,7 @@ export function createLenisWheel({
         Math.max(0, 1 - remaining / coastStartDistance),
       );
       onSettleProgress(progress);
+      emitRotation(lenis, progress);
     }
 
     if (
@@ -174,23 +203,7 @@ export function createLenisWheel({
     if (diff < -SLIDE_COUNT / 2) diff += SLIDE_COUNT;
     if (diff === 0) return;
     const dir: 1 | -1 = diff > 0 ? 1 : -1;
-    rolling = true;
-    const landing = settledPocket + diff + dir * SLIDE_COUNT * COAST_LAPS;
-    committedLandingPocket = landing;
-    landingSlide = slideIndexFor(landing);
-    if (!moving) {
-      moving = true;
-      onMoving();
-    }
-    onSettleProgress(0);
-    onLandingCommitted(landingSlide);
-    const pocketDelta = landing - settledPocket;
-    coastStartDistance = Math.abs(pocketDelta) * PX_PER_STEP;
-    lenis.scrollTo(lenis.animatedScroll + pocketDelta * PX_PER_STEP, {
-      duration: CLICK_DURATION_S,
-      easing: (t) => 1 - Math.pow(1 - t, 4),
-      force: true,
-    });
+    beginCoast(dir, diff, CLICK_DURATION_S);
   };
 
   return {
