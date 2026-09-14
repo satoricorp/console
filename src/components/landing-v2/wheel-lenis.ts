@@ -108,6 +108,11 @@ export function createLenisWheel({
 
   let moving = false;
   let lastInputAt = 0;
+  /** Canonical pocket after the last completed landing — never read from wrapped
+   * `lenis.scroll`, which can sit on an equivalent pocket (e.g. 60 ≡ 0) and
+   * pin every subsequent gesture to the same slide. */
+  let settledPocket = 0;
+  let committedLandingPocket: number | null = null;
   let startPocket: number | null = null;
   let startSlide: number | null = null;
   let gestureDelta = 0;
@@ -116,16 +121,20 @@ export function createLenisWheel({
   let coastStartDistance = 0;
 
   const settle = () => {
+    if (committedLandingPocket !== null) {
+      settledPocket = committedLandingPocket;
+    }
     startPocket = null;
     startSlide = null;
     gestureDelta = 0;
     rolling = false;
     landingSlide = null;
+    committedLandingPocket = null;
     coastStartDistance = 0;
     onSettleProgress(1);
     if (!moving) return;
     moving = false;
-    onSettled(Math.round(lenis.scroll / PX_PER_STEP));
+    onSettled(settledPocket);
   };
 
   const atRest = () =>
@@ -134,8 +143,8 @@ export function createLenisWheel({
 
   const unsubscribeInput = lenis.on("virtual-scroll", ({ deltaY }) => {
     if (startPocket === null) {
-      startPocket = Math.round(lenis.scroll / PX_PER_STEP);
-      startSlide = slideIndexFor(startPocket);
+      startPocket = settledPocket;
+      startSlide = slideIndexFor(settledPocket);
       gestureDelta = 0;
     }
     gestureDelta += deltaY;
@@ -170,6 +179,7 @@ export function createLenisWheel({
       rolling = true;
       const dir = gestureDelta > 0 ? 1 : -1;
       const landing = landingPocketOneStep(startSlide, startPocket, dir);
+      committedLandingPocket = landing;
       landingSlide = slideIndexFor(landing);
       onLandingCommitted(landingSlide);
 
@@ -216,7 +226,10 @@ export function createLenisWheel({
     startSlide = null;
     gestureDelta = 0;
     rolling = true;
-    landingSlide = slideIndexFor(index);
+    const targetPocket =
+      ((current + diff) % WORD_COUNT + WORD_COUNT) % WORD_COUNT;
+    committedLandingPocket = targetPocket;
+    landingSlide = slideIndexFor(targetPocket);
     onLandingCommitted(landingSlide);
     coastStartDistance = Math.abs(diff) * PX_PER_STEP;
     lenis.scrollTo(lenis.scroll + diff * PX_PER_STEP, {

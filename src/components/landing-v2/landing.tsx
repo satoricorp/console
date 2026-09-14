@@ -200,11 +200,17 @@ export function LandingV2() {
     spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
   };
 
+  /** Sequential crossfade — no overlap, so white text never composites to gray. */
   const slideOpacity = (index: number): number => {
     if (!moving) return index === activeScreen ? 1 : 0;
     if (incomingSlide === null) return index === activeScreen ? 0 : 0;
-    if (index === incomingSlide) return settleProgress;
-    if (index === activeScreen) return 1 - settleProgress;
+    const p = settleProgress;
+    if (index === activeScreen && index !== incomingSlide) {
+      return p < 0.5 ? 1 - p * 2 : 0;
+    }
+    if (index === incomingSlide) {
+      return p < 0.5 ? 0 : (p - 0.5) * 2;
+    }
     return 0;
   };
 
@@ -268,7 +274,7 @@ export function LandingV2() {
         </div>
 
         <div
-          className={`relative text-xs leading-6 text-zinc-100 lg:mt-14 ${
+          className={`relative text-xs leading-6 text-[#f4f4f5] lg:mt-14 ${
             hasWheel ? "" : "space-y-20"
           }`}
         >
