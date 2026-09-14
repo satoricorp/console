@@ -200,21 +200,16 @@ export function LandingV2() {
     spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
   };
 
-  /** Only settled + committed adjacent page may be visible — never intermediates. */
+  /** Wheel spin is visual-only until coast; then only settled ↔ target fade. */
   const slideOpacity = (index: number): number => {
-    if (!moving || incomingSlide === null) {
-      return index === activeScreen ? 1 : 0;
-    }
+    if (!moving) return index === activeScreen ? 1 : 0;
+    if (incomingSlide === null) return index === activeScreen ? 1 : 0;
     const from = activeScreen;
     const to = incomingSlide;
     if (index !== from && index !== to) return 0;
     const p = settleProgress;
-    if (index === from && from !== to) {
-      return p < 0.5 ? 1 - p * 2 : 0;
-    }
-    if (index === to) {
-      return from === to ? 1 : p < 0.5 ? 0 : (p - 0.5) * 2;
-    }
+    if (index === from) return 1 - p;
+    if (index === to) return p;
     return 0;
   };
 
