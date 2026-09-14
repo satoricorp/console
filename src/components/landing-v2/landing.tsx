@@ -12,10 +12,12 @@ import {
   type SlideName,
   TextWheel,
   type TextWheelHandle,
+  nearestPocketForSlide,
   slideIndexFor,
 } from "@/components/landing-v2/text-wheel";
 import { useWheelDriver } from "@/components/landing-v2/use-wheel-driver";
 import { useWheelFits } from "@/components/landing-v2/use-wheel-fits";
+import { WheelNav } from "@/components/landing-v2/wheel-nav";
 import {
   DOCS_URL,
   FOUNDER_CALL_URL,
@@ -193,6 +195,10 @@ export function LandingV2() {
   // The ring repeats the deck, so every pocket folds back onto a slide.
   const activeScreen = slideIndexFor(activeStep);
 
+  const spinToSlide = (slideIndex: number) => {
+    spinToIndex(nearestPocketForSlide(activeStep, slideIndex));
+  };
+
   return (
     <main
       className={`${berkeleyMono.className} relative bg-[#181716] text-zinc-100 ${
@@ -200,7 +206,14 @@ export function LandingV2() {
       }`}
     >
       {hasWheel ? (
-        <TextWheel ref={wheelRef} onWordClick={spinToIndex} />
+        <>
+          <TextWheel ref={wheelRef} />
+          <WheelNav
+            activeSlide={activeScreen}
+            moving={moving}
+            onSlideClick={spinToSlide}
+          />
+        </>
       ) : null}
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-14 px-8 pt-24 sm:pt-36 lg:grid-cols-[1fr_1.8fr] lg:gap-12">
