@@ -1,6 +1,5 @@
 import Lenis from "lenis";
 import {
-  SLIDE_COUNT,
   WHEEL_STEP_DEG,
   WORD_COUNT,
   slideIndexFor,
@@ -203,7 +202,14 @@ export function createLenisWheel({
       onSettleProgress(progress);
     }
 
-    if (moving && idle && atRest()) settle();
+    if (moving && idle && atRest()) {
+      if (rolling) {
+        settle();
+      } else if (gestureDelta === 0) {
+        moving = false;
+        onSettleProgress(1);
+      }
+    }
 
     frame = requestAnimationFrame(raf);
   });
