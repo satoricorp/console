@@ -1,9 +1,5 @@
 import Lenis from "lenis";
-import {
-  WHEEL_STEP_DEG,
-  WORD_COUNT,
-  slideIndexFor,
-} from "@/components/landing-v2/text-wheel";
+import { WHEEL_STEP_DEG, WORD_COUNT } from "@/components/landing-v2/text-wheel";
 
 /**
  * The landing wheel's motion, driven by Lenis.
@@ -13,25 +9,21 @@ import {
  * it, `infinite` wraps it at the lap boundary, and the rotation is read back
  * off `lenis.scroll`.
  *
- * The gesture itself is Lenis's own, untouched: the wheel tracks the hand, and
- * a hard throw spins past a whole stretch of words. Only the landing is ours.
- * When the hand lets go the wheel is re-aimed at the first pocket bearing the
- * *next* title — never two along, never back the way it came.
+ * The gesture itself is Lenis's own: the wheel tracks the hand with low lerp
+ * so momentum coasts, and a hard throw carries through many pockets. When the
+ * hand lets go the wheel is re-aimed at whichever pocket the throw reached —
+ * a light nudge may not leave the starting pocket at all; a firm flick can
+ * skip several slides before the lerp eases into the snap.
  *
- * Two things keep that from feeling like a catch. The pocket is small enough
- * that the furthest the wheel is ever re-aimed is one notch's worth of scroll
- * (see `PX_PER_STEP`). And the re-aim is timed off the speed the wheel is
- * already carrying, so it leaves at exactly that speed and eases to a stop —
- * a continuation of the throw rather than a second animation played after it.
+ * The post-throw nudge onto the landing pocket uses the same lerp as the
+ * gesture, not a separate duration-based ease, so deceleration stays smooth.
  */
 
-/** Virtual pixels per pocket. One mouse notch (~120 delta) turns the ring a
- * whole deck — five words — which is what keeps the landing smooth: the titles
- * repeat every `SLIDE_COUNT` pockets, so the furthest the wheel ever has to
- * roll on past where the throw was heading is one notch's worth of scroll. At
- * one pocket per notch that correction was five notches, and a gentle scroll
- * lurched several times further than the hand had moved. */
-const PX_PER_STEP = 24;
+/** Virtual pixels per pocket. Lower = more rotation per scroll pixel (longer
+ * visual travel per flick). Kept above one pocket per mouse notch so the
+ * post-throw landing correction stays within a single notch — the titles repeat
+ * every `SLIDE_COUNT` pockets, so the furthest re-aim is one notch's worth. */
+const PX_PER_STEP = 18;
 /** One visual turn of the ring, in virtual pixels. */
 const LAP_PX = PX_PER_STEP * WORD_COUNT;
 /** Turns of the ring the borrowed scroller holds before `infinite` wraps it.
@@ -94,37 +86,40 @@ function rotationFor(scroll: number): number {
 }
 
 /**
- * The pocket a throw should come to rest in: the first one bearing the next
- * title along, at or beyond `raw`, going the way the wheel was thrown. Never
- * behind `raw`, so the wheel finishes rolling forwards instead of doubling
- * back into the gesture.
- *
- * `raw` may be a wrapped scroll position — that is fine, because `WORD_COUNT`
- * is a whole number of decks, so wrapping the ring leaves each pocket's title
- * unchanged.
+ * The pocket a throw should come to rest in. Travel is proportional to how
+ * far the gesture carried the virtual scroll: a light nudge that does not clear
+ * `POCKET_THRESHOLD` stays put; anything past that lands on the nearest whole
+ * pocket at or beyond the throw, in the thrown direction.
  */
-function landingPocket(fromSlide: number, raw: number, dir: 1 | -1): number {
-  const want = slideIndexFor(fromSlide + dir);
-  // First whole pocket at or beyond the throw, never behind it.
-  let pocket = dir === 1 ? Math.ceil(raw) : Math.floor(raw);
-  // At most a deck's worth of steps: each title appears once per deck.
-  while (slideIndexFor(pocket) !== want) pocket += dir;
-  return pocket;
+const POCKET_THRESHOLD = 0.42;
+
+function landingPocket(
+  startPocket: number,
+  raw: number,
+  dir: 1 | -1,
+): number {
+  const drift = dir === 1 ? raw - startPocket : startPocket - raw;
+  if (drift < POCKET_THRESHOLD) return startPocket;
+  return dir === 1 ? Math.ceil(raw) : Math.floor(raw);
 }
 
 /** How long after the last notch the wheel counts as let go of. A trackpad's
  * momentum tail arrives as a steady stream of small deltas, so this has to
- * outlast the gaps between those without feeling sticky. */
-const IDLE_MS = 140;
-/** Rate the gesture itself decays at — Lenis's own tracking. */
-const ROLL_LERP = 0.1;
-/** Crossing the wheel to a clicked word — a longer, deliberate travel. */
-const CLICK_DURATION_S = 0.9;
-/** Bounds on the roll-on. Its length is set by the wheel's own speed so the
- * handoff is seamless; these only stop the extremes — a crawl when the wheel
- * has almost stopped, a snap when it is still flying. */
-const MIN_ROLL_S = 0.18;
-const MAX_ROLL_S = 0.8;
+ * outlast the gaps between those and leave room for the lerp coast to run down
+ * before the pocket nudge. */
+const IDLE_MS = 420;
+/** Lerp intensity for gesture tracking and coast-down. Very low = heavy wheel:
+ * animated scroll trails target for a long glide before the pocket settles. */
+const ROLL_LERP = 0.014;
+/** Amplifies wheel delta before it hits the virtual scroller — harder flicks
+ * carry more virtual distance without changing pocket geometry. */
+const WHEEL_MULTIPLIER = 1.35;
+/** Crossing the wheel to a clicked slide — a longer, deliberate travel. */
+const CLICK_DURATION_S = 1.1;
+/** How close animated scroll must be to target before we call the wheel at
+ * rest. Loose enough that the long lerp tail can end once motion is
+ * imperceptible without waiting on asymptotic creep. */
+const REST_EPSILON_PX = 0.65;
 
 export function createLenisWheel({
   onRotation,
@@ -141,6 +136,7 @@ export function createLenisWheel({
     infinite: true,
     lerp: ROLL_LERP,
     smoothWheel: true,
+    wheelMultiplier: WHEEL_MULTIPLIER,
     syncTouch: false,
     // The page itself never scrolls; swallow the gesture so the browser's
     // elastic overscroll doesn't bump the viewport.
@@ -153,10 +149,9 @@ export function createLenisWheel({
   let moving = false;
   /** Timestamp of the last gesture, so the roll waits for the hand to stop. */
   let lastInputAt = 0;
-  /** Slide the current gesture was thrown from, or null when none is in
-   * flight. The landing is measured against this, not against wherever the
-   * throw drifted to, which is what pins it to exactly one slide along. */
-  let fromSlide: number | null = null;
+  /** Pocket the current gesture started from, or null when none is in flight.
+   * Landing distance is measured from here so a light nudge can stay put. */
+  let startPocket: number | null = null;
   /** Net virtual pixels the gesture has asked for. Read from the raw input
    * rather than off `lenis.targetScroll`, which `infinite` wraps at the lap
    * boundary — a throw across that seam would otherwise look like a throw
@@ -165,13 +160,8 @@ export function createLenisWheel({
   /** True once the wheel has been re-aimed at its landing pocket, so the aim
    * is taken once per gesture rather than every frame. */
   let rolling = false;
-  /** Wheel speed in pixels per frame, wrap-corrected. The roll-on is timed off
-   * this so it leaves at exactly the speed the wheel is already going. */
-  let velocity = 0;
-  let prevScroll = 0;
-
   const settle = () => {
-    fromSlide = null;
+    startPocket = null;
     gestureDelta = 0;
     rolling = false;
     if (!moving) return;
@@ -181,13 +171,13 @@ export function createLenisWheel({
 
   const atRest = () =>
     !lenis.isScrolling &&
-    Math.abs(lenis.animatedScroll - lenis.targetScroll) < 0.01;
+    Math.abs(lenis.animatedScroll - lenis.targetScroll) < REST_EPSILON_PX;
 
   const unsubscribeInput = lenis.on("virtual-scroll", ({ deltaY }) => {
-    // The first notch after a rest fixes the slide the throw is measured from;
+    // The first notch after a rest fixes the pocket the throw is measured from;
     // the rest of the gesture, momentum tail included, keeps that origin.
-    if (fromSlide === null) {
-      fromSlide = slideIndexFor(Math.round(lenis.scroll / PX_PER_STEP));
+    if (startPocket === null) {
+      startPocket = Math.round(lenis.scroll / PX_PER_STEP);
       gestureDelta = 0;
     }
     gestureDelta += deltaY;
@@ -207,39 +197,21 @@ export function createLenisWheel({
   let frame = requestAnimationFrame(function raf(time: number) {
     lenis.raf(time);
 
-    // Track speed across the wrap seam so the roll-on can match it.
-    let step = lenis.animatedScroll - prevScroll;
-    if (step > TRACK_PX / 2) step -= TRACK_PX;
-    if (step < -TRACK_PX / 2) step += TRACK_PX;
-    velocity = step;
-    prevScroll = lenis.animatedScroll;
-
     const idle = time - lastInputAt > IDLE_MS;
 
-    if (moving && idle && !rolling && fromSlide !== null && gestureDelta !== 0) {
+    if (moving && idle && !rolling && startPocket !== null && gestureDelta !== 0) {
       rolling = true;
       const dir = gestureDelta > 0 ? 1 : -1;
       const raw = lenis.targetScroll / PX_PER_STEP;
-      const extra = (landingPocket(fromSlide, raw, dir) - raw) * PX_PER_STEP;
+      const extra = (landingPocket(startPocket, raw, dir) - raw) * PX_PER_STEP;
       if (Math.abs(extra) > 0.5) {
         const target = lenis.targetScroll + extra;
-        // Everything still to travel — the tail of the gesture plus the hop
-        // onto the landing pocket — covered as one movement.
-        let distance = target - lenis.animatedScroll;
-        if (distance > TRACK_PX / 2) distance -= TRACK_PX;
-        if (distance < -TRACK_PX / 2) distance += TRACK_PX;
-        // Under `1 - (1-t)²` the opening speed is 2·distance/duration, so
-        // timing the roll at 2·distance/speed launches it at exactly the speed
-        // the wheel is already doing. No step in velocity, no catch — it just
-        // keeps rolling and eases to a stop on the pocket.
-        const speed = Math.abs(velocity) * 60;
-        const duration = Math.min(
-          MAX_ROLL_S,
-          Math.max(MIN_ROLL_S, (2 * Math.abs(distance)) / Math.max(speed, 1)),
-        );
+        // Nudge the target onto the landing pocket and let the same lerp that
+        // carried the throw coast the wheel in — no second duration-based ease
+        // that would interrupt velocity and feel like a catch.
         lenis.scrollTo(target, {
-          duration,
-          easing: (t) => 1 - (1 - t) * (1 - t),
+          programmatic: false,
+          lerp: ROLL_LERP,
           force: true,
         });
       }
@@ -262,14 +234,14 @@ export function createLenisWheel({
     if (diff < -WORD_COUNT / 2) diff += WORD_COUNT;
     if (diff === 0) return;
     // A click is its own destination, not a throw to be rolled on from.
-    fromSlide = null;
+    startPocket = null;
     gestureDelta = 0;
     rolling = true;
     // `infinite` wraps the target itself, so an out-of-range value is fine and
     // keeps the spin going the short way across the lap boundary.
     lenis.scrollTo(lenis.scroll + diff * PX_PER_STEP, {
       duration: CLICK_DURATION_S,
-      easing: (t) => 1 - Math.pow(1 - t, 3),
+      easing: (t) => 1 - Math.pow(1 - t, 4),
       force: true,
     });
   };
