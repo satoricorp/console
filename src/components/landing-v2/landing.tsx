@@ -16,6 +16,7 @@ import {
 } from "@/components/landing-v2/text-wheel";
 import { useWheelDriver } from "@/components/landing-v2/use-wheel-driver";
 import { useWheelFits } from "@/components/landing-v2/use-wheel-fits";
+import { WheelNav } from "@/components/landing-v2/wheel-nav";
 import {
   DOCS_URL,
   FOUNDER_CALL_URL,
@@ -188,10 +189,30 @@ export function LandingV2() {
   // deck scroll like an ordinary page instead of hijacking the gesture.
   const hasWheel = useWheelFits();
   const wheelRef = useRef<TextWheelHandle>(null);
-  const { activeStep, moving, spinToIndex } = useWheelDriver(wheelRef, hasWheel);
+  const { activeStep, incomingSlide, moving, settleProgress, spinToIndex } =
+    useWheelDriver(wheelRef, hasWheel);
 
   // The ring repeats the deck, so every pocket folds back onto a slide.
   const activeScreen = slideIndexFor(activeStep);
+
+  const spinToSlide = (slideIndex: number) => {
+    spinToIndex(slideIndex);
+  };
+
+  /** Fade out current and fade in the committed adjacent page only — never intermediates. */
+  const slideOpacity = (index: number): number => {
+    if (!moving || incomingSlide === null) {
+      return index === activeScreen ? 1 : 0;
+    }
+    const from = activeScreen;
+    const to = incomingSlide;
+    if (index !== from && index !== to) return 0;
+    if (from === to) return index === from ? 1 : 0;
+    const p = Math.min(1, Math.max(0, settleProgress));
+    if (index === from) return 1 - p;
+    if (index === to) return p;
+    return 0;
+  };
 
   return (
     <main
@@ -200,7 +221,16 @@ export function LandingV2() {
       }`}
     >
       {hasWheel ? (
-        <TextWheel ref={wheelRef} onWordClick={spinToIndex} />
+        <>
+          <TextWheel ref={wheelRef} />
+          <WheelNav
+            activeSlide={activeScreen}
+            incomingSlide={incomingSlide}
+            moving={moving}
+            settleProgress={settleProgress}
+            onSlideClick={spinToSlide}
+          />
+        </>
       ) : null}
 
       <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-14 px-8 pt-24 sm:pt-36 lg:grid-cols-[1fr_1.8fr] lg:gap-12">
@@ -244,7 +274,7 @@ export function LandingV2() {
         </div>
 
         <div
-          className={`relative text-xs leading-6 text-zinc-100 lg:mt-14 ${
+          className={`relative text-xs leading-6 text-[#f4f4f5] lg:mt-14 ${
             hasWheel ? "" : "space-y-20"
           }`}
         >
@@ -255,17 +285,18 @@ export function LandingV2() {
               key={name}
               className={`${
                 screen.kind === "terminal" ? "h-[620px]" : "max-w-md space-y-6"
-              } ${
+              } ${hasWheel ? "absolute inset-x-0 top-0" : ""}`}
+              style={
                 hasWheel
-                  ? `transition-opacity duration-300 ${
-                      index === activeScreen
-                        ? moving
-                          ? "opacity-0"
-                          : "opacity-100"
-                        : "pointer-events-none absolute inset-x-0 top-0 opacity-0"
-                    }`
-                  : ""
-              }`}
+                  ? {
+                      opacity: slideOpacity(index),
+                      // Example terminal (and CTAs) must receive clicks on the
+                      // active slide; inactive slides stay inert.
+                      pointerEvents:
+                        slideOpacity(index) > 0.5 ? "auto" : "none",
+                    }
+                  : undefined
+              }
             >
               {/* Without the wheel there is nothing else naming the slides. */}
               {hasWheel ? null : (
