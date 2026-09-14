@@ -218,7 +218,7 @@ export function LandingV2() {
                 aria-hidden
                 className="h-2.5 w-2.5 shrink-0 rounded-full bg-current"
               />
-              Quasi Computer Co.
+              Satori Engineering Co
             </span>
           </p>
 
