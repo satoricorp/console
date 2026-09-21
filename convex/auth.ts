@@ -5,6 +5,7 @@ import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
 import { getBetterAuthGitHubUserInfo } from "./githubProfile";
+import { notifyNewWebSignup } from "./signupNotifyWeb";
 
 const siteUrl = process.env.SITE_URL!;
 
@@ -48,6 +49,18 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
       },
     },
     plugins: [convex({ authConfig })],
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            await notifyNewWebSignup(
+              ctx,
+              user as Record<string, unknown>,
+            );
+          },
+        },
+      },
+    },
   });
 
 export const { getAuthUser } = authComponent.clientApi();
