@@ -193,15 +193,29 @@ jobs:
         with:
           bun-version: "1.3.4"
 
+      # GX AWS (ECS/CDK/RDS) can be parked to stop credit burn while Vercel +
+      # Convex stay on main. Set repo variable GX_AWS_DEPLOY=true to re-enable.
+      - name: Resolve GX AWS deploy gate
+        id: gx_aws_deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ vars.GX_AWS_DEPLOY }}" == "true" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "GX AWS deploy skipped (GX_AWS_DEPLOY != true; stack parked for cost)"
+          fi
+
       - name: Configure AWS credentials with OIDC
-        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' && env.AWS_ROLE_TO_ASSUME != '' }}
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Configure AWS credentials with access keys
-        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' && env.AWS_ROLE_TO_ASSUME == '' }}
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ env.DEPLOY_AWS_ACCESS_KEY_ID }}
@@ -209,6 +223,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install server dependencies
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         working-directory: server
         run: bun install --frozen-lockfile
 
@@ -229,6 +244,7 @@ jobs:
           bunx convex deploy
 
       - name: Ensure ECR repository
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         env:
           ECR_REPOSITORY: ${{ steps.settings.outputs.repository_name }}
         run: |
@@ -242,10 +258,12 @@ jobs:
             --image-tag-mutability MUTABLE >/dev/null
 
       - name: Login to Amazon ECR
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push server image
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         id: image
         env:
           DEPLOY_ENV: ${{ steps.settings.outputs.environment }}
@@ -263,10 +281,12 @@ jobs:
           echo "env_image=$env_image" >> "$GITHUB_OUTPUT"
 
       - name: Install infra dependencies
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         working-directory: infra
         run: bun install --frozen-lockfile
 
       - name: Deploy downloads stack
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         working-directory: infra
         env:
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
@@ -279,6 +299,7 @@ jobs:
             --require-approval never
 
       - name: Deploy CDK stack
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         working-directory: infra
         env:
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
@@ -291,6 +312,7 @@ jobs:
             --require-approval never
 
       - name: Read stack outputs
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         id: outputs
         env:
           STACK_NAME: ${{ steps.settings.outputs.stack_name }}
@@ -309,6 +331,7 @@ jobs:
           echo "url=$(output Url)" >> "$GITHUB_OUTPUT"
 
       - name: Run database migrations
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         env:
           CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
           TASK_DEFINITION_FAMILY: ${{ steps.outputs.outputs.task_definition_family }}
@@ -344,6 +367,7 @@ jobs:
           fi
 
       - name: Roll ECS service
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         env:
           CLUSTER_NAME: ${{ steps.settings.outputs.cluster_name }}
           SERVICE_NAME: ${{ steps.settings.outputs.service_name }}
@@ -358,6 +382,7 @@ jobs:
             --services "$SERVICE_NAME"
 
       - name: Smoke test
+        if: ${{ steps.gx_aws_deploy.outputs.enabled == 'true' }}
         env:
           URL: ${{ steps.outputs.outputs.url }}
         run: |
