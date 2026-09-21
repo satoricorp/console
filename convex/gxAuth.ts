@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { betterAuthUserIdFromCreateResult, hashToken } from "./gxAuthUtils";
+import { enqueueSignupNotifyHandler } from "./signupNotify";
 
 export const ensureGithubUser = internalMutation({
   args: {
@@ -71,6 +72,17 @@ export const ensureGithubUser = internalMutation({
         },
       },
     });
+
+    try {
+      await enqueueSignupNotifyHandler(ctx, {
+        userId,
+        email: args.email,
+        githubLogin: args.githubLogin,
+        source: "cli",
+      });
+    } catch {
+      // Signup email must never block auth.
+    }
 
     return userId;
   },

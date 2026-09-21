@@ -87,6 +87,21 @@ export default defineSchema({
     .index("by_userId_fullName", ["userId", "fullName"])
     .index("by_fullName", ["fullName"]),
 
+  signupNotifications: defineTable({
+    userId: v.string(),
+    email: v.string(),
+    githubLogin: v.string(),
+    source: v.union(v.literal("web"), v.literal("cli")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("failed"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sentAt: v.optional(v.number()),
+  }).index("by_userId", ["userId"]),
+
   gxCliSessions: defineTable({
     tokenHash: v.string(),
     userId: v.string(),

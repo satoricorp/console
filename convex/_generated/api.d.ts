@@ -43,6 +43,8 @@ import type * as repoActions from "../repoActions.js";
 import type * as repos from "../repos.js";
 import type * as runs from "../runs.js";
 import type * as stripeCheckout from "../stripeCheckout.js";
+import type * as signupNotify from "../signupNotify.js";
+import type * as signupNotifyActions from "../signupNotifyActions.js";
 import type * as stripeWebhookActions from "../stripeWebhookActions.js";
 import type * as userAppState from "../userAppState.js";
 
@@ -87,6 +89,8 @@ declare const fullApi: ApiFromModules<{
   repoActions: typeof repoActions;
   repos: typeof repos;
   runs: typeof runs;
+  signupNotify: typeof signupNotify;
+  signupNotifyActions: typeof signupNotifyActions;
   stripeCheckout: typeof stripeCheckout;
   stripeWebhookActions: typeof stripeWebhookActions;
   userAppState: typeof userAppState;
