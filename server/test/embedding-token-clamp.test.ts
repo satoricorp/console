@@ -81,10 +81,11 @@ describe("embedTexts token clamp", () => {
 
     // The indexing callers batch 64 chunks per request, and one oversized
     // chunk 400s the entire batch — so the short chunks beside it fail too.
-    // Space-free on purpose: it is the shape the BPE pre-tokenizer cannot
-    // split, so it exercises the slow path the slicing in tokenClamp exists
-    // to bound. Kept modest because that path is quadratic per slice.
-    const huge = "x".repeat(60_000);
+    // Reuse the dense diff-shaped string from the single-input case: it blows
+    // past the API limit with far fewer characters than a space-free run of
+    // "x", so CI stays under Bun's default 5s timeout on shared runners.
+    const huge = "diff --git a/x.ts b/x.ts\n+const x=1;".repeat(2000);
+    expect(countTokens(huge)).toBeGreaterThan(API_LIMIT_TOKENS);
     await embedTexts(cfg, ["short one", huge, "short two"]);
 
     const sent = captured[0]!;
