@@ -21,6 +21,7 @@ type GxServerStackProps = StackProps & {
   maxCapacity: number;
   rdsDeletionProtection: boolean;
   rdsBackupRetentionDays: number;
+  extraCertificateArn?: string;
 };
 
 const containerName = "gx-server";
@@ -312,17 +313,16 @@ export class GxServerStack extends Stack {
         },
       });
 
-    // Serve the gx.run hostnames (api.gx.run / staging.gx.run)
-    // alongside the gx.run cert via SNI. gx.run DNS lives on Vercel, so
-    // this cert was issued outside CDK and its CNAMEs are managed there too.
-    const totalityCertificate = acm.Certificate.fromCertificateArn(
-      this,
-      "TotalityCertificate",
-      "arn:aws:acm:us-east-1:088950452464:certificate/8d88c72c-5254-40c8-bdd9-994b1066fc16",
-    );
-    service.listener.addCertificates("TotalityCertificate", [
-      totalityCertificate,
-    ]);
+    // Optional extra certificate, for a hostname whose DNS lives outside this
+    // stack. Pass -c certificateArn=<arn> at deploy time.
+    if (props.extraCertificateArn) {
+      const extraCertificate = acm.Certificate.fromCertificateArn(
+        this,
+        "ExtraCertificate",
+        props.extraCertificateArn,
+      );
+      service.listener.addCertificates("ExtraCertificate", [extraCertificate]);
+    }
 
     service.targetGroup.configureHealthCheck({
       path: "/health",

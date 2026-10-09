@@ -9,8 +9,6 @@ import { api } from "../../../convex/_generated/api";
 import { GitHubIcon } from "@/components/github-icon";
 import { withOnboardingParam } from "@/lib/site-links";
 
-const FALLBACK_INSTALL_URL = "https://github.com/apps/satoricorp-gx";
-
 export function InstallGithubAppStep() {
   const searchParams = useSearchParams();
   const forceOnboarding = searchParams.get("onboarding") === "1";
@@ -20,7 +18,7 @@ export function InstallGithubAppStep() {
     api.userAppState.completeGithubAppInstallScreen,
   );
 
-  const [installUrl, setInstallUrl] = useState(FALLBACK_INSTALL_URL);
+  const [installUrl, setInstallUrl] = useState("");
   const [installed, setInstalled] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -34,12 +32,12 @@ export function InstallGithubAppStep() {
     setChecking(true);
     try {
       const status = await getStatus({});
-      setInstallUrl(status.installUrl || FALLBACK_INSTALL_URL);
+      setInstallUrl(status.installUrl || "");
       setInstalled(status.installed);
       setChecked(status.checked);
     } catch (error: unknown) {
       console.error("Failed to check GitHub App install status", error);
-      setInstallUrl(FALLBACK_INSTALL_URL);
+      setInstallUrl("");
     } finally {
       setLoading(false);
       setChecking(false);
@@ -73,7 +71,7 @@ export function InstallGithubAppStep() {
       <ol className="list-decimal space-y-2 pl-4 text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
         <li>Click the button below to open GitHub.</li>
         <li>Choose your personal account or an organization.</li>
-        <li>Install the gx app, then come back here and continue.</li>
+        <li>Install your GitHub App, then come back here and continue.</li>
       </ol>
 
       {installed ? (
@@ -85,15 +83,21 @@ export function InstallGithubAppStep() {
 
       <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={installUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-          >
-            <GitHubIcon className="h-3.5 w-3.5" />
-            {installed ? "Manage on GitHub" : "Install gx on GitHub"}
-          </a>
+          {installUrl ? (
+            <a
+              href={installUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-none bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            >
+              <GitHubIcon className="h-3.5 w-3.5" />
+              {installed ? "Manage on GitHub" : "Install on GitHub"}
+            </a>
+          ) : (
+            <p className="text-[13px] leading-5 text-zinc-600 dark:text-zinc-400">
+              Set <code>GITHUB_APP_INSTALL_URL</code> to your GitHub App&apos;s install page.
+            </p>
+          )}
 
           {checked && !installed ? (
             <button

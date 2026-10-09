@@ -9,7 +9,7 @@ for AI code review and generated pull request summaries. You work in plain Git.
 ## Install
 
 ```bash
-curl -fsSL https://download.gx.run/install.sh | sh
+# CLI: GitHub release, or clone satoricorp/gx and `just install`
 gx auth login
 export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY
 ```
@@ -35,8 +35,9 @@ git push                               # hook captures the session and publishes
 gh pr create                           # gx Cloud adds the summary to the PR
 ```
 
-Summaries require the [gx GitHub App](https://github.com/apps/satoricorp-gx)
-on the account or org that owns the repo.
+Summaries require a GitHub App you create, installed on the account or
+organization that owns the repo. The [gx CLI README](https://github.com/satoricorp/gx#get-started)
+has the app settings and how to run the API.
 
 ## Uninstall
 

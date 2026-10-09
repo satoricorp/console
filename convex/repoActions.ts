@@ -154,7 +154,7 @@ export const connectRepos = action({
 
       if (!orgId) {
         errors.push(
-          `${repo.fullName}: connected, but not indexed yet — install the gx GitHub App on ${repo.owner} so gx Cloud can index it`,
+          `${repo.fullName}: connected, but not indexed yet — install your GitHub App on ${repo.owner} so it can be indexed`,
         );
         continue;
       }
@@ -227,7 +227,7 @@ export const reindexRepo = action({
     if (!orgId) {
       return {
         started: false,
-        reason: `Install the gx GitHub App on ${owner} so gx Cloud can index this repository.`,
+        reason: `Install your GitHub App on ${owner} so this repository can be indexed.`,
       };
     }
 

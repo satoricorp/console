@@ -39,6 +39,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# CDK lookups for the deploying account (zone id, account id). Regenerated locally.
+infra/cdk.context.json
+
 # vercel
 .vercel
 

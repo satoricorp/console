@@ -5,6 +5,11 @@ import { GxServerStack } from "../lib/gx-server-stack.js";
 
 const app = new cdk.App();
 const domainName = app.node.tryGetContext("domainName");
+const certificateArn = app.node.tryGetContext("certificateArn");
+const extraCertificateArn =
+  typeof certificateArn === "string" && certificateArn.trim() !== ""
+    ? certificateArn.trim()
+    : undefined;
 
 if (!domainName || typeof domainName !== "string") {
   throw new Error("Pass -c domainName=<domain> when running cdk");
@@ -33,6 +38,7 @@ new GxServerStack(app, "gx-server-staging", {
   maxCapacity: 2,
   rdsDeletionProtection: false,
   rdsBackupRetentionDays: 3,
+  extraCertificateArn,
 });
 
 new GxServerStack(app, "gx-server-production", {
@@ -52,4 +58,5 @@ new GxServerStack(app, "gx-server-production", {
   maxCapacity: 6,
   rdsDeletionProtection: true,
   rdsBackupRetentionDays: 14,
+  extraCertificateArn,
 });

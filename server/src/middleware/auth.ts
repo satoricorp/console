@@ -281,7 +281,7 @@ async function enforceOrgMembership(
     if (!resolved) {
       return {
         status: 403,
-        error: "Install the gx GitHub App to continue",
+        error: "Install your GitHub App to continue",
       };
     }
     orgId = resolved;

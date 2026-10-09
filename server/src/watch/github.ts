@@ -1,8 +1,8 @@
 /**
  * GitHub REST helpers for sessionless PR summaries (summary/external.ts).
  *
- * The server has no `gh` binary, so these replace the `gh pr view` / `gh pr diff`
- * calls that scripts/outreach.ts uses. Every call takes its token as an argument
+ * The server has no `gh` binary, so these talk to the GitHub REST API directly.
+ * Every call takes its token as an argument
  * rather than reading one from the environment, so a caller can use whichever
  * identity it has.
  *

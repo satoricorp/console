@@ -15,7 +15,7 @@ import { validateSummary } from "./validate";
 /**
  * Sessionless PR-summary generator for the OSS "watch" rail.
  *
- * Productionized from scripts/outreach.ts: same real PR_SUMMARY_SYSTEM_PROMPT,
+ * Same PR_SUMMARY_SYSTEM_PROMPT,
  * same validators and severity enrichment, same honesty rule (no captured agent
  * sessions ⇒ attributions restricted to concrete diff paths and referenced PRs).
  * The only substantive change vs. the CLI is that the dossier is built from the

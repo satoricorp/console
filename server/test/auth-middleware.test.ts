@@ -255,7 +255,7 @@ describe("requireAuth", () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({
-      error: "Install the gx GitHub App to continue",
+      error: "Install your GitHub App to continue",
     });
   });
 

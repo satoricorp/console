@@ -1,6 +1,6 @@
 # gx Server Deploy
 
-This CDK app lives in the private Console repo. It deploys the Hono server in
+This CDK app deploys the Hono server in
 `server/` to ECS/Fargate with private RDS Postgres, an ALB, Route 53 records,
 and Bedrock access through the ECS task role. It also serves the macOS app ZIP
 from `https://download.<domain>/gx-macOS.zip` through CloudFront and a private
@@ -115,8 +115,8 @@ promotion workflow is `.github/workflows/promote-production.yaml`.
        "GITHUB_WEBHOOK_SECRET": "...",
        "OPENAI_API_KEY": "...",
        "TURBOPUFFER_API_KEY": "...",
-       "GX_POSTHOG_KEY": "<gx-staging phc_…>",
-       "GX_POSTHOG_HOST": "https://f.gx.run"
+       "GX_POSTHOG_KEY": "<posthog project token>",
+       "GX_POSTHOG_HOST": "https://us.i.posthog.com"
      }'
 
    For production (`/gx/production/server`), use the production PostHog project
