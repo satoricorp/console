@@ -1,5 +1,10 @@
 # gx console
 
+<p align="center">
+  <a href="https://github.com/satoricorp/console/actions/workflows/deploy.yaml"><img src="https://img.shields.io/github/actions/workflow/status/satoricorp/console/deploy.yaml?branch=main&label=ci" alt="CI"></a>
+  <a href="https://github.com/satoricorp/console/actions/workflows/deploy.yaml"><img src="https://img.shields.io/github/actions/workflow/status/satoricorp/console/deploy.yaml?branch=main&label=unit%20tests" alt="unit tests"></a>
+</p>
+
 The web app and the API behind GX that enables  pull request comment posts. The CLI in [satoricorp/gx](https://github.com/satoricorp/gx) handles the git hooks and triggers the PR comments.
 
 ## Get started
